@@ -1,0 +1,21 @@
+[project]
+name = "sentiment-service"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "KelvinHo995", email = "quochasagi2k5@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.141.1",
+    "pydantic>=2.13.4",
+    "uvicorn[standard]>=0.52.1",
+]
+
+[project.scripts]
+sentiment-service = "sentiment_service:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"

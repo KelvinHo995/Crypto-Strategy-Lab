@@ -1,0 +1,16 @@
+# Go
+backend/bin/
+*.exe
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Python
+sentiment-service/.venv/
+sentiment-service/__pycache__/
+*.pyc
+
+# General
+.env
+.DS_Store
