@@ -17,6 +17,7 @@ func main() {
 
 	// Since go 1.22 we can use method-based routing
 	http.HandleFunc("GET /strategies", strategyHandler.ListStrategies)
+	http.HandleFunc("POST /search/start", strategyHandler.StartSearch)
 	
 	http.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
