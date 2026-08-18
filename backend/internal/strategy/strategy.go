@@ -26,3 +26,16 @@ func NewRegistry() *Registry {
 func (r *Registry) Register(s Strategy) {
 	r.strategies[s.Name()] = s
 }
+
+func (r *Registry) Get(name string) (Strategy, bool) {
+	s, ok := r.strategies[name]
+	return s, ok
+}
+
+func (r *Registry) List() []string {
+	names := make([]string, 0, len(r.strategies))
+	for name := range r.strategies {
+		names = append(names, name)
+	}
+	return names
+}
