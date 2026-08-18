@@ -2,7 +2,6 @@ package strategy
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
@@ -43,7 +42,10 @@ func NewSentimentStrategy(base Strategy, client SentimentClient, threshold float
 }
 
 func (s *SentimentStrategy) Name() string {
-	return fmt.Sprintf("Sentiment+EmptyBase")
+	if s.BaseStrategy != nil {
+		return "Sentiment+" + s.BaseStrategy.Name()
+	}
+	return "Sentiment"
 }
 
 func (s *SentimentStrategy) Analyze(candles []market.Candle) Signal {
