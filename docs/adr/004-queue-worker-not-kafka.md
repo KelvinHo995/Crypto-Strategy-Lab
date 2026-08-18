@@ -1,5 +1,9 @@
 # ADR 004: Why Queue/Worker Pool (and why NOT Kafka)?
 
+- **Status**: Accepted
+- **Date**: 2026-08-19
+- **Author**: Người 2 (Vũ Thành Đạt) & Người 3
+
 ## Context
 The Experiment domain needs to execute hundreds or thousands of backtest jobs when a search is initiated. We need a way to distribute these jobs to workers efficiently to maximize throughput, while avoiding blocking the main HTTP thread that received the `/search/start` request.
 
