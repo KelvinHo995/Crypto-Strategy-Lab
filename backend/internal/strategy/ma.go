@@ -48,6 +48,9 @@ func (s *MAStrategy) Analyze(candles []market.Candle) Signal {
 
 // calculateMA calculates the simple moving average ending at endIndex (inclusive)
 func calculateMA(candles []market.Candle, endIndex int, window int) float64 {
+	if endIndex-window+1 < 0 || endIndex >= len(candles) || window <= 0 {
+		return 0
+	}
 	sum := 0.0
 	for i := endIndex - window + 1; i <= endIndex; i++ {
 		sum += candles[i].Close
