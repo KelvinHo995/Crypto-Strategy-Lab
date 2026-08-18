@@ -1,6 +1,6 @@
 # Kế hoạch Build Crypto Strategy Lab — Nhóm 4 người, 2 tuần
 
-Stack: **Go 1.22+** (backend core, `net/http` thuần — không dùng chi, xem mục 6), **React + TypeScript** (pnpm), **Python 3.11 + FastAPI** (Sentiment Service, quản lý bằng `uv`)
+Stack: **Go 1.22+** (backend core, `net/http` thuần — không dùng chi, xem mục 6), **React + TypeScript** (pnpm), **Python 3.11 + FastAPI** (Sentiment Service, quản lý bằng `uv`), **PostgreSQL (Supabase-hosted, dùng chung cho cả nhóm — xem ADR-0012)**
 
 Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 
@@ -13,8 +13,9 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ `Binance.StreamLiveCandles` — WS thật, chạy được, đã test qua `/ws` endpoint (branch `feat/market-data-websocket`, đang chờ merge)
 - ✅ sentiment-service scaffold FastAPI chạy được, `/analyze` mới là placeholder, chưa có model thật
 - ⬜ `Binance.FetchHistoricalCandles` (REST klines) — mới có code mẫu, chưa chạy thật
-- ⬜ `repository.go`, DB thật (SQLite), backfill script — chưa làm
+- ⬜ `repository.go`, DB thật (Postgres, Supabase-hosted — xem ADR-0012), backfill script — chưa làm
 - ⬜ Strategy, Experiment, Frontend UI thật — chưa bắt đầu (đang chạy mock)
+- ⬜ **Auth (users/session)** — MỚI, chưa gán người, chưa lên lịch trong bảng 14 ngày. Quyết định đã chốt (username/password + session cookie tối giản, xem `docs/adr/0007-simple-session-auth.md`), còn thiếu: ai làm + slot vào ngày nào (buffer 8–9 là ứng viên tự nhiên)
 
 ## 1. Phân công (đã điều chỉnh so với bản đầu)
 
@@ -35,7 +36,7 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 | Ngày | Người 1 | Người 2 | Người 3 | Người 4 |
 |---|---|---|---|---|
 | 1 | Họp chung: chốt contract (Candle, Strategy interface, ExperimentResult, Sentiment API, WS message) — **bắt buộc xong trong ngày**, không thì cả nhóm code lệch pha | | | |
-| 2–3 | Binance Adapter → Candle chuẩn | 3–4 strategy MA/RSI/BB (chạy với mock data, không chờ Người 1) | Backtester + Evaluator (mock signal) | React skeleton + chart component (mock WS data) |
+| 2–3 | Binance Adapter → Candle chuẩn | 5 strategy: MA/RSI/BB/SR + SMC (SMC bản tối giản — swing high/low structure break, không cần đúng 100% lý thuyết SMC, xem PDF ch.11) (chạy với mock data, không chờ Người 1) | Backtester + Evaluator (mock signal, gồm SL/TP/transaction cost/slippage 5bps) | React skeleton + chart component (mock WS data) |
 | 4–5 | Nối WebSocket thật → Backend; reconnect logic | StrategyRegistry.register() + extension test | Nối signal thật từ Người 2; bắt đầu transaction boundary | Nối chart vào WS thật; UI chọn strategy |
 | 6 | Bắt đầu Sentiment Service (FastAPI) | CandidateStrategy generator (Random) | Experiment pipeline: Candidate→Backtest→Evaluate→Rank + provenance field | Leaderboard UI |
 | 7 | Sentiment API hoàn chỉnh + test | Nhảy sang hỗ trợ Người 3: Job Queue/Worker pool | Job Queue/Worker pool (cùng Người 2) | UI search progress / observability panel |
@@ -47,6 +48,8 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 | 14 | Rehearsal demo, chuẩn bị trả lời checklist vấn đáp | | | |
 
 **Ưu tiên cắt nếu thiếu giờ** (theo thứ tự): Event Sourcing/CQRS thật (dùng CRUD đơn giản) → Genetic Search (giữ Random, chứng minh bằng interface) → MLOps monitoring dashboard riêng (chỉ cần lưu model/version trong record) → Serverless cho News (cron job thường cũng được).
+
+**Ngoài phạm vi 2 tuần (stretch, không lên lịch trong bảng trên)**: NL/link-to-strategy generator (nhập ngôn ngữ tự nhiên hoặc link website, hệ thống tự sinh strategy) — chi phí implement lớn (LLM synthesis + validate output khớp `Strategy` interface + UI riêng), không chứng minh thêm gì về kiến trúc so với `StrategyGenerator` interface đã có (Random/Domain-guided); LLM-based HTML tag extraction + cache schema cho News Crawler — dùng parser cố định theo RSS/News API là đủ cho MVP, raw-HTML scraping không cần thiết khi có nguồn structured. Chi tiết lý do: `docs/architecture/07-quality-attributes.md`.
 
 ---
 
@@ -137,6 +140,50 @@ Response: {
 { "type": "SEARCH_PROGRESS", "payload": { "tested": 125, "total": 500 } }
 ```
 
+### 3.6 Auth — User & Session (rất tối giản: không role, không reset password, không OAuth)
+
+```go
+type User struct {
+    ID           string `json:"id"`
+    Username     string `json:"username"`
+    PasswordHash string `json:"-"`      // bcrypt, không bao giờ serialize ra JSON
+    CreatedAt    int64  `json:"createdAt"`
+}
+```
+
+Session: JWT ký bằng secret server-side (HS256), claims `{sub: userID, iat,
+exp}`, `exp = iat + 1h` — không phải session token tra DB (lý do xem
+ADR-0007). Gửi về client qua httpOnly cookie khi login; browser tự gửi lại ở
+mọi request kể cả lúc WebSocket handshake. Middleware chỉ verify chữ ký +
+`exp`, không query DB. Toàn bộ API — trừ `/health`, `POST /auth/register`,
+`POST /auth/login` — yêu cầu JWT hợp lệ, chưa hết hạn. Không có danh sách
+route "public vs private" riêng — 1 middleware áp dụng đều, để bớt chỗ dễ
+sai. Logout chỉ xoá cookie phía client — token cũ về lý thuyết vẫn hợp lệ
+tới khi hết hạn tự nhiên (tối đa 1h), đây là đánh đổi đã chấp nhận, không
+phải thiếu sót.
+
+### 3.7 Queue — BacktestJob & Job Queue interface (giữa Search Loop và Backtest Worker)
+
+```go
+type BacktestJob struct {
+    ID         string
+    Candidate  CandidateStrategy // xem 3.2
+    EnqueuedAt int64
+}
+
+type Queue interface {
+    Enqueue(ctx context.Context, job BacktestJob) error
+    Dequeue(ctx context.Context) (BacktestJob, error)
+}
+```
+
+`InMemoryQueue` (channel-backed) là implementation duy nhất cho MVP — xem
+[ADR-0004](adr/0004-inprocess-job-queue-not-kafka.md). Worker pool,
+`StrategyGenerator`, `Backtester` chỉ phụ thuộc vào interface `Queue`, không
+phụ thuộc `InMemoryQueue` — nhờ đó sau này có thể thay bằng
+`RedisQueue`/`KafkaQueue` mà không đổi code 3 chỗ đó (Replaceability — xem
+`docs/architecture/07-quality-attributes.md`).
+
 ---
 
 ## 3b. Toàn bộ API endpoint (~7-8 cái, không nhiều)
@@ -151,6 +198,13 @@ Response: {
 | GET | `/strategies` | List strategy đã đăng ký, cho strategy picker UI |
 | GET | `/ws` | WebSocket — CANDLE_UPDATE, SEARCH_PROGRESS, LEADERBOARD_UPDATE |
 | GET | `/health` | Sanity check, hữu ích cho docker-compose/demo |
+| POST | `/auth/register` | `{username, password}` → tạo user, hash password bằng bcrypt |
+| POST | `/auth/login` | `{username, password}` → set session cookie |
+| POST | `/auth/logout` | Xoá session hiện tại |
+
+**Tất cả endpoint khác ở trên** (`/search/start`, `/experiments`,
+`/experiments/{id}`, `/strategies`, `/ws`) **yêu cầu session hợp lệ** — trừ
+`/health` và 2 endpoint `/auth/register` + `/auth/login`.
 
 ### sentiment-service (Python)
 
@@ -161,7 +215,12 @@ Response: {
 
 **Không có form validate phức tạp** — chỉ 2-3 request body cần check (`StartSearchRequest`, `AnalyzeRequest`), dùng pattern `Validate() error` viết tay trên struct (xem mục 6), không cần thư viện `validator`.
 
-## 3c. DB schema — chỉ 2 bảng bên Go backend
+## 3c. DB schema — Postgres (Supabase-hosted, xem ADR-0012), chỉ 3 bảng bên Go backend
+
+Lưu ý: cột lưu unix-millisecond timestamp phải là `BIGINT`, không phải
+`INTEGER` — `INTEGER` trong Postgres chỉ 32-bit (tối đa ~2.1 tỷ), unix ms
+hiện tại đã ~1.7 nghìn tỷ, sẽ overflow. Đây là khác biệt thật giữa SQLite
+(INTEGER affinity linh hoạt tới 64-bit) và Postgres — xem ADR-0012.
 
 ```sql
 -- Toàn bộ leaderboard + provenance nằm ở đây, đọc/ghi qua 1 Repository interface
@@ -177,14 +236,14 @@ CREATE TABLE experiments (
     mdd                REAL,
     trade_count        INTEGER,
     status             TEXT NOT NULL,
-    created_at         INTEGER NOT NULL
+    created_at         BIGINT NOT NULL
 );
 
 -- Dữ liệu nến lịch sử, backfill 1 lần, dùng cho mọi lần backtest
 CREATE TABLE candles (
     symbol     TEXT NOT NULL,
     timeframe  TEXT NOT NULL,
-    open_time  INTEGER NOT NULL,
+    open_time  BIGINT NOT NULL,
     open REAL, high REAL, low REAL, close REAL, volume REAL,
     PRIMARY KEY (symbol, timeframe, open_time)
 );
@@ -193,6 +252,22 @@ CREATE TABLE candles (
 **Backfill dataset: cố định 2 năm, không cho user chọn range tùy ý** — chạy `cmd/backfill` một lần thủ công (không phải mỗi lần server restart), upsert theo primary key nên chạy lại an toàn. Quyết định này được ghi lại như một ADR — bỏ gap-check/dynamic-range logic vì không có driver nào bắt buộc cho scope 2 tuần này.
 
 **Không cần bảng riêng cho:** strategies (là code, sống trong `StrategyRegistry` in-memory), sentiment cache (nếu có, sống độc lập trong `sentiment-service`, không chung DB với Go backend — "database per service", xem mục 6).
+
+```sql
+-- Đăng nhập tối giản — không role, không password reset, không OAuth
+-- Không có bảng sessions: session là JWT tự-chứa (self-contained), verify
+-- bằng chữ ký + exp claim, không tra DB — xem ADR-0007
+CREATE TABLE users (
+    id            TEXT PRIMARY KEY,
+    username      TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,   -- bcrypt
+    created_at    BIGINT NOT NULL
+);
+```
+
+Connection string tới Supabase là secret dùng chung cả nhóm — mỗi người giữ
+riêng trong `.env.local` (gitignored), không paste vào chat/commit. Chỉ Go
+backend kết nối Postgres trực tiếp; frontend không bao giờ gọi Supabase.
 
 ---
 
@@ -209,7 +284,7 @@ Việc biết mình *không* cần gì cũng là kiến trúc — mỗi dòng d�
 | Kubernetes | **Không** — chạy chay lúc dev, docker-compose chỉ cho demo cuối | Không cần orchestration cho 1 server + 1 FE + 1 sentiment service |
 | Request validator library (Go) | **Không** — viết tay `Validate() error` trên struct | Chỉ 2-3 struct cần validate, học 1 thư viện tốn công hơn viết tay |
 | `var _ Interface = (*Type)(nil)` | **Có dùng** — mỗi Strategy implementation | Ép compiler bắt lỗi lệch signature ngay tại chỗ, miễn phí |
-| Dependency injection qua interface (Repository) | **Có dùng** | Cho phép bắt đầu code với in-memory store, swap sang SQLite sau không đụng handler |
+| Dependency injection qua interface (Repository) | **Có dùng** | Cho phép bắt đầu code với in-memory store, swap sang Postgres (Supabase) sau không đụng handler — xem ADR-0012 |
 | uv (Python), pnpm (Node) | **Có dùng** | Nhanh hơn pip/npm, lockfile thật, cài đặt nhất quán giữa các máy |
 
 ## 6b. Quy ước Git
@@ -230,6 +305,7 @@ Format: Context · Decision · Alternatives · Consequences · Evidence
 4. **Why queue/worker (or why NOT Kafka)?** (Người 2 + 3)
 5. **Why modular monolith vs microservices?** (cả nhóm)
 6. **Why separate News Collector and Sentiment Service?** (Người 1/4 tùy ai làm sentiment)
+7. **Why JWT (1h expiry) instead of a server-side session table?** (cần gán người — xem §0)
 
 ---
 
@@ -247,6 +323,7 @@ Format: Context · Decision · Alternatives · Consequences · Evidence
 | 8 | Service lỗi có lan failure không? | Người 4 (test News down) + Người 1 (test Binance disconnect) |
 | 9 | Duplicate/retry/event order xử lý thế nào? | Người 3 |
 | 10 | Leaderboard result truy được provenance thế nào? | Người 3 |
+| 11 | Vì sao chọn JWT 1h thay vì session table? Logout thật sự nghĩa là gì (và vì sao chấp nhận được)? | (cần gán người — xem §0) |
 
 **Lưu ý:** Không trả lời được câu nào trong domain mình phụ trách là dấu hiệu kiến trúc "vẫn đang là hộp và mũi tên" — mỗi người nên tự test lại domain mình bằng 3 bài Architecture Proof (Extensibility / Replaceability / Scalability & Failure) trước ngày vấn đáp, không chỉ code chạy được mà phải giải thích được *tại sao* nó chịu được thay đổi.
 
