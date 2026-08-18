@@ -23,17 +23,59 @@ func BuildFromCandidate(reg *Registry, c CandidateStrategy) ([]Strategy, error) 
 	var strategies []Strategy
 
 	for _, name := range c.Strategies {
-		// In a real system we would use c.Params to initialize them.
-		// For this lab, since we don't have a factory pattern for dynamic params,
-		// we'll just get the pre-registered default instance from registry, or
-		// recreate them with default params if we want isolated instances.
-		// According to plan, we just resolve them.
-		s, ok := reg.Get(name)
-		if !ok {
-			return nil, fmt.Errorf("strategy %s not found in registry", name)
+		s, err := buildStrategy(name, c.Params)
+		if err != nil {
+			// Fallback: try getting default from registry
+			defaultS, ok := reg.Get(name)
+			if !ok {
+				return nil, fmt.Errorf("strategy %s not found in registry", name)
+			}
+			s = defaultS
 		}
 		strategies = append(strategies, s)
 	}
 
 	return strategies, nil
+}
+
+func buildStrategy(name string, params map[string]any) (Strategy, error) {
+	switch name {
+	case "MA":
+		short, _ := toInt(params["maShortWindow"], 20)
+		long, _ := toInt(params["maLongWindow"], 50)
+		return NewMAStrategy(short, long), nil
+	case "RSI":
+		period, _ := toInt(params["rsiPeriod"], 14)
+		ob, _ := toFloat(params["rsiOverbought"], 70.0)
+		os, _ := toFloat(params["rsiOversold"], 30.0)
+		return NewRSIStrategy(period, ob, os), nil
+	case "Bollinger":
+		period, _ := toInt(params["bollingerPeriod"], 20)
+		sd, _ := toFloat(params["bollingerStdDev"], 2.0)
+		return NewBollingerStrategy(period, sd), nil
+	default:
+		return nil, fmt.Errorf("unknown strategy: %s", name)
+	}
+}
+
+func toInt(v any, fallback int) (int, bool) {
+	switch val := v.(type) {
+	case int:
+		return val, true
+	case float64:
+		return int(val), true
+	default:
+		return fallback, false
+	}
+}
+
+func toFloat(v any, fallback float64) (float64, bool) {
+	switch val := v.(type) {
+	case float64:
+		return val, true
+	case int:
+		return float64(val), true
+	default:
+		return fallback, false
+	}
 }
