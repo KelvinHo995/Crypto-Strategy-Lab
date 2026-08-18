@@ -37,19 +37,4 @@ func TestHandler_ListStrategies(t *testing.T) {
 	}
 }
 
-func TestHandler_ListStrategies_MethodNotAllowed(t *testing.T) {
-	registry := strategy.NewRegistry()
-	handler := strategy.NewHandler(registry)
 
-	req, err := http.NewRequest(http.MethodPost, "/strategies", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rr := httptest.NewRecorder()
-	handler.ListStrategies(rr, req)
-
-	if status := rr.Code; status != http.StatusMethodNotAllowed {
-		t.Errorf("handler returned wrong status code for POST: got %v want %v", status, http.StatusMethodNotAllowed)
-	}
-}

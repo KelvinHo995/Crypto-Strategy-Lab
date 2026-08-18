@@ -16,11 +16,6 @@ func NewHandler(registry *Registry) *Handler {
 }
 
 func (h *Handler) ListStrategies(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
 	strategies := h.registry.List()
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(strategies); err != nil {
