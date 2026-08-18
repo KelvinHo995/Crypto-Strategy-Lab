@@ -38,17 +38,10 @@ func (h *Handler) StartSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// This is where we would generate Candidates and push them to the Job Queue
-	// controlled by Person 3 (Experiment domain).
-	// We'll generate a dummy search ID for now.
+	// TODO(Person2+Person3): Hook vào Job Queue khi Người 3 define interface.
+	// Luồng: generator.Generate() x req.Count → queue.Push(candidate)
+	// Hiện tại chỉ trả searchID, chưa dispatch job thật.
 	searchID := generateID()
-
-	// Example logic (Integration with Job Queue would go here):
-	// generator := NewRandomGenerator(h.registry)
-	// for i := 0; i < req.Count; i++ {
-	// 	 candidate := generator.Generate()
-	//   experimentQueue.Push(candidate)
-	// }
 
 	resp := StartSearchResponse{
 		SearchID: searchID,
