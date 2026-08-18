@@ -1,6 +1,10 @@
 package strategy
 
-import "github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
+import (
+	"sort"
+
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
+)
 
 type Signal string
 
@@ -15,6 +19,9 @@ type Strategy interface {
 	Analyze(candles []market.Candle) Signal
 }
 
+// Registry holds registered strategy implementations.
+// It is NOT safe for concurrent use. All Register calls must
+// happen during application startup before any concurrent Get/List.
 type Registry struct {
 	strategies map[string]Strategy
 }
@@ -37,5 +44,6 @@ func (r *Registry) List() []string {
 	for name := range r.strategies {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }
