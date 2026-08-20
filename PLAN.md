@@ -12,10 +12,14 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ `Candle` struct chốt xong, có thêm field `IsClosed` (candle đang hình thành vs đã đóng)
 - ✅ `Binance.StreamLiveCandles` — WS thật, chạy được, đã test qua `/ws` endpoint (branch `feat/market-data-websocket`, đang chờ merge)
 - ✅ sentiment-service scaffold FastAPI chạy được, `/analyze` mới là placeholder, chưa có model thật
+- ✅ `internal/experiment`: Backtester + Evaluator xong, có test (14 case, `go vet`/`go test` sạch) — SL/TP, fee, slippage, tránh lookahead bias. Xem ADR-0003, ADR-0009.
+- ✅ `internal/httpx`: router skeleton xong (2-mux public/protected sau `requireAuth` stub), `cmd/server/main.go` chỉ còn compose, không định nghĩa route. `POST /search/start` đã parse + validate request thật (decode → `Validate()` → 400 nếu sai field, còn lại 501 vì chưa có Queue/Registry để chạy thật). Các route khác vẫn 501.
 - ⬜ `Binance.FetchHistoricalCandles` (REST klines) — mới có code mẫu, chưa chạy thật
 - ⬜ `repository.go`, DB thật (Postgres, Supabase-hosted — xem ADR-0012), backfill script — chưa làm
-- ⬜ Strategy, Experiment, Frontend UI thật — chưa bắt đầu (đang chạy mock)
-- ⬜ **Auth (users/session)** — MỚI, chưa gán người, chưa lên lịch trong bảng 14 ngày. Quyết định đã chốt (username/password + session cookie tối giản, xem `docs/adr/0007-simple-session-auth.md`), còn thiếu: ai làm + slot vào ngày nào (buffer 8–9 là ứng viên tự nhiên)
+- ⬜ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — chưa làm
+- ⬜ Queue/Worker pool (ADR-0004), search loop + stop condition (ADR-0011), orchestrator ghép `Metrics` + provenance thành `Result` — chưa làm
+- ⬜ Frontend UI thật — chưa bắt đầu (đang chạy mock)
+- ⬜ **Auth (users/session)** — MỚI, chưa gán người, chưa lên lịch trong bảng 14 ngày. Quyết định đã chốt (username/password + JWT 1h, xem `docs/adr/0007-simple-session-auth.md`), còn thiếu: ai làm + slot vào ngày nào (buffer 8–9 là ứng viên tự nhiên). `requireAuth` hiện là middleware rỗng, chưa verify JWT thật.
 
 ## 1. Phân công (đã điều chỉnh so với bản đầu)
 
