@@ -1,0 +1,193 @@
+# 7. Quality Attributes & Architectural Drivers
+
+Spec ch.32 frames these as the actual grading criteria — "architectural
+drivers", not feature checkboxes. Each one below states the pressure, the
+decision made in response, and where that decision is documented in depth.
+
+## Modifiability
+
+**Pressure:** add `MACDStrategy` without touching 20 other modules
+(spec ch.32.1).
+**Decision:** `Strategy` interface + `Registry.Register()`
+([05-strategy-flow.md](05-strategy-flow.md), [ADR-0002](../adr/0002-strategy-plugin-registry.md)).
+**Test:** spec ch.41 scenario — count how many files a new strategy touches.
+Should be 1 (new strategy file) + 1 registration call.
+
+## Scalability
+
+**Pressure:** 10 strategies today → 100,000 candidate strategies later
+(spec ch.32.2, ch.43).
+**Decision:** Job Queue + Worker pool, worker count is the scaling knob, not
+a rewrite ([06-search-backtest-flow.md](06-search-backtest-flow.md),
+[ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md)).
+**Deferred, not solved:** true multi-process/multi-machine worker scaling
+(would need a real broker, not in-process channels) — the team's position
+is "no driver forces this at current scope" (PLAN.md §6), and the queue
+abstraction is what makes that swap possible later without touching the
+Backtester or Evaluator.
+
+## Realtime
+
+**Pressure:** Binance market data → indicator → strategy signal → UI with
+low latency, without the frontend polling (spec ch.32.3).
+**Decision:** WebSocket push, one connection, tagged message types
+(`CANDLE_UPDATE`, `SEARCH_PROGRESS`, `LEADERBOARD_UPDATE`) —
+[04-realtime-flow.md](04-realtime-flow.md).
+
+## Reliability
+
+**Pressure:** Binance connection drops — does the system stay usable
+(spec ch.32.4, ch.40 Q7)?
+**Decision:** reconnect/retry logic owned entirely inside
+`internal/market`, isolated from strategy/experiment/frontend. Visible
+"reconnecting" state on the frontend rather than silent staleness.
+**Untested assumption to close before defense:** what happens to an
+in-flight backtest if candle data it depends on is mid-backfill or stale —
+this should be answered explicitly, not left implicit.
+
+## Performance
+
+**Pressure:** 1,000 strategies to backtest — sequential loop vs. concurrent
+workers (spec ch.32.5).
+**Decision:** same as Scalability above — Job Queue + Workers.
+
+## Replaceability (spec ch.32.6 calls this "Maintainability" — same test)
+
+**Pressure:** can an implementation be swapped without its consumers
+changing? Two concrete instances:
+1. Swap `Random Search` for `Genetic Search` without the Backtester
+   changing (spec ch.32.6, spec ch.42's scenario).
+2. Swap the in-memory job queue for `RedisQueue`/`KafkaQueue` without the
+   worker pool, `StrategyGenerator`, or `Backtester` changing, if
+   distributed workers ever become a real requirement.
+**Decision:** both are interfaces consumers depend on, never the concrete
+implementation — `StrategyGenerator` (`generate() -> CandidateStrategy`) and
+`Queue` (`Enqueue`/`Dequeue` over `BacktestJob`) —
+[06-search-backtest-flow.md](06-search-backtest-flow.md),
+[ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md).
+**Test:** for either swap, count how many files outside the
+implementation itself need to change. Should be zero.
+
+## Observability
+
+**Pressure:** is the loop running? how many candidates tried? how many
+job failures? who's #1 right now? (spec ch.32.7)
+**Status:** not yet implemented — `experiment.Result.Status` field
+(`PENDING|RUNNING|COMPLETED|FAILED`) is the only observability primitive
+that exists today. A dedicated progress/metrics surface (beyond
+`SEARCH_PROGRESS` WS messages) is still open work.
+
+## Reproducibility
+
+**Pressure:** can a leaderboard result be traced back to the exact strategy
+code, parameters, dataset, and model version that produced it? (deck
+rubric: "Top-K có link về exact experiment config/version?", spec ch.36).
+**Decision:** `Result` rows store `StrategyVersions`, `CandidateID`,
+`DatasetPeriod` inline at write time —
+[ADR-0009](../adr/0009-experiment-provenance-storage.md), provenance
+section in [06-search-backtest-flow.md](06-search-backtest-flow.md).
+**Explicitly not done:** Event Sourcing / a full state-transition audit
+trail — [ADR-0010](../adr/0010-no-cqrs-event-sourcing.md) explains why
+state-only storage already answers what's actually asked.
+**Open risk:** version bumps on strategy code changes are a manual
+discipline, not enforced automatically — see ADR-0009's Consequences.
+
+## Security / Access Control
+
+**Pressure:** an anonymous visitor must not be able to trigger a backtest —
+every search run enqueues real work onto the Job Queue/worker pool
+([06-search-backtest-flow.md](06-search-backtest-flow.md)), and the app may
+be reachable beyond the team (grading, a shared demo link).
+**Decision:** minimal username/password accounts + a short-lived (1h) signed
+JWT cookie, gating the whole API by default (one middleware, not a curated
+public/private route list) — [ADR-0007](../adr/0007-simple-session-auth.md).
+**Explicitly not done:** roles/permissions, password reset, OAuth/SSO — no
+driver requires them at this scope.
+**Open item:** `internal/auth` package ownership isn't assigned yet (see
+PLAN.md §0) — this is scope added mid-plan, not part of the original
+14-day schedule.
+
+## Deferred extensions (explicitly out of scope for MVP)
+
+Two ideas surfaced (from the professor's supplementary notes) that are
+deliberately **not** being built in the 2-week window, with reasoning kept
+here rather than as ADRs — an ADR justifies a decision that was made and
+acted on; these are decisions to *not* act, which belong with the other
+scope cuts in [PLAN.md](../../PLAN.md)'s "Ngoài phạm vi 2 tuần" list.
+
+- **Natural language / website link → auto-generate strategy.** A user
+  types a description or pastes a link, and the system synthesizes a
+  `CandidateStrategy` via an LLM. Cut because: (1) it's a large surface —
+  LLM prompt/output validation, ensuring generated output actually conforms
+  to the `Strategy` interface, plus its own UI — for a 4-person/2-week
+  build; (2) it doesn't prove anything about the architecture that
+  `StrategyGenerator` (Random → Domain-guided,
+  [06-search-backtest-flow.md](06-search-backtest-flow.md)) doesn't already
+  demonstrate — the interface is what's graded, not how creative the
+  generator is. If time allows post-MVP, it plugs in as one more
+  `StrategyGenerator` implementation, no architecture change required.
+- **LLM-based HTML tag extraction with cached schema for the News
+  Crawler.** Cut because a fixed parser per structured source (RSS feed,
+  News API) already satisfies the `NewsProvider` abstraction
+  ([ADR-0006](../adr/0006-separate-sentiment-service.md)'s sibling
+  decision, spec ch.28) without needing raw-HTML scraping at all for MVP.
+  Worth revisiting only if a required news source has no structured feed.
+
+## Documentation
+
+**Pressure:** deck rubric asks "Context/Container/Dynamic view nhất quán
+với code?" — is this documentation an accurate map of the system, or has
+it drifted from what's actually built?
+**Decision:** the `docs/architecture/` + `docs/adr/` split (trimmed arc42
+sections + one-file-per-decision ADRs), cross-referenced by chapter/slide
+number against both the project spec (`Crypto Strategy Lab – Đồ án cuối
+kỳ.pdf`) and the professor's teaching deck (`KienTrucDoAn_slide.pdf`), so
+each claim traces to a source instead of being asserted from memory.
+**Known gap:** these docs were written ahead of most of the implementation
+(see [PLAN.md](../../PLAN.md) §0 status) — they describe the *agreed*
+architecture, not yet one verified against code. As modules get built, this
+file and the flow docs need to be checked against actual code before vấn
+đáp, not just against the plan — docs drifting from code is a real risk
+here, not a hypothetical one.
+
+## Trade-off reasoning
+
+**Pressure:** deck rubric: "mỗi công nghệ có driver và consequence?" — every
+non-trivial choice should state what it costs, not just what it buys
+("không có free lunch", deck slide 69).
+**Where this lives:** every ADR's Consequences section states both the
+benefit and the cost of that decision — not duplicated here. See in
+particular [ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md) (queue:
+scale/retry vs. eventual consistency and a multi-machine limit),
+[ADR-0005](../adr/0005-modular-monolith-not-microservices.md) (monolith:
+simplicity vs. no independent scaling), and
+[ADR-0010](../adr/0010-no-cqrs-event-sourcing.md) (CRUD: simplicity vs. no
+audit trail).
+**Test:** pick any ADR at random during vấn đáp and be able to state its
+cost, not just its benefit, without re-reading it first.
+
+## Anti-patterns this architecture is designed to avoid (spec ch.44)
+
+| Anti-pattern | Where it would show up | Why the current package boundaries prevent it |
+|---|---|---|
+| God Service | one `TradingService` doing Binance calls + RSI math + crawling + ML + backtest + ranking + DB + WS | `internal/market` / `internal/strategy` / `internal/experiment` are separate packages with one owner each |
+| Hard-coded strategy dispatch | `if strategy == MA ... else if ...` | `Registry.Register()` — see [05-strategy-flow.md](05-strategy-flow.md) |
+| Business logic in frontend | React computing backtest/ranking itself | Frontend only renders `Result`/`Candle`/WS payloads it receives, never derives them |
+| Strategy → Database directly | `RSIStrategy` calling Postgres directly | `Strategy.Analyze(candles) Signal` — no I/O in the interface at all |
+| Crawler tightly coupled to ML model | `Crawler → BERT model` inline | `sentiment-service` is a separate deployable behind a REST boundary — [ADR-0006](../adr/0006-separate-sentiment-service.md) |
+
+## The 8 central questions (spec ch.40) — where each is answered
+
+1. Strategy mới thêm vào hệ thống thế nào? → [05-strategy-flow.md](05-strategy-flow.md)
+2. Search algorithm mới thêm thế nào? → [06-search-backtest-flow.md](06-search-backtest-flow.md)
+3. Market Data Provider mới thêm thế nào, có sửa frontend không? → [04-realtime-flow.md](04-realtime-flow.md), [ADR-0001](../adr/0001-market-data-adapter.md)
+4. Backtest 100 → 100,000 thì kiến trúc thay đổi thế nào? → Scalability section above
+5. News Service lỗi thì Chart còn chạy không? → [ADR-0006](../adr/0006-separate-sentiment-service.md) (must degrade gracefully, not cascade)
+6. Sentiment Model thay đổi thì Strategy Engine bị ảnh hưởng không? → `StrategyVersions` provenance in [06-search-backtest-flow.md](06-search-backtest-flow.md)
+7. Binance WebSocket disconnect thì phục hồi thế nào? → Reliability section above
+8. Kết quả trên Leaderboard truy được version strategy nào? → Provenance section in [06-search-backtest-flow.md](06-search-backtest-flow.md)
+
+Each team member should be able to answer the question tied to their owned
+domain (see root README ownership table) without reading from this doc —
+this file is the fallback reference, not the primary source of
+understanding.
