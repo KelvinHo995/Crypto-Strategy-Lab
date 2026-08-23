@@ -38,10 +38,10 @@ cd sentiment-service && uv sync && uv run uvicorn app.main:app --reload --port 8
 ## Team & Ownership
 | Person | Owns |
 |---|---|
-| Võ Thành Đạt | Market Data + Sentiment Service |
-| Vũ Thành Đạt | Strategy + Search |
-| Hồ Tấn Quốc | Experiment (Backtest/Evaluate/Rank) |
-| Trịnh Hạnh | Frontend |
+| Person 1 | Market Data |
+| Person 2 | Strategy + Search |
+| Person 3 | Experiment (Backtest/Evaluate/Rank) |
+| Person 4 | Frontend |
 
 ## Working rules
 - Branch naming: feat/<domain>-<short-desc>, e.g. feat/market-binance-adapter
