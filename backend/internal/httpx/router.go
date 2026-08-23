@@ -18,7 +18,7 @@ func NewRouter(registry *strategy.Registry) http.Handler {
 	protected.HandleFunc("POST /auth/logout", logout)
 	strategyHandler := strategy.NewHandler(registry)
 
-	protected.HandleFunc("POST /search/start", strategyHandler.StartSearch) // use strategy search for now, or experiment search?
+	protected.HandleFunc("POST /search/start", startSearch)
 	protected.HandleFunc("GET /experiments", listExperiments)
 	protected.HandleFunc("GET /experiments/{id}", getExperiment)
 	protected.HandleFunc("GET /strategies", strategyHandler.ListStrategies)

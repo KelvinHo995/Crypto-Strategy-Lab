@@ -16,6 +16,12 @@ func NewMAStrategy(shortWindow, longWindow int) *MAStrategy {
 	}
 }
 
+func MAFactory(params map[string]any) Strategy {
+	short, _ := toInt(params["maShortWindow"], 20)
+	long, _ := toInt(params["maLongWindow"], 50)
+	return NewMAStrategy(short, long)
+}
+
 func (s *MAStrategy) Name() string {
 	return "MA"
 }

@@ -18,6 +18,13 @@ func NewRSIStrategy(period int, overbought, oversold float64) *RSIStrategy {
 	}
 }
 
+func RSIFactory(params map[string]any) Strategy {
+	period, _ := toInt(params["rsiPeriod"], 14)
+	ob, _ := toFloat(params["rsiOverbought"], 70.0)
+	os, _ := toFloat(params["rsiOversold"], 30.0)
+	return NewRSIStrategy(period, ob, os)
+}
+
 func (s *RSIStrategy) Name() string {
 	return "RSI"
 }

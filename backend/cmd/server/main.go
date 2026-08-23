@@ -11,8 +11,21 @@ import (
 func main() {
 	registry := strategy.NewRegistry()
 	registry.Register(strategy.NewMAStrategy(20, 50))
+	registry.RegisterFactory("MA", strategy.MAFactory)
 	registry.Register(strategy.NewRSIStrategy(14, 70.0, 30.0))
+	registry.RegisterFactory("RSI", strategy.RSIFactory)
 	registry.Register(strategy.NewBollingerStrategy(20, 2.0))
+	registry.RegisterFactory("Bollinger", strategy.BollingerFactory)
+	registry.Register(strategy.NewSRStrategy(20, 0.005))
+	registry.RegisterFactory("SR", strategy.SRFactory)
+	registry.Register(strategy.NewSMCStrategy(10))
+	registry.RegisterFactory("SMC", strategy.SMCFactory)
+
+	// Architecture Proof (ADR-0002): Assert expected strategies are registered
+	expectedStrategies := 5 // MA, RSI, Bollinger, SR, SMC
+	if len(registry.List()) != expectedStrategies {
+		log.Fatalf("expected %d strategies, got %d", expectedStrategies, len(registry.List()))
+	}
 
 	router := httpx.NewRouter(registry)
 

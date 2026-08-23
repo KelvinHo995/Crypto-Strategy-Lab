@@ -85,6 +85,11 @@ func generateRandomParams(strategies []string) map[string]any {
 		case "Bollinger":
 			params["bollingerPeriod"] = 10 + randomInt(31)        // 10-40
 			params["bollingerStdDev"] = 1.5 + float64(randomInt(15))/10.0 // 1.5-3.0
+		case "SR":
+			params["srWindow"] = 10 + randomInt(41) // 10-50
+			params["srTolerance"] = 0.001 + float64(randomInt(10))/1000.0 // 0.1% to 1%
+		case "SMC":
+			params["smcLookback"] = 5 + randomInt(26) // 5-30
 		}
 	}
 	return params

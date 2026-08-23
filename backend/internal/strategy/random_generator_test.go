@@ -29,13 +29,13 @@ func TestRandomGenerator_Generate(t *testing.T) {
 	}
 
 	// Test BuildFromCandidate
-	strategies, err := strategy.BuildFromCandidate(registry, candidate)
+	strat, err := strategy.BuildFromCandidate(registry, candidate)
 	if err != nil {
 		t.Errorf("BuildFromCandidate failed: %v", err)
 	}
 
-	if len(strategies) != len(candidate.Strategies) {
-		t.Errorf("Expected %d built strategies, got %d", len(candidate.Strategies), len(strategies))
+	if strat == nil {
+		t.Errorf("Expected built strategy, got nil")
 	}
 }
 

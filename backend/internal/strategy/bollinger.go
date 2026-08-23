@@ -20,6 +20,12 @@ func NewBollingerStrategy(period int, stdDevMultiplier float64) *BollingerStrate
 	}
 }
 
+func BollingerFactory(params map[string]any) Strategy {
+	period, _ := toInt(params["bollingerPeriod"], 20)
+	sd, _ := toFloat(params["bollingerStdDev"], 2.0)
+	return NewBollingerStrategy(period, sd)
+}
+
 func (s *BollingerStrategy) Name() string {
 	return "Bollinger"
 }
