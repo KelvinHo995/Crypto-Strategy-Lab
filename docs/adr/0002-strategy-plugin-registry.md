@@ -69,5 +69,5 @@ check is explicitly "Có dùng").
 - **Cost:** the `Registry` itself is a single point every strategy must be
   registered through; if registration is forgotten, the strategy silently
   doesn't exist rather than failing loudly. Mitigation: `cmd/server`'s
-  composition root should assert the expected strategy count/names at
-  startup (not yet implemented — open item).
+  composition root asserts the expected strategy count/names at
+  startup (Implemented).

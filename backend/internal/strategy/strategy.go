@@ -1,6 +1,11 @@
 package strategy
 
-import "github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
+import (
+	"fmt"
+	"sort"
+
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
+)
 
 type Signal string
 
@@ -15,14 +20,52 @@ type Strategy interface {
 	Analyze(candles []market.Candle) Signal
 }
 
+type StrategyFactory func(params map[string]any) Strategy
+
+// Registry holds registered strategy implementations and factories.
+// It is NOT safe for concurrent use. All Register calls must
+// happen during application startup before any concurrent Get/List.
 type Registry struct {
 	strategies map[string]Strategy
+	factories  map[string]StrategyFactory
 }
 
 func NewRegistry() *Registry {
-	return &Registry{strategies: make(map[string]Strategy)}
+	return &Registry{
+		strategies: make(map[string]Strategy),
+		factories:  make(map[string]StrategyFactory),
+	}
 }
 
 func (r *Registry) Register(s Strategy) {
 	r.strategies[s.Name()] = s
+}
+
+func (r *Registry) RegisterFactory(name string, f StrategyFactory) {
+	r.factories[name] = f
+}
+
+func (r *Registry) Get(name string) (Strategy, bool) {
+	s, ok := r.strategies[name]
+	return s, ok
+}
+
+func (r *Registry) BuildWithParams(name string, params map[string]any) (Strategy, error) {
+	if f, ok := r.factories[name]; ok {
+		return f(params), nil
+	}
+	// Fallback: try getting default from registry
+	if s, ok := r.strategies[name]; ok {
+		return s, nil
+	}
+	return nil, fmt.Errorf("strategy %s not found in registry", name)
+}
+
+func (r *Registry) List() []string {
+	names := make([]string, 0, len(r.strategies))
+	for name := range r.strategies {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
