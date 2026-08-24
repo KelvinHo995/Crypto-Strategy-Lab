@@ -16,7 +16,7 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ `internal/httpx`: router skeleton xong (2-mux public/protected sau `requireAuth` stub), `cmd/server/main.go` chỉ còn compose, không định nghĩa route. `POST /search/start` đã parse + validate request thật (decode → `Validate()` → 400 nếu sai field, còn lại 501 vì chưa có Queue/Registry để chạy thật). Các route khác vẫn 501.
 - ⬜ `Binance.FetchHistoricalCandles` (REST klines) — mới có code mẫu, chưa chạy thật
 - ⬜ `repository.go`, DB thật (Postgres, Supabase-hosted — xem ADR-0012), backfill script — chưa làm
-- ⬜ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — chưa làm
+- ✅ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện, coverage 100% test.
 - ⬜ Queue/Worker pool (ADR-0004), search loop + stop condition (ADR-0011), orchestrator ghép `Metrics` + provenance thành `Result` — chưa làm
 - ⬜ Frontend UI thật — chưa bắt đầu (đang chạy mock)
 - ⬜ **Auth (users/session)** — MỚI, chưa gán người, chưa lên lịch trong bảng 14 ngày. Quyết định đã chốt (username/password + JWT 1h, xem `docs/adr/0007-simple-session-auth.md`), còn thiếu: ai làm + slot vào ngày nào (buffer 8–9 là ứng viên tự nhiên). `requireAuth` hiện là middleware rỗng, chưa verify JWT thật.
@@ -40,9 +40,9 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 | Ngày | Người 1 | Người 2 | Người 3 | Người 4 |
 |---|---|---|---|---|
 | 1 | Họp chung: chốt contract (Candle, Strategy interface, ExperimentResult, Sentiment API, WS message) — **bắt buộc xong trong ngày**, không thì cả nhóm code lệch pha | | | |
-| 2–3 | Binance Adapter → Candle chuẩn | 5 strategy: MA/RSI/BB/SR + SMC (SMC bản tối giản — swing high/low structure break, không cần đúng 100% lý thuyết SMC, xem PDF ch.11) (chạy với mock data, không chờ Người 1) | Backtester + Evaluator (mock signal, gồm SL/TP/transaction cost/slippage 5bps) | React skeleton + chart component (mock WS data) |
-| 4–5 | Nối WebSocket thật → Backend; reconnect logic | StrategyRegistry.register() + extension test | Nối signal thật từ Người 2; bắt đầu transaction boundary | Nối chart vào WS thật; UI chọn strategy |
-| 6 | Bắt đầu Sentiment Service (FastAPI) | CandidateStrategy generator (Random) | Experiment pipeline: Candidate→Backtest→Evaluate→Rank + provenance field | Leaderboard UI |
+| 2–3 | Binance Adapter → Candle chuẩn | ✅ 5 strategy: MA/RSI/BB/SR + SMC (SMC bản tối giản — swing high/low structure break, không cần đúng 100% lý thuyết SMC, xem PDF ch.11) (chạy với mock data, không chờ Người 1) | Backtester + Evaluator (mock signal, gồm SL/TP/transaction cost/slippage 5bps) | React skeleton + chart component (mock WS data) |
+| 4–5 | Nối WebSocket thật → Backend; reconnect logic | ✅ StrategyRegistry.register() + extension test | Nối signal thật từ Người 3; bắt đầu transaction boundary | Nối chart vào WS thật; UI chọn strategy |
+| 6 | Bắt đầu Sentiment Service (FastAPI) | ✅ CandidateStrategy generator (Random) | Experiment pipeline: Candidate→Backtest→Evaluate→Rank + provenance field | Leaderboard UI |
 | 7 | Sentiment API hoàn chỉnh + test | Nhảy sang hỗ trợ Người 3: Job Queue/Worker pool | Job Queue/Worker pool (cùng Người 2) | UI search progress / observability panel |
 | 8–9 | **Buffer chung — fix bug tích hợp toàn hệ thống** | | | |
 | 10 | Nối Sentiment → Go backend (REST, xử lý service-down) | SentimentStrategy (nhận SentimentResult làm input) | Đảm bảo Experiment lưu đúng strategyVersions/model version | News panel UI + gắn Sentiment vào chart/leaderboard |
