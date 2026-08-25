@@ -3,7 +3,9 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/experiment"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/httpx"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/strategy"
 )
@@ -27,7 +29,18 @@ func main() {
 		log.Fatalf("expected %d strategies, got %d", expectedStrategies, len(registry.List()))
 	}
 
-	router := httpx.NewRouter(registry)
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		log.Fatal("DATABASE_URL is required — see backend/migrations/0001_init.sql and ADR-0012")
+	}
+	db, err := experiment.OpenDB(dsn)
+	if err != nil {
+		log.Fatalf("connect to database: %v", err)
+	}
+	defer db.Close()
+	repo := experiment.NewPostgresRepository(db)
+
+	router := httpx.NewRouter(registry, repo)
 
 	log.Println("listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
