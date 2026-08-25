@@ -112,11 +112,18 @@ type CandidateStrategy struct {
 type ExperimentResult struct {
     ID               string            `json:"id"`
     CandidateID      string            `json:"candidateId"`
+    Strategies       []string          `json:"strategies"`       // snapshot, not FK
+    Params           map[string]any    `json:"params"`           // snapshot
+    Policy           string            `json:"policy"`           // snapshot
     StrategyVersions map[string]string `json:"strategyVersions"` // provenance
     DatasetPeriod    string            `json:"datasetPeriod"`
     Return           float64           `json:"return"`
     MDD              float64           `json:"mdd"`
     TradeCount       int               `json:"tradeCount"`
+    WinRate          float64           `json:"winRate"`
+    Wins             int               `json:"wins"`
+    Losses           int               `json:"losses"`
+    TotalProfit      float64           `json:"totalProfit"`
     Status           string            `json:"status"` // PENDING|RUNNING|COMPLETED|FAILED
     CreatedAt        int64             `json:"createdAt"`
 }
@@ -231,14 +238,18 @@ hiện tại đã ~1.7 nghìn tỷ, sẽ overflow. Đây là khác biệt thật
 CREATE TABLE experiments (
     id                 TEXT PRIMARY KEY,
     candidate_id       TEXT NOT NULL,
-    strategies         TEXT NOT NULL,   -- JSON: ["MA","RSI"]
-    params             TEXT NOT NULL,   -- JSON: {"maWindow":20,...}
-    policy             TEXT NOT NULL,
+    strategies         TEXT NOT NULL,   -- JSON: ["MA","RSI"] — snapshot, not FK
+    params             TEXT NOT NULL,   -- JSON: {"maWindow":20,...} — snapshot
+    policy             TEXT NOT NULL,   -- snapshot
     strategy_versions  TEXT NOT NULL,   -- JSON provenance
     dataset_period     TEXT NOT NULL,
     return_pct         REAL,
     mdd                REAL,
     trade_count        INTEGER,
+    win_rate           REAL,
+    wins               INTEGER,
+    losses             INTEGER,
+    total_profit       REAL,
     status             TEXT NOT NULL,
     created_at         BIGINT NOT NULL
 );
