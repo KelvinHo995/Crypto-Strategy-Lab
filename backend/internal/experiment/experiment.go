@@ -12,6 +12,9 @@ type Strategy interface {
 type Result struct {
 	ID               string            `json:"id"`
 	CandidateID      string            `json:"candidateId"`
+	Strategies       []string          `json:"strategies"`
+	Params           map[string]any    `json:"params"`
+	Policy           string            `json:"policy"`
 	StrategyVersions map[string]string `json:"strategyVersions"`
 	DatasetPeriod    string            `json:"datasetPeriod"`
 	Return           float64           `json:"return"`
