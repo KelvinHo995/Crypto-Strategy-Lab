@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/experiment"
@@ -10,6 +11,9 @@ import (
 // NewRouter wires public routes directly and mounts everything else behind
 // requireAuth on a single catch-all — one gate, not a per-route list.
 func NewRouter(registry *strategy.Registry, repo experiment.Repository) http.Handler {
+	queue := experiment.NewInMemoryQueue(128)
+	pool := experiment.NewWorkerPool(queue, registry, repo, 3)
+	pool.Start(context.Background())
 	public := http.NewServeMux()
 	public.HandleFunc("GET /health", health)
 	public.HandleFunc("POST /auth/register", register)
@@ -19,7 +23,7 @@ func NewRouter(registry *strategy.Registry, repo experiment.Repository) http.Han
 	protected.HandleFunc("POST /auth/logout", logout)
 	strategyHandler := strategy.NewHandler(registry)
 
-	protected.HandleFunc("POST /search/start", startSearch(registry, repo))
+	protected.HandleFunc("POST /search/start", startSearch(registry, repo, queue))
 	protected.HandleFunc("GET /experiments", listExperiments(repo))
 	protected.HandleFunc("GET /experiments/{id}", getExperiment(repo))
 	protected.HandleFunc("GET /strategies", strategyHandler.ListStrategies)
