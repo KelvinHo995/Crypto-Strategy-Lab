@@ -44,10 +44,9 @@ type StartSearchResponse struct {
 	Status   string `json:"status"`
 }
 
-// startSearch runs synchronously for now — no Queue/Worker yet (ADR-0004),
-// so this doesn't yet match the "returns immediately with STARTED" contract
-// in PLAN.md §3b. Candles are a fixture until Market Data lands.
-func startSearch(registry *strategy.Registry, repo experiment.Repository) http.HandlerFunc {
+// startSearch returns as soon as a validated, snapshotted candidate is queued.
+// Candles remain a fixture until Market Data provides historical candles.
+func startSearch(registry *strategy.Registry, repo experiment.Repository, queue experiment.Queue) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req StartSearchRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -59,54 +58,47 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository) http.H
 			return
 		}
 
+		now := time.Now()
+		id := experiment.NewJobID(now)
 		candidate := strategy.CandidateStrategy{
-			ID:         fmt.Sprintf("cand-%d", time.Now().UnixNano()),
+			ID:         fmt.Sprintf("cand-%d", now.UnixNano()),
 			Strategies: req.Strategies,
 			Policy:     "majority",
 		}
-		strat, err := strategy.BuildFromCandidate(registry, candidate)
+		_, err := strategy.BuildFromCandidate(registry, candidate)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		candles := fixtureCandles(req.Pair, req.From, req.To)
-		trades := experiment.NewBacktester(experiment.Config{
-			Pair:            req.Pair,
-			StartingCapital: req.Capital,
-			PositionSizePct: 1,
-			StopLossPct:     0.02,
-			TakeProfitPct:   0.04,
-			FeePct:          0.001,
-			SlippageBps:     5,
-			Window:          20,
-		}).Run(strat, candles)
-		metrics := experiment.Evaluator{StartingCapital: req.Capital}.Evaluate(trades)
-
-		result := experiment.Result{
-			ID:            fmt.Sprintf("exp-%d", time.Now().UnixNano()),
-			CandidateID:   candidate.ID,
-			Strategies:    candidate.Strategies,
-			Params:        candidate.Params,
-			Policy:        candidate.Policy,
-			DatasetPeriod: fmt.Sprintf("%d-%d", req.From, req.To),
-			Return:        metrics.Return,
-			MDD:           metrics.MDD,
-			TradeCount:    metrics.TradeCount,
-			WinRate:       metrics.WinRate,
-			Wins:          metrics.Wins,
-			Losses:        metrics.Losses,
-			TotalProfit:   metrics.TotalProfit,
-			Status:        "COMPLETED",
-			CreatedAt:     time.Now().UnixMilli(),
+		versions := experiment.DefaultStrategyVersions(candidate.Strategies)
+		job := experiment.BacktestJob{
+			ID: id, Candidate: candidate,
+			Candles: fixtureCandles(req.Pair, req.From, req.To),
+			Config: experiment.Config{Pair: req.Pair, StartingCapital: req.Capital,
+				PositionSizePct: 1, StopLossPct: 0.02, TakeProfitPct: 0.04,
+				FeePct: 0.001, SlippageBps: 5, Window: 20},
+			DatasetPeriod:    fmt.Sprintf("%d-%d", req.From, req.To),
+			StrategyVersions: versions, EnqueuedAt: now.UnixMilli(),
 		}
-		if err := repo.Save(r.Context(), result); err != nil {
+		pending := experiment.Result{ID: id, CandidateID: candidate.ID,
+			Strategies: candidate.Strategies, Params: candidate.Params, Policy: candidate.Policy,
+			StrategyVersions: versions, DatasetPeriod: job.DatasetPeriod,
+			Status: "PENDING", CreatedAt: now.UnixMilli()}
+		if err := repo.Save(r.Context(), pending); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := queue.Enqueue(r.Context(), job); err != nil {
+			pending.Status = "FAILED"
+			_ = repo.Save(r.Context(), pending)
+			http.Error(w, "search queue unavailable", http.StatusServiceUnavailable)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(StartSearchResponse{SearchID: result.ID, Status: result.Status})
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(StartSearchResponse{SearchID: id, Status: "STARTED"})
 	}
 }
 
@@ -118,7 +110,7 @@ func listExperiments(repo experiment.Repository) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(results)
+		json.NewEncoder(w).Encode(experiment.Rank(results))
 	}
 }
 

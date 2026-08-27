@@ -49,11 +49,14 @@ separate packages with no import cycles back into each other except
 
 ## Frontend feature packages
 
-`frontend/src/features/{market,strategy,experiment,news}` — one feature
-folder per backend domain it renders, plus `shared/` for cross-cutting UI
-(chart primitives, WebSocket client). This keeps frontend ownership aligned
-with backend ownership so the same person can reason about a domain
-end-to-end.
+The current frontend MVP is a compact React dashboard in `frontend/src/App.tsx`
+with six navigable product surfaces: Realtime, Strategy Engine, Discovery,
+Backtest, News Crawler, and Settings. Shared visual rules live in `App.css`.
+The screens currently use representative demo data while the remaining HTTP
+and WebSocket contracts are implemented. When API integration begins, split
+the surfaces into `features/{market,strategy,experiment,news}` and place the
+API/WebSocket clients in `shared/`; that is the intended ownership boundary,
+not a directory structure the repository already claims to have.
 
 ## Why this shape
 

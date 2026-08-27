@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/experiment"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/httpx"
@@ -57,7 +58,7 @@ func newTestRegistry() *strategy.Registry {
 	return reg
 }
 
-func TestSearchStart_RunsRealPipelineAndSaves(t *testing.T) {
+func TestSearchStart_QueuesRealPipelineAndSavesProvenance(t *testing.T) {
 	repo := newFakeRepo()
 	srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), repo))
 	defer srv.Close()
@@ -69,24 +70,33 @@ func TestSearchStart_RunsRealPipelineAndSaves(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", resp.StatusCode)
 	}
 	var out httpx.StartSearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
-	if out.SearchID == "" || out.Status != "COMPLETED" {
+	if out.SearchID == "" || out.Status != "STARTED" {
 		t.Fatalf("got %+v", out)
 	}
 
-	getResp, err := http.Get(srv.URL + "/experiments/" + out.SearchID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer getResp.Body.Close()
-	if getResp.StatusCode != http.StatusOK {
-		t.Fatalf("GET /experiments/{id} status = %d, want 200 (result should be saved and readable back)", getResp.StatusCode)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		result, err := repo.Get(context.Background(), out.SearchID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Status == "COMPLETED" {
+			if result.StrategyVersions["MA"] != "v1" {
+				t.Fatalf("strategyVersions = %#v, want MA=v1", result.StrategyVersions)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("search stayed in status %q", result.Status)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

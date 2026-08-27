@@ -17,8 +17,8 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ⬜ `Binance.FetchHistoricalCandles` (REST klines) — mới có code mẫu, chưa chạy thật
 - ⬜ `repository.go`, DB thật (Postgres, Supabase-hosted — xem ADR-0012), backfill script — chưa làm
 - ✅ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện, coverage 100% test.
-- ⬜ Queue/Worker pool (ADR-0004), search loop + stop condition (ADR-0011), orchestrator ghép `Metrics` + provenance thành `Result` — chưa làm
-- ⬜ Frontend UI thật — chưa bắt đầu (đang chạy mock)
+- ✅ Queue/Worker pool in-memory (3 workers), pipeline Candidate→Backtest→Evaluate→Rank, trạng thái `PENDING→RUNNING→COMPLETED/FAILED`, và provenance snapshot đã hoàn thiện; `POST /search/start` trả `202 STARTED` ngay. `SEARCH_PROGRESS` qua WebSocket và vòng lặp sinh nhiều candidate/stop condition vẫn chờ tích hợp với Search/WS (ADR-0011).
+- ✅ Frontend UI responsive đã hoàn thiện theo design mẫu: Realtime, Strategy Engine, Discovery, Backtest, News Crawler và Settings; navigation/controls chạy được với demo data. Kết nối API/WebSocket thật vẫn chờ các endpoint backend tương ứng hoàn tất.
 - ⬜ **Auth (users/session)** — MỚI, chưa gán người, chưa lên lịch trong bảng 14 ngày. Quyết định đã chốt (username/password + JWT 1h, xem `docs/adr/0007-simple-session-auth.md`), còn thiếu: ai làm + slot vào ngày nào (buffer 8–9 là ứng viên tự nhiên). `requireAuth` hiện là middleware rỗng, chưa verify JWT thật.
 
 ## 1. Phân công (đã điều chỉnh so với bản đầu)
@@ -43,10 +43,10 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 | 2–3 | Binance Adapter → Candle chuẩn | ✅ 5 strategy: MA/RSI/BB/SR + SMC (SMC bản tối giản — swing high/low structure break, không cần đúng 100% lý thuyết SMC, xem PDF ch.11) (chạy với mock data, không chờ Người 1) | Backtester + Evaluator (mock signal, gồm SL/TP/transaction cost/slippage 5bps) | React skeleton + chart component (mock WS data) |
 | 4–5 | Nối WebSocket thật → Backend; reconnect logic | ✅ StrategyRegistry.register() + extension test | Nối signal thật từ Người 3; bắt đầu transaction boundary | Nối chart vào WS thật; UI chọn strategy |
 | 6 | Bắt đầu Sentiment Service (FastAPI) | ✅ CandidateStrategy generator (Random) | Experiment pipeline: Candidate→Backtest→Evaluate→Rank + provenance field | Leaderboard UI |
-| 7 | Sentiment API hoàn chỉnh + test | Nhảy sang hỗ trợ Người 3: Job Queue/Worker pool | Job Queue/Worker pool (cùng Người 2) | UI search progress / observability panel |
+| 7 | Sentiment API hoàn chỉnh + test | Nhảy sang hỗ trợ Người 3: Job Queue/Worker pool | ✅ Job Queue/Worker pool (cùng Người 2) | UI search progress / observability panel |
 | 8–9 | **Buffer chung — fix bug tích hợp toàn hệ thống** | | | |
-| 10 | Nối Sentiment → Go backend (REST, xử lý service-down) | SentimentStrategy (nhận SentimentResult làm input) | Đảm bảo Experiment lưu đúng strategyVersions/model version | News panel UI + gắn Sentiment vào chart/leaderboard |
-| 11 | Test failure case: News/Sentiment down | Đo throughput khi tăng worker 1→3 (cùng Người 3) | Đo throughput/backlog (cùng Người 2) | Đảm bảo FE không sập khi News down |
+| 10 | Nối Sentiment → Go backend (REST, xử lý service-down) | SentimentStrategy (nhận SentimentResult làm input) | ✅ Experiment snapshot `strategyVersions` cùng Result; model version sẽ được thêm khi Sentiment client cung cấp metadata thật | News panel UI + gắn Sentiment vào chart/leaderboard |
+| 11 | Test failure case: News/Sentiment down | Đo throughput khi tăng worker 1→3 (cùng Người 3) | ✅ Worker count là scaling knob (mặc định 3); còn benchmark với dataset lịch sử thật sau khi Market Data hoàn tất | Đảm bảo FE không sập khi News down |
 | 12 | **Architecture Proof cả nhóm** — mỗi người test domain mình (Extensibility / Replaceability / Scalability & Failure) | | | |
 | 13 | Viết ADR (5–6 cái quan trọng), chuẩn bị data demo | | | |
 | 14 | Rehearsal demo, chuẩn bị trả lời checklist vấn đáp | | | |
