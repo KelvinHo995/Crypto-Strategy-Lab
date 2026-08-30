@@ -16,6 +16,12 @@ returns HTTP 202 `{searchId,status:"STARTED"}`. The result transitions through
 `PENDING|RUNNING|COMPLETED|FAILED`. `GET /experiments` returns ranked results;
 `GET /experiments/{id}` returns one provenance snapshot.
 
+## Historical market data
+
+`GET /candles?symbol=BTCUSDT&timeframe=5m&from=<unix-ms>&to=<unix-ms>&limit=500`
+returns closed candles from Postgres. Supported MVP timeframes are `5m`, `15m`,
+`1h`, and `4h`; `limit` is bounded to 1-5000.
+
 ## Authentication
 
 `POST /auth/register` creates a bcrypt-backed user. `POST /auth/login` sets an
@@ -35,6 +41,9 @@ except health/register/login require that cookie. Logout clears it.
 
 Search is started through the REST endpoint in the current MVP; the WebSocket
 is the server-push channel.
+
+The browser authenticates first, then opens `/ws` with its httpOnly session
+cookie. Vite proxies REST and WebSocket paths to port 8080 in development.
 
 ## Sentiment
 

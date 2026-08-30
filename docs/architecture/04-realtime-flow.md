@@ -28,6 +28,11 @@ Frontend — shared WS client
 Chart component(s) — up to 4, independently timeframe-switchable
 ```
 
+The frontend opens the socket only after login so the browser includes the
+httpOnly JWT cookie. During Vite development, same-origin proxy routes forward
+REST and `/ws` to the Go server. The four initial charts are aligned to
+BTCUSDT `5m`, `15m`, `1h`, and `4h`; unsupported pairs/timeframes are not shown.
+
 The same WebSocket connection also carries `SEARCH_PROGRESS` and
 `LEADERBOARD_UPDATE` messages (see
 [06-search-backtest-flow.md](06-search-backtest-flow.md)) — one connection,
