@@ -35,7 +35,7 @@ Binance
 | `internal/market` | Market Data | `Candle` type, Binance adapter (REST historical + WS live), reconnect logic | Strategy logic, DB writes for anything but candles, chart-rendering concerns |
 | `internal/strategy` | Strategy + Search | `Strategy` interface, `Signal` type, `Registry`, individual strategies (MA/RSI/BB/SR...), `StrategyGenerator` (Random/Domain-guided), `CandidateStrategy` composition | Binance calls, DB access, HTTP handlers — a strategy only sees candles in, signal out |
 | `internal/experiment` | Experiment | Backtester (simulate trades), Evaluator (Return/WinRate/MDD/TradeCount), Ranking, `Queue` interface + `InMemoryQueue` + Worker pool for running many candidates concurrently ([ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md)), `Result` provenance ([ADR-0009](../adr/0009-experiment-provenance-storage.md)) | Strategy logic itself, market data fetching |
-| `internal/auth` | **unassigned** (new scope — [ADR-0007](../adr/0007-simple-session-auth.md)) | `User` storage, password hashing (bcrypt), JWT issuance/verification, login/register/logout handlers, auth middleware wrapping every other route — no session table, tokens are self-contained | Domain logic from any other package; this package knows nothing about strategies, candles, or experiments |
+| `internal/auth` | shared infrastructure ([ADR-0007](../adr/0007-simple-session-auth.md)) | Implemented `User` storage, bcrypt hashing, JWT issuance/verification and Postgres repository; `internal/httpx` owns handlers/cookie middleware | Domain logic from any other package; this package knows nothing about strategies, candles, or experiments |
 | `cmd/server` | shared (composition root) | HTTP/WebSocket route wiring only — constructs and injects the above, contains no business logic | Any domain logic; if `cmd/server` has an `if`/`switch` on strategy type, that's the God-Service anti-pattern (spec ch.44) |
 
 This mirrors the codebase as it stands today: `market.Candle`,
@@ -49,11 +49,14 @@ separate packages with no import cycles back into each other except
 
 ## Frontend feature packages
 
-`frontend/src/features/{market,strategy,experiment,news}` — one feature
-folder per backend domain it renders, plus `shared/` for cross-cutting UI
-(chart primitives, WebSocket client). This keeps frontend ownership aligned
-with backend ownership so the same person can reason about a domain
-end-to-end.
+The current frontend MVP is a compact React dashboard in `frontend/src/App.tsx`
+with six navigable product surfaces: Realtime, Strategy Engine, Discovery,
+Backtest, News Crawler, and Settings. Shared visual rules live in `App.css`.
+The screens currently use representative demo data while the remaining HTTP
+and WebSocket contracts are implemented. When API integration begins, split
+the surfaces into `features/{market,strategy,experiment,news}` and place the
+API/WebSocket clients in `shared/`; that is the intended ownership boundary,
+not a directory structure the repository already claims to have.
 
 ## Why this shape
 

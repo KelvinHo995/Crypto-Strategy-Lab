@@ -36,5 +36,3 @@ func TestHandler_ListStrategies(t *testing.T) {
 		t.Errorf("handler returned unexpected body: got %v", response)
 	}
 }
-
-

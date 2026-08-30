@@ -26,7 +26,7 @@ func (s *SMCStrategy) Name() string {
 }
 
 func (s *SMCStrategy) Analyze(candles []market.Candle) Signal {
-	if len(candles) < s.SwingLookback+2 {
+	if s.SwingLookback <= 0 || len(candles) < s.SwingLookback+2 {
 		return Hold
 	}
 

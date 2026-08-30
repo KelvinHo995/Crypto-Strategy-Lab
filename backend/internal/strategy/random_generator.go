@@ -76,17 +76,17 @@ func generateRandomParams(strategies []string) map[string]any {
 	for _, name := range strategies {
 		switch name {
 		case "MA":
-			params["maShortWindow"] = 5 + randomInt(46)   // 5-50
-			params["maLongWindow"] = 50 + randomInt(151)   // 50-200
+			params["maShortWindow"] = 5 + randomInt(46)  // 5-50
+			params["maLongWindow"] = 50 + randomInt(151) // 50-200
 		case "RSI":
-			params["rsiPeriod"] = 7 + randomInt(22)        // 7-28
+			params["rsiPeriod"] = 7 + randomInt(22)               // 7-28
 			params["rsiOverbought"] = float64(65 + randomInt(16)) // 65-80
 			params["rsiOversold"] = float64(20 + randomInt(16))   // 20-35
 		case "Bollinger":
-			params["bollingerPeriod"] = 10 + randomInt(31)        // 10-40
+			params["bollingerPeriod"] = 10 + randomInt(31)                // 10-40
 			params["bollingerStdDev"] = 1.5 + float64(randomInt(15))/10.0 // 1.5-3.0
 		case "SR":
-			params["srWindow"] = 10 + randomInt(41) // 10-50
+			params["srWindow"] = 10 + randomInt(41)                       // 10-50
 			params["srTolerance"] = 0.001 + float64(randomInt(10))/1000.0 // 0.1% to 1%
 		case "SMC":
 			params["smcLookback"] = 5 + randomInt(26) // 5-30

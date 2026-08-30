@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from time import time
+from app.model import model
 from app.schemas import AnalyzeRequest, AnalyzeResponse
 
 app = FastAPI()
@@ -9,11 +11,11 @@ def health():
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 def analyze(req: AnalyzeRequest):
-    # placeholder until model.py is wired up
+    result = model.analyze(req.text)
     return AnalyzeResponse(
         newsId=req.newsId,
-        sentiment="NEUTRAL",
-        score=0.0,
-        model={"name": "placeholder", "version": "v0"},
-        createdAt=0,
+        sentiment=result.label,
+        score=result.score,
+        model={"name": model.name, "version": model.version},
+        createdAt=int(time()),
     )

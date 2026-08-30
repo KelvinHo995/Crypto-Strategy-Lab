@@ -52,7 +52,7 @@ func (p *PostgresRepository) Save(ctx context.Context, r Result) error {
 			total_profit = EXCLUDED.total_profit,
 			status = EXCLUDED.status,
 			created_at = EXCLUDED.created_at
-	`, r.ID, r.CandidateID, strategies, params, r.Policy, versions,
+	`, r.ID, r.CandidateID, string(strategies), string(params), r.Policy, string(versions),
 		r.DatasetPeriod, r.Return, r.MDD, r.TradeCount, r.WinRate, r.Wins, r.Losses,
 		r.TotalProfit, r.Status, r.CreatedAt)
 	if err != nil {

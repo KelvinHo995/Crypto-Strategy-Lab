@@ -29,7 +29,7 @@ func TestSRStrategy_Analyze(t *testing.T) {
 	// Add 5th candle near resistance (maxHigh is 120 from last 3 candles: 95,100,90.5 -> wait, last 3 candles (indices 1,2,3) maxHigh is 120 (at index 2).
 	// Let's test resistance
 	candles[3] = market.Candle{Close: 119.5, High: 119.5, Low: 110} // replace 4th candle to not trigger Buy
-	candles = append(candles, market.Candle{Close: 119.0}) // near maxHigh 120 (from index 2)
+	candles = append(candles, market.Candle{Close: 119.0})          // near maxHigh 120 (from index 2)
 	// indices 1, 2, 3 highs: 115, 120, 119.5. maxHigh = 120
 	// current price 119.0. (120-119)/120 = 0.83% <= 1%
 	if sig := strat.Analyze(candles); sig != Sell {

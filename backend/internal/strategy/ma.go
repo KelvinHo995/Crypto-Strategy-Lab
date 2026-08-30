@@ -27,7 +27,7 @@ func (s *MAStrategy) Name() string {
 }
 
 func (s *MAStrategy) Analyze(candles []market.Candle) Signal {
-	if len(candles) < s.LongWindow+1 {
+	if s.ShortWindow <= 0 || s.LongWindow <= 0 || s.ShortWindow >= s.LongWindow || len(candles) < s.LongWindow+1 {
 		return Hold
 	}
 

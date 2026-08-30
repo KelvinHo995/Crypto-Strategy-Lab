@@ -25,9 +25,11 @@ tagged message types over one channel:
 ```
 (full contract in `PLAN.md` §3.5)
 
-The connection is bidirectional — the frontend can also send commands
-(subscribe to a symbol+timeframe, `START_SEARCH`) over the same connection
-that delivers updates back.
+The current MVP uses the connection as the single server-push channel.
+Commands remain REST (`POST /search/start`), while candle/progress/leaderboard
+updates share this tagged WebSocket. Client-side subscription commands are a
+future optimization; clients currently filter the four configured timeframe
+streams they receive.
 
 ## Alternatives considered
 
@@ -55,9 +57,8 @@ that delivers updates back.
 
 - **Positive:** one connection, one place to implement reconnect/backoff
   logic on the frontend — not N.
-- **Positive:** bidirectional by default — command-and-update flows
-  (`START_SEARCH` → `SEARCH_PROGRESS` → `LEADERBOARD_UPDATED`) stay on one
-  channel.
+- **Positive:** one authenticated push channel carries candle, progress and
+  leaderboard events; starting a search remains the explicit REST contract.
 - **Cost:** unlike SSE, WebSocket reconnect is not automatic — the frontend
   must hand-roll reconnect/backoff logic itself (this is separate from, but
   related to, the Binance-side reconnect logic in

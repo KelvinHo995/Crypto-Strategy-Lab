@@ -5,6 +5,7 @@ backend/bin/
 # Node
 frontend/node_modules/
 frontend/dist/
+.pnpm-store/
 
 # Python
 sentiment-service/.venv/

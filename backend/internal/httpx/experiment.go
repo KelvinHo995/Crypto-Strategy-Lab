@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/experiment"
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/strategy"
 )
 
@@ -21,11 +24,12 @@ type StartSearchRequest struct {
 }
 
 func (r StartSearchRequest) Validate() error {
-	if r.Pair == "" {
+	if strings.TrimSpace(r.Pair) == "" {
 		return errors.New("pair is required")
 	}
-	if r.TimeFrame == "" {
-		return errors.New("time frame is required")
+	validTimeframes := map[string]bool{"5m": true, "15m": true, "1h": true, "4h": true}
+	if !validTimeframes[r.TimeFrame] {
+		return errors.New("timeframe must be one of 5m, 15m, 1h, 4h")
 	}
 	if r.From <= 0 || r.To <= 0 || r.To <= r.From {
 		return errors.New("from/to must be a valid time range")
@@ -36,6 +40,16 @@ func (r StartSearchRequest) Validate() error {
 	if len(r.Strategies) == 0 {
 		return errors.New("at least one strategy is required")
 	}
+	seen := make(map[string]struct{}, len(r.Strategies))
+	for _, name := range r.Strategies {
+		if strings.TrimSpace(name) == "" {
+			return errors.New("strategy names cannot be empty")
+		}
+		if _, ok := seen[name]; ok {
+			return fmt.Errorf("strategy %s is duplicated", name)
+		}
+		seen[name] = struct{}{}
+	}
 	return nil
 }
 
@@ -44,70 +58,93 @@ type StartSearchResponse struct {
 	Status   string `json:"status"`
 }
 
-// startSearch runs synchronously for now — no Queue/Worker yet (ADR-0004),
-// so this doesn't yet match the "returns immediately with STARTED" contract
-// in PLAN.md §3b. Candles are a fixture until Market Data lands.
-func startSearch(registry *strategy.Registry, repo experiment.Repository) http.HandlerFunc {
+// startSearch returns as soon as a validated, snapshotted candidate is queued.
+// Production reads persisted market data; tests may omit the repository and use
+// the deterministic fixture fallback.
+func startSearch(registry *strategy.Registry, repo experiment.Repository, queue experiment.Queue, candleRepo market.CandleRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req StartSearchRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeJSON(w, r, &req); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
+		}
+		req.Pair = strings.ToUpper(strings.TrimSpace(req.Pair))
+		req.TimeFrame = strings.TrimSpace(req.TimeFrame)
+		for i := range req.Strategies {
+			req.Strategies[i] = strings.TrimSpace(req.Strategies[i])
 		}
 		if err := req.Validate(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
+		now := time.Now()
+		id := experiment.NewJobID(now)
 		candidate := strategy.CandidateStrategy{
-			ID:         fmt.Sprintf("cand-%d", time.Now().UnixNano()),
+			ID:         fmt.Sprintf("cand-%d", now.UnixNano()),
 			Strategies: req.Strategies,
 			Policy:     "majority",
 		}
-		strat, err := strategy.BuildFromCandidate(registry, candidate)
+		_, err := strategy.BuildFromCandidate(registry, candidate)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
+		versions := experiment.DefaultStrategyVersions(candidate.Strategies)
 		candles := fixtureCandles(req.Pair, req.From, req.To)
-		trades := experiment.NewBacktester(experiment.Config{
-			Pair:            req.Pair,
-			StartingCapital: req.Capital,
-			PositionSizePct: 1,
-			StopLossPct:     0.02,
-			TakeProfitPct:   0.04,
-			FeePct:          0.001,
-			SlippageBps:     5,
-			Window:          20,
-		}).Run(strat, candles)
-		metrics := experiment.Evaluator{StartingCapital: req.Capital}.Evaluate(trades)
-
-		result := experiment.Result{
-			ID:            fmt.Sprintf("exp-%d", time.Now().UnixNano()),
-			CandidateID:   candidate.ID,
-			Strategies:    candidate.Strategies,
-			Params:        candidate.Params,
-			Policy:        candidate.Policy,
-			DatasetPeriod: fmt.Sprintf("%d-%d", req.From, req.To),
-			Return:        metrics.Return,
-			MDD:           metrics.MDD,
-			TradeCount:    metrics.TradeCount,
-			WinRate:       metrics.WinRate,
-			Wins:          metrics.Wins,
-			Losses:        metrics.Losses,
-			TotalProfit:   metrics.TotalProfit,
-			Status:        "COMPLETED",
-			CreatedAt:     time.Now().UnixMilli(),
+		if candleRepo != nil {
+			candles, err = candleRepo.Range(r.Context(), req.Pair, req.TimeFrame, req.From, req.To)
+			if err != nil {
+				http.Error(w, "load historical candles", http.StatusInternalServerError)
+				return
+			}
+			if len(candles) < 21 {
+				http.Error(w, "insufficient historical candles; run backfill first", http.StatusUnprocessableEntity)
+				return
+			}
 		}
-		if err := repo.Save(r.Context(), result); err != nil {
+		job := experiment.BacktestJob{
+			ID: id, Candidate: candidate,
+			Candles: candles,
+			Config: experiment.Config{Pair: req.Pair, StartingCapital: req.Capital,
+				PositionSizePct: 1, StopLossPct: 0.02, TakeProfitPct: 0.04,
+				FeePct: 0.001, SlippageBps: 5, Window: 20},
+			DatasetPeriod:    fmt.Sprintf("%d-%d", req.From, req.To),
+			StrategyVersions: versions, EnqueuedAt: now.UnixMilli(),
+		}
+		pending := experiment.Result{ID: id, CandidateID: candidate.ID,
+			Strategies: candidate.Strategies, Params: candidate.Params, Policy: candidate.Policy,
+			StrategyVersions: versions, DatasetPeriod: job.DatasetPeriod,
+			Status: "PENDING", CreatedAt: now.UnixMilli()}
+		if err := repo.Save(r.Context(), pending); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := queue.Enqueue(r.Context(), job); err != nil {
+			pending.Status = "FAILED"
+			_ = repo.Save(r.Context(), pending)
+			http.Error(w, "search queue unavailable", http.StatusServiceUnavailable)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(StartSearchResponse{SearchID: result.ID, Status: result.Status})
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(StartSearchResponse{SearchID: id, Status: "STARTED"})
 	}
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return errors.New("request body must contain one JSON object")
+	}
+	return nil
 }
 
 func listExperiments(repo experiment.Repository) http.HandlerFunc {
@@ -117,8 +154,11 @@ func listExperiments(repo experiment.Repository) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		if results == nil {
+			results = []experiment.Result{}
+		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(results)
+		json.NewEncoder(w).Encode(experiment.Rank(results))
 	}
 }
 

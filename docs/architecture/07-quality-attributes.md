@@ -72,10 +72,10 @@ implementation itself need to change. Should be zero.
 
 **Pressure:** is the loop running? how many candidates tried? how many
 job failures? who's #1 right now? (spec ch.32.7)
-**Status:** not yet implemented — `experiment.Result.Status` field
-(`PENDING|RUNNING|COMPLETED|FAILED`) is the only observability primitive
-that exists today. A dedicated progress/metrics surface (beyond
-`SEARCH_PROGRESS` WS messages) is still open work.
+**Status:** implemented for the MVP one-candidate request: workers persist
+`PENDING → RUNNING → COMPLETED/FAILED`; the WebSocket hub broadcasts
+`SEARCH_PROGRESS` and a ranked Top-10 `LEADERBOARD_UPDATE`. A dedicated
+queue-depth/latency metrics surface remains future work.
 
 ## Reproducibility
 
@@ -103,9 +103,9 @@ JWT cookie, gating the whole API by default (one middleware, not a curated
 public/private route list) — [ADR-0007](../adr/0007-simple-session-auth.md).
 **Explicitly not done:** roles/permissions, password reset, OAuth/SSO — no
 driver requires them at this scope.
-**Open item:** `internal/auth` package ownership isn't assigned yet (see
-PLAN.md §0) — this is scope added mid-plan, not part of the original
-14-day schedule.
+**Implemented:** `internal/auth` owns bcrypt/JWT/user persistence and
+`internal/httpx` applies one cookie-verification middleware to every
+non-public route. `JWT_SECRET` is required at server startup.
 
 ## Deferred extensions (explicitly out of scope for MVP)
 

@@ -21,7 +21,7 @@ func TestSMCStrategy_Analyze(t *testing.T) {
 	}
 
 	candles = append(candles, market.Candle{High: 101, Low: 91}) // length 4, still Hold
-	
+
 	// Add 5th candle (BOS Bullish)
 	candles = append(candles, market.Candle{Close: 106}) // > highestHigh (105)
 	if sig := strat.Analyze(candles); sig != Buy {

@@ -9,4 +9,5 @@ type Candle struct {
 	Low       float64 `json:"low"`
 	Close     float64 `json:"close"`
 	Volume    float64 `json:"volume"`
+	IsClosed  bool    `json:"isClosed"`
 }

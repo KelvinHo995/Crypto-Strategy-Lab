@@ -32,8 +32,7 @@ Evaluator
 experiment.Result  { CandidateID, StrategyVersions (provenance), Return,
                       MDD, TradeCount, Status, CreatedAt }
      ▼
-Ranking (Overall Score = weighted combination of Return/WinRate/RiskScore
-          — team must state the exact formula, spec ch.21)
+Ranking (Score = 0.50×Return + 0.30×WinRate − 0.20×MDD)
      ▼
 Repository → Supabase (Postgres) `experiments` table
      ▼
@@ -87,10 +86,21 @@ Strategy/Registry boundary in
 
 ## Stop condition
 
-The loop must not be `while(true)` (spec ch.23, explicitly flagged as the
-thing *not* to do). Configurable stop conditions: candidate count cap
-(e.g. 100), wall-clock cap (e.g. 1 hour), or no-improvement-in-N-iterations
-(e.g. 50). The team must pick and document which one(s) MVP supports.
+The current HTTP slice accepts one candidate per request and therefore has an
+implicit candidate-count cap of one; it never uses `while(true)`. The next
+Search integration will batch generated candidates and use the configured
+candidate-count cap as the MVP stop condition. Wall-clock and no-improvement
+limits remain extension points rather than partially implemented behaviour.
+
+## Implemented runtime states
+
+`POST /search/start` validates the named strategies, snapshots candidate and
+version provenance, saves `PENDING`, enqueues the job, and returns HTTP 202
+with `{searchId, status:"STARTED"}`. A worker changes the same result to
+`RUNNING`, executes Backtester and Evaluator, then persists `COMPLETED`; a
+candidate-resolution failure becomes `FAILED`. The in-memory queue capacity
+is 128 and the server starts three workers. Repository reads are ranked by the
+formula above; incomplete jobs remain visible but below completed results.
 
 ## Trade simulation realism
 
@@ -112,3 +122,8 @@ sentiment model version) produced this result. Spec ch.36 calls this
 Reproducibility: "Experiment #122 luôn biết chính xác nó đã sử dụng strategy
 nào" — a leaderboard entry must be traceable to the exact code that produced
 it, not just a strategy name that may have since changed behavior.
+
+Built-in strategies currently use the explicit release label `v1`. A future
+Sentiment candidate must replace/add the actual model name/version received
+from the Sentiment API before enqueueing; the worker persists the supplied
+snapshot unchanged.

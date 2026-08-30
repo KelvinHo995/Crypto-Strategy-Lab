@@ -32,6 +32,14 @@ subsystem:
   and let queue latency (time between enqueue and dequeue) be measured
   directly, without a separate metrics store.
 
+**MVP implementation status (2026-08-27):** one accepted HTTP request creates
+one bounded job, so the running backend cannot enter an uncontrolled loop.
+The queue and three-worker pool implement the per-job states above. Batched
+candidate generation, user cancellation, and `SEARCH_PROGRESS` WebSocket
+broadcasting remain integration work; they are not claimed as implemented.
+For the first batched version, max candidate count is the required stop
+condition and wins when any additional optional limit is reached first.
+
 ## Alternatives considered
 
 - **Single hardcoded stop condition** (always exactly N candidates).
@@ -55,12 +63,8 @@ subsystem:
 - **Positive:** `SEARCH_PROGRESS` gives the frontend (and the graded demo)
   a live, honest signal of loop health, directly answering the deck's
   Observability rubric question.
-- **Cost:** multiple simultaneously-active stop conditions (e.g., "stop at
-  either 1000 candidates OR 1 hour, whichever comes first") need an explicit
-  precedence/combination rule when implemented — not yet specified, must be
-  decided before the Continuous Loop milestone (M5) is built, not left
-  implicit.
-- **Open item:** job failure *retry* policy — does a `FAILED` `BacktestJob`
-  get retried, how many times, before counting as a permanent failure? Not
-  yet decided; a follow-up note (or ADR, if the answer turns out to be
-  non-trivial) is needed once the worker pool is actually implemented.
+- **Rule:** combined stop conditions use OR semantics: the first limit reached
+  stops further generation. Already-enqueued jobs finish normally.
+- **Rule:** MVP workers do not retry failed jobs. A deterministic bad
+  candidate would fail identically, while automatic retry could duplicate
+  compute invisibly. Manual resubmission creates a new traceable job ID.
