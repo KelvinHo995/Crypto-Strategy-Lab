@@ -31,7 +31,7 @@ func (s *SRStrategy) Name() string {
 }
 
 func (s *SRStrategy) Analyze(candles []market.Candle) Signal {
-	if len(candles) <= s.Window {
+	if s.Window <= 0 || s.Tolerance < 0 || len(candles) <= s.Window {
 		return Hold
 	}
 
@@ -55,11 +55,11 @@ func (s *SRStrategy) Analyze(candles []market.Candle) Signal {
 		}
 	}
 
-	if math.Abs(currentPrice-minLow)/minLow <= s.Tolerance {
+	if minLow > 0 && math.Abs(currentPrice-minLow)/minLow <= s.Tolerance {
 		return Buy
 	}
 
-	if math.Abs(currentPrice-maxHigh)/maxHigh <= s.Tolerance {
+	if maxHigh > 0 && math.Abs(currentPrice-maxHigh)/maxHigh <= s.Tolerance {
 		return Sell
 	}
 

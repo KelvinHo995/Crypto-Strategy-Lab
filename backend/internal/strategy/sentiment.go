@@ -34,6 +34,9 @@ func NewSentimentStrategy(base Strategy, client SentimentClient, threshold float
 	if client == nil {
 		client = &DummySentimentClient{}
 	}
+	if threshold < 0.5 || threshold > 1 {
+		threshold = 0.7
+	}
 	return &SentimentStrategy{
 		BaseStrategy: base,
 		Client:       client,

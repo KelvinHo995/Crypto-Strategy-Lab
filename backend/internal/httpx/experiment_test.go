@@ -116,6 +116,41 @@ func TestSearchStart_UnknownStrategy(t *testing.T) {
 	}
 }
 
+func TestSearchStart_RejectsUnknownFieldsAndTrailingJSON(t *testing.T) {
+	for _, body := range []string{
+		`{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":1000,"capital":1000,"strategies":["MA"],"surprise":true}`,
+		`{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":1000,"capital":1000,"strategies":["MA"]} {}`,
+	} {
+		srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), newFakeRepo()))
+		resp, err := http.Post(srv.URL+"/search/start", "application/json", bytes.NewBufferString(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		srv.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 for %s", resp.StatusCode, body)
+		}
+	}
+}
+
+func TestExperimentsEmptyListIsJSONArray(t *testing.T) {
+	srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), newFakeRepo()))
+	defer srv.Close()
+	resp, err := http.Get(srv.URL + "/experiments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var results []experiment.Result
+	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+		t.Fatal(err)
+	}
+	if results == nil {
+		t.Fatal("empty leaderboard encoded as null, want []")
+	}
+}
+
 func TestGetExperiment_NotFound(t *testing.T) {
 	repo := newFakeRepo()
 	srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), repo))

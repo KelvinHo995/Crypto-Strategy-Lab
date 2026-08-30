@@ -31,10 +31,9 @@ Chart component(s) — up to 4, independently timeframe-switchable
 The same WebSocket connection also carries `SEARCH_PROGRESS` and
 `LEADERBOARD_UPDATE` messages (see
 [06-search-backtest-flow.md](06-search-backtest-flow.md)) — one connection,
-tagged message types, not one socket per concern. This keeps the "4 charts on
-screen, each independently switchable" requirement (spec ch.5) cheap: switching
-Chart 1 from `5m` to `1h` only changes that chart's subscription, it doesn't
-reconnect the socket or refetch the other three charts.
+tagged message types, not one socket per concern. The backend streams the four
+MVP timeframes (`5m`, `15m`, `1h`, `4h`) over that connection; each chart
+filters the timeframe it displays, so switching a chart does not reconnect.
 
 ## Why the frontend never touches Binance directly
 

@@ -21,18 +21,28 @@ type Backtester struct{ cfg Config }
 func NewBacktester(cfg Config) *Backtester { return &Backtester{cfg: cfg} }
 
 func (b *Backtester) Run(strat Strategy, candles []market.Candle) []Trade {
+	if strat == nil || len(candles) == 0 || !b.cfg.valid() {
+		return nil
+	}
 	var trades []Trade
 	var pos *openPosition
 	capital := b.cfg.StartingCapital
 
 	for i, c := range candles {
+		exitedThisCandle := false
 		if pos != nil && i > pos.entryIndex {
 			if exitPrice, hit := checkStopTarget(pos, c); hit {
 				t := b.settle(pos, c.OpenTime, exitPrice)
 				trades = append(trades, t)
 				capital += t.Profit
 				pos = nil
+				exitedThisCandle = true
 			}
+		}
+		// A stop/target is resolved using this candle's OHLC. Re-entering at the
+		// same candle's Open would travel backwards in time and add lookahead bias.
+		if exitedThisCandle {
+			continue
 		}
 
 		if i < b.cfg.Window {
@@ -58,6 +68,12 @@ func (b *Backtester) Run(strat Strategy, candles []market.Candle) []Trade {
 		trades = append(trades, t)
 	}
 	return trades
+}
+
+func (c Config) valid() bool {
+	return c.StartingCapital > 0 && c.PositionSizePct > 0 && c.PositionSizePct <= 1 &&
+		c.StopLossPct >= 0 && c.StopLossPct < 1 && c.TakeProfitPct >= 0 &&
+		c.FeePct >= 0 && c.SlippageBps >= 0 && c.Window > 0
 }
 
 type openPosition struct {
@@ -105,6 +121,10 @@ func (b *Backtester) settle(pos *openPosition, exitTime int64, idealExit float64
 
 func checkStopTarget(pos *openPosition, c market.Candle) (exitPrice float64, hit bool) {
 	switch {
+	case c.Open <= pos.stopLoss: // gap below SL: cannot fill at the better trigger price
+		return c.Open, true
+	case c.Open >= pos.takeProfit: // gap above TP: fill at the available open
+		return c.Open, true
 	case c.Low <= pos.stopLoss: // SL wins if both hit same candle
 		return pos.stopLoss, true
 	case c.High >= pos.takeProfit:

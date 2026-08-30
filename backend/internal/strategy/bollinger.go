@@ -31,12 +31,12 @@ func (s *BollingerStrategy) Name() string {
 }
 
 func (s *BollingerStrategy) Analyze(candles []market.Candle) Signal {
-	if len(candles) < s.Period {
+	if s.Period <= 0 || s.StdDevMultiplier <= 0 || len(candles) < s.Period {
 		return Hold
 	}
 
 	sma, stdDev := s.calculateStats(candles)
-	
+
 	upperBand := sma + (s.StdDevMultiplier * stdDev)
 	lowerBand := sma - (s.StdDevMultiplier * stdDev)
 

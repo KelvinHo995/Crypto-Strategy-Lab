@@ -38,7 +38,9 @@ a design gap today, it's a documented scope cut.
 
 ## What consumes this table
 
-Only `internal/experiment`'s Backtester reads `candles` directly. Live chart
+The search HTTP orchestrator reads the requested candle range through
+`market.CandleRepository` and passes the normalized slice into
+`internal/experiment`'s Backtester. Live chart
 rendering does **not** go through this table — see
 [04-realtime-flow.md](04-realtime-flow.md) for the separate, unbuffered path
 live ticks take to the frontend. Indicator calculation (MA, RSI, Bollinger)
