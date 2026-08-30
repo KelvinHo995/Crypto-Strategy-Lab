@@ -25,10 +25,15 @@ no UI/UX source was changed in this review pass.
 - Reliability: graceful HTTP shutdown, worker cancellation/wait, bounded request
   bodies, database query timeout in leaderboard notification and JSON-safe
   Postgres provenance binding.
+- Final pre-commit review: normalize market symbols and strategy names at the
+  HTTP boundary, normalize usernames case-insensitively, reject malformed live
+  Binance numeric payloads, fail-fast on invalid live subscriptions and preserve
+  the cookie `Secure` attribute during HTTPS logout.
 
 ## Project impact
 
-- `JWT_SECRET` (minimum 32 characters) is now required to start the server.
+- `JWT_SECRET` (minimum 16 characters) is now required to start the server; the
+  agreed team value in `.env.example` is accepted.
 - Production search requires candles to be backfilled; fewer than 21 candles in
   the requested range returns HTTP 422 instead of silently using fabricated data.
 - Four BTCUSDT streams (`5m`, `15m`, `1h`, `4h`) start with the server and share
@@ -47,6 +52,8 @@ no UI/UX source was changed in this review pass.
 - `python -m unittest discover -s tests -v`: passed with the bundled Python
   runtime (lexicon positive/negative/neutral behavior).
 - `git diff --check`: passed; only Git's Windows LF-to-CRLF notices were emitted.
+- Frontend `pnpm lint` and `pnpm build`: passed during the cross-project review;
+  no UI/UX source was edited in the final review pass.
 
 ## Deliberate MVP boundaries
 
@@ -58,3 +65,9 @@ no UI/UX source was changed in this review pass.
   subscriptions are outside the current runtime contract.
 - End-to-end startup still requires external PostgreSQL/Binance availability and
   valid environment configuration; automated tests isolate those dependencies.
+- The Go race detector was not available in the current Windows toolchain because
+  CGO is disabled. Standard tests were repeated three times, but this is not a
+  substitute for a future `go test -race ./...` run in a CGO-enabled environment.
+- The agreed JWT value is intentionally retained for team compatibility. Because
+  `.env.example` is public, it must be replaced with a private random value before
+  any Internet-facing production deployment where forged sessions would matter.

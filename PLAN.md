@@ -19,7 +19,7 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện; package strategy đạt 82.5% statement coverage trong lượt kiểm tra 2026-08-30.
 - ✅ Queue/Worker pool in-memory (3 workers), pipeline Candidate→Backtest→Evaluate→Rank, trạng thái `PENDING→RUNNING→COMPLETED/FAILED`, provenance snapshot và WebSocket `SEARCH_PROGRESS`/`LEADERBOARD_UPDATE` đã hoàn thiện cho một candidate/request. Batch nhiều candidate/user-cancel vẫn là stretch theo ADR-0011.
 - ✅ Frontend UI responsive đã hoàn thiện theo design mẫu: Realtime, Strategy Engine, Discovery, Backtest, News Crawler và Settings; navigation/controls chạy được với demo data. Kết nối API/WebSocket thật vẫn chờ các endpoint backend tương ứng hoàn tất.
-- ✅ **Auth (users/session)** — bcrypt, Postgres user repository, JWT HS256 1h, httpOnly SameSite=Lax cookie, protected-route middleware và logout cookie clearing đã hoàn thiện; `JWT_SECRET` tối thiểu 32 ký tự là biến môi trường bắt buộc.
+- ✅ **Auth (users/session)** — bcrypt, Postgres user repository, JWT HS256 1h, httpOnly SameSite=Lax cookie, protected-route middleware và logout cookie clearing đã hoàn thiện; `JWT_SECRET` tối thiểu 16 ký tự là biến môi trường bắt buộc.
 
 ## 1. Phân công (đã điều chỉnh so với bản đầu)
 

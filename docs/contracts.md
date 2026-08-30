@@ -19,7 +19,8 @@ returns HTTP 202 `{searchId,status:"STARTED"}`. The result transitions through
 ## Authentication
 
 `POST /auth/register` creates a bcrypt-backed user. `POST /auth/login` sets an
-httpOnly SameSite=Lax `session` JWT cookie with a one-hour expiry. All routes
+httpOnly SameSite=Lax `session` JWT cookie with a one-hour expiry. The configured
+secret must contain at least 16 characters. All routes
 except health/register/login require that cookie. Logout clears it.
 
 ## WebSocket
