@@ -14,4 +14,9 @@ sentiment-service/__pycache__/
 
 # General
 .env
+.env.local
+.env.*.local
 .DS_Store
+.vscode/
+.idea/
+*.log

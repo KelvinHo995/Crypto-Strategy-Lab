@@ -1,41 +1,188 @@
-import { useState, type ReactNode } from 'react'
-import './App.css'
+import { useState, useEffect } from 'react';
+import { ErrorBoundary, WebSocketStateBanner } from './shared/components/index';
+import { wsManager } from './shared/ws';
+import { MarketDashboard } from './features/market/index';
+import { StrategyDiscoveryPage } from './features/strategy/index';
+import { ExperimentDashboard } from './features/experiment/index';
+import { NewsCrawlerDashboard } from './features/news/index';
 
-const strategies = [['〽','RSI','Đo động lượng và vùng quá mua/quá bán'],['⌁','MA Crossover','Theo xu hướng bằng đường trung bình động'],['◉','Bollinger Bands','Phát hiện phá vỡ và độ biến động'],['═','Support / Resistance','Xác định vùng hỗ trợ và kháng cự'],['♮','Smart Money','Cấu trúc thị trường và swing points']]
-const leaders = [['MA + RSI + S/R','+2,342.18','68.21%'],['RSI + Bollinger','+1,864.76','64.73%'],['MA + RSI','+1,512.33','62.19%'],['MA + RSI + Bollinger','+1,102.47','59.48%'],['S/R + Bollinger','+987.15','57.63%']]
 
-function Info(){return <span className="info">i</span>}
-function Tag({children,orange=false}:{children:ReactNode,orange?:boolean}){return <span className={'tag '+(orange?'orange':'')}>{children}</span>}
-function PageTitle({title,subtitle}:{title:string,subtitle:string}){return <header className="page-title"><div><h1>{title}</h1><p>{subtitle}</p></div><div className="source"><i/> Nguồn dữ liệu: Binance API + WebSocket</div></header>}
+function App() {
+  const [activeTab, setActiveTab] = useState<'charts' | 'leaderboard' | 'builder' | 'news'>('charts');
 
-function Discovery(){
- const [running,setRunning]=useState(false);const [progress,setProgress]=useState(47)
- const start=()=>{setRunning(true);setProgress(v=>Math.min(500,v+25));window.setTimeout(()=>setRunning(false),900)}
- return <><PageTitle title="Strategy Engine & Loop Discovery" subtitle="Tạo strategy đơn, strategy kết hợp và tự động tìm biến thể tốt nhất"/><div className="discovery-grid">
-  <section className="panel strategy-library"><h3>Strategy đơn <Info/></h3><div className="strategy-list">{strategies.map(([icon,name,desc])=><button className="strategy-card" key={name}><span className="strategy-icon">{icon}</span><span><b>{name}</b><small>{desc}</small></span><span>›</span></button>)}</div><button className="secondary wide">＋ Tạo strategy mới</button></section>
-  <div className="stack"><section className="panel"><h3>Strategy kết hợp <Info/></h3><p className="label">Chọn các strategy để kết hợp</p><div className="token-box"><Tag>MA ×</Tag><Tag>RSI ×</Tag><Tag orange>Support / Resistance ×</Tag></div><p className="label">Gợi ý kết hợp nhanh</p><div className="button-row"><button>MA + RSI</button><button>RSI + Bollinger</button><button className="selected">MA + RSI + S/R</button></div></section>
-  <section className="panel voting"><h3>Weighted Voting <Info/></h3>{[['⌁','MA (20, 50)','40'],['〽','RSI (14)','30'],['═','Support / Resistance','30']].map(row=><div className="weight" key={row[1]}><input type="checkbox" defaultChecked/><span>{row[0]}</span><b>{row[1]}</b><input type="range" defaultValue={row[2]}/><output>{row[2]}%</output></div>)}<div className="signal-title">Tín hiệu tổng hợp hiện tại</div><div className="signals"><div className="long"><b>LONG ↑</b><span>0.62</span></div><div><b>HOLD —</b><span>-0.08</span></div><div className="short"><b>SHORT ↓</b><span>-0.54</span></div></div><div className="actions"><button className="primary">Lưu strategy kết hợp</button><button className="secondary" onClick={start}>{running?'Đang chạy…':'▷ Backtest ngay'}</button></div></section></div>
-  <div className="stack"><section className="panel loop"><h3>Loop Discovery <Info/></h3><div className="loop-flow">{[['✣','Generate'],['▥','Backtest'],['⌁','Evaluate'],['▥','Rank'],['♜','Leaderboard']].map((item,i)=><div className="loop-step" key={item[1]}><span>{item[0]}</span><b>{item[1]}</b>{i<4&&<i>→</i>}</div>)}</div></section>
-  <section className="panel leaderboard"><h3>Leaderboard <span className="muted">(Top strategies)</span></h3><div className="table head"><span>Rank</span><span>Strategy</span><span>Profit (USDT)</span><span>Winrate</span></div>{leaders.map((row,i)=><div className="table" key={row[0]}><span className={'rank r'+i}>{i+1}</span><b>{row[0]}</b><span className="positive">{row[1]}</span><span>{row[2]}</span></div>)}</section>
-  <div className="split"><section className="panel methods"><h3>Phương pháp Discovery</h3><label><span>◈</span><b>Random Search<small>Sinh ngẫu nhiên các biến thể.</small></b><input type="radio" defaultChecked name="method"/></label><label><span>◎</span><b>Domain-guided Search<small>Tìm kiếm dựa trên kiến thức.</small></b><input type="radio" name="method"/></label></section><section className="panel progress"><h3>Tiến trình Discovery</h3><small>Iteration hiện tại</small><strong>{progress}<i> / 500</i></strong><progress value={progress} max="500"/><span>Đã kiểm tra <b>{progress*50} candidates</b></span><small>Best strategy so far</small><Tag>MA + RSI + S/R</Tag></section></div></div>
- </div></>
+  useEffect(() => {
+    // Initiate WebSocket connection on app startup
+    wsManager.connect();
+    return () => {
+      // Disconnect when app unmounts
+      wsManager.disconnect();
+    };
+  }, []);
+
+  return (
+    <ErrorBoundary>
+      {/* WebSocket Status Indicator Banner */}
+      <WebSocketStateBanner />
+
+      <div style={appContainerStyle}>
+        {/* Navigation Sidebar / Header */}
+        <header style={headerStyle}>
+          <div style={logoAreaStyle}>
+            <div style={logoIconStyle}>⚡</div>
+            <h1 style={logoTitleStyle}>Crypto Strategy Lab</h1>
+            <span style={badgeStyle}>v1.0.0</span>
+          </div>
+
+          <nav style={navStyle}>
+            <button
+              style={activeTab === 'charts' ? activeNavBtnStyle : navBtnStyle}
+              onClick={() => setActiveTab('charts')}
+            >
+              Multi-Charts
+            </button>
+            <button
+              style={activeTab === 'builder' ? activeNavBtnStyle : navBtnStyle}
+              onClick={() => setActiveTab('builder')}
+            >
+              Strategy Builder
+            </button>
+            <button
+              style={activeTab === 'leaderboard' ? activeNavBtnStyle : navBtnStyle}
+              onClick={() => setActiveTab('leaderboard')}
+            >
+              Leaderboard
+            </button>
+            <button
+              style={activeTab === 'news' ? activeNavBtnStyle : navBtnStyle}
+              onClick={() => setActiveTab('news')}
+            >
+              Sentiment Feed
+            </button>
+          </nav>
+        </header>
+
+        {/* Main Work Area */}
+        <main style={mainStyle}>
+          {activeTab === 'charts' && <MarketDashboard />}
+
+          {activeTab === 'builder' && <StrategyDiscoveryPage />}
+
+          {activeTab === 'leaderboard' && <ExperimentDashboard />}
+
+          {activeTab === 'news' && <NewsCrawlerDashboard />}
+        </main>
+
+        {/* Footer */}
+        <footer style={footerStyle}>
+          <p>© 2026 Crypto Strategy Lab — Monorepo Architecture Board</p>
+        </footer>
+      </div>
+    </ErrorBoundary>
+  );
 }
 
-const candles=Array.from({length:42},(_,i)=>({h:24+(i*17)%43,up:(i*7)%5!==0}))
-function CandleChart(){return <div className="chart"><div className="price-line"/>{candles.map((c,i)=><span key={i} className={c.up?'up':'down'} style={{height:c.h+'%',left:(i*2.32)+'%'}}/>)}<div className="ma-line">⌁⌁⌁⌁⌁⌁⌁⌁⌁</div><div className="chart-label">69,342.18</div></div>}
+// ==========================================
+// STYLING PRESET (Premium dark/cyan theme)
+// ==========================================
+const appContainerStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  minHeight: '100vh',
+  backgroundColor: '#0c0f17', // Midnight blue
+  color: '#e2e8f0',
+  fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+};
 
-function Realtime(){const [frame,setFrame]=useState('1m');return <><PageTitle title="Realtime Chart – Đa khung thời gian" subtitle="Theo dõi thị trường trực tiếp với candle đang hình thành"/><section className="panel toolbar"><label>Pair / Coin <b>₿ BTCUSDT⌄</b></label><label>Khung thời gian <span className="segments">{['1m','5m','15m','1h','4h'].map(x=><button className={frame===x?'on':''} onClick={()=>setFrame(x)} key={x}>{x}</button>)}</span></label><label>Realtime <span className="toggle">●</span></label><span className="live">● Đang nhận dữ liệu</span></section><div className="realtime-grid"><div className="chart-grid">{['1m','5m','15m','1h'].map((x,i)=><section className="panel market-card" key={x}><header><b>BTCUSDT · {x} <i>●</i></b><strong>69,342.18 <em className={i===3?'negative':'positive'}>{i===3?'-0.15%':'+0.28%'}</em></strong><Tag>{i===3?'SELL':'BUY'}</Tag></header><small>MA(20) &nbsp; <b>69,{315-i*120}.45</b></small><CandleChart/><footer>☁ Load 1000 nến lịch sử <span>⟳ Cập nhật realtime ●</span></footer></section>)}</div><div className="side-stack"><section className="panel logic"><h3>Logic cập nhật candle <Info/></h3><b>Trùng nến cuối → Update candle</b><div>▮ ▯ ▮ ▮ &nbsp; → &nbsp; ▮ ▯ ▮ ▮</div><small>Cùng thời gian với nến cuối → ghi đè.</small><b>Nến mới hoàn toàn → Append candle</b><div>▮ ▯ ▮ &nbsp; → &nbsp; ▮ ▯ ▮ ▮</div></section><section className="panel status-list"><h3>Trạng thái kết nối <span className="positive">● Đã kết nối</span></h3><p>Nguồn dữ liệu <b>Binance API + WebSocket</b></p><p>Độ trễ <b>102 ms</b></p><p>Dữ liệu cuối <b>10:45:38</b></p></section><section className="panel"><h3>Recent Ticks</h3>{['10:45:38.123  69,342.18  Buy','10:45:38.087  69,342.17  Buy','10:45:38.051  69,342.16  Sell'].map(x=><code className="tick" key={x}>{x}</code>)}</section></div></div></>}
+const headerStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: '1.25rem 2rem',
+  borderBottom: '1px solid #1e293b',
+  backgroundColor: '#0f172a',
+  flexWrap: 'wrap',
+  gap: '1rem',
+};
 
-const trades=Array.from({length:10},(_,i)=>[i+1,'BTCUSDT',`0${1+(i>>2)}/05  ${6+i}:15`,i%2?'SHORT':'LONG',(68120+i*85).toFixed(2),i%3===2?'-0.67':`+0.${83+i}`])
-function Backtest(){const [done,setDone]=useState(true);return <><PageTitle title="Backtest & Kết quả giao dịch" subtitle="Chọn coin, thời gian test, vốn, strategy và đánh giá hiệu quả"/><section className="panel filters">{[['Pair / Coin','₿ BTCUSDT'],['Timeframe','5m'],['From date','01/05/2025'],['To date','15/05/2025'],['Vốn','100 USD'],['Strategy','MA Crossover'],['Fee','0.08%'],['Slippage','5 bps']].map(x=><label key={x[0]}>{x[0]}<button>{x[1]}⌄</button></label>)}<button className="primary" onClick={()=>{setDone(false);setTimeout(()=>setDone(true),800)}}>{done?'Chạy lại':'Đang chạy…'}</button></section><div className="backtest-grid"><section className="panel"><h3>Biểu đồ Backtest (BTCUSDT · 5m)</h3><div className="legend">MA(20) <b>69,135.45</b> — MA(50) <em>68,912.73</em></div><CandleChart/><div className="chart-flags"><span>↑ LONG Entry</span><span>↓ SHORT Entry</span></div></section><section className="panel trades"><h3>Danh sách lệnh giao dịch</h3><div className="trade-row trade-head"><span>#</span><span>Pair</span><span>Thời gian</span><span>Hướng</span><span>Giá vào</span><span>Profit</span></div>{trades.map(r=><div className="trade-row" key={r[0]}>{r.map((v,i)=><span className={i===3?(v==='LONG'?'positive':'negative'):i===5?(String(v).startsWith('+')?'positive':'negative'):''} key={i}>{v}</span>)}</div>)}</section></div><div className="metrics">{[['Winrate','61.80%','110 / 178'],['Wins','110','Tổng lệnh thắng'],['Losses','68','Tổng lệnh thua'],['Total Profit','+8.42 USD','Lợi nhuận ròng'],['Max Drawdown','-3.21%','Rủi ro cực đại'],['Total Trades','178','100%']].map((m,i)=><section className="panel" key={m[0]}><b>{m[0]}</b><strong className={i===4?'negative':i<4?'positive':''}>{m[1]}</strong><small>{m[2]}</small><div className="spark">⌁⌁⌁⌁</div></section>)}</div></>}
+const logoAreaStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.75rem',
+  flexGrow: 1,
+};
 
-const news=[['₿','BlackRock’s Bitcoin ETF sees $200M inflows as BTC holds above $69K','CoinDesk'],['◆','Ethereum Pectra testnet upgrade live, developers eye final launch','The Block'],['●','Solana network fees drop 60% amid lower memecoin activity','Decrypt'],['₿','CME Bitcoin futures open interest hits new all-time high','Cointelegraph'],['◆','Vitalik outlines roadmap for Ethereum scaling post-Pectra','Bankless']]
-function News(){const [crawling,setCrawling]=useState(false);return <><PageTitle title="News Crawler & Phân tích thị trường" subtitle="Thu thập tin tức, trích xuất nội dung và phân tích sentiment"/><section className="panel news-toolbar"><div><small>Nguồn</small><button className="selected">◎ Website</button><button>◔ RSS</button><button>⌘ HTML</button></div><label>Pair (Asset)<b>BTC, ETH, SOL⌄</b></label><label>Auto refresh<b>1 phút</b></label><button className="primary" onClick={()=>{setCrawling(true);setTimeout(()=>setCrawling(false),900)}}>{crawling?'Đang crawl…':'▷ Bắt đầu crawl'}</button></section><div className="news-grid"><section className="panel feed"><h3>Tin tức đầu vào <span>⟳ 10:45:18</span></h3>{news.map((n,i)=><article key={n[1]}><i>{n[0]}</i><div><b>{n[1]}</b><p>Thông tin thị trường mới nhất được tổng hợp tự động...</p></div><small>{n[2]}<br/>10:{40-i*3}</small></article>)}</section><div className="stack"><section className="panel"><h3>Extraction Pipeline <Tag>v1.4.2 ✓</Tag></h3><div className="pipeline">{[['1','HTML thô'],['2','Nhận diện cấu trúc'],['3','Sinh template'],['4','Lưu version']].map(x=><div key={x[0]}><span>{x[0]}</span><b>{x[1]}</b><small>Tin cậy 0.92</small></div>)}</div></section><section className="panel"><h3>Self-healing extraction</h3><div className="healing"><div><b>Chỉ số hiện tại</b><p>Fields rỗng: 8.7%</p><strong className="negative">Tổng lỗi: 11.9%</strong></div><span>→</span><div className="decision">Lỗi cao?</div><span>→</span><div><b>Template mới</b><p>v1.4.3</p><strong className="positive">Tin cậy: 0.93</strong></div></div></section></div><div className="stack"><section className="panel sentiment"><h3>Đầu ra phân tích</h3><p>Sentiment tổng hợp (24h)</p><div className="sentiment-bar"><span>58%</span><span>27%</span><span>15%</span></div><div className="stats"><p>Confidence <b>0.78</b></p><p>Tin đã phân tích <b>1,248</b></p><p>Độ bao phủ <b>92%</b></p></div></section><section className="panel integration"><h3>Tích hợp với Strategy</h3><div>▤ News <span>→ API →</span> ⌁ Strategy</div><Tag>⚡ NewsSentimentStrategy</Tag></section></div></div></>}
+const logoIconStyle: React.CSSProperties = {
+  fontSize: '1.5rem',
+  background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+  padding: '0.25rem 0.5rem',
+  borderRadius: '6px',
+};
 
-function StrategyEngine(){return <><PageTitle title="Tạo Strategy từ Prompt / URL" subtitle="Nhập ngôn ngữ tự nhiên hoặc link website để sinh strategy và lưu vào thư viện"/><div className="strategy-page"><div className="stack"><section className="panel prompt"><h3>Nhập mô tả strategy <Info/></h3><textarea defaultValue="Khi RSI dưới 30 và giá nằm dưới Bollinger Lower Band thì LONG. Stop loss 2%, take profit 4%."/><button className="primary wide">⚗ Phân tích strategy</button></section><section className="panel"><h3>Nhập URL chiến lược</h3><input className="url" defaultValue="https://www.tradingview.com/script/abc123-example/"/><button className="secondary wide">◎ Trích xuất từ website</button></section></div><section className="panel parsed"><h3>Strategy đã phân tích</h3>{[['Điều kiện LONG','RSI < 30; giá dưới Bollinger Lower Band'],['Điều kiện SHORT','RSI > 70; giá trên Bollinger Upper Band'],['Quản trị rủi ro','Stop Loss 2%; Take Profit 4%'],['Khung thời gian','1h (mặc định)']].map((x,i)=><article className={'parse-'+i} key={x[0]}><b>{x[0]}</b><p>{x[1]}</p></article>)}</section><section className="panel json"><h3>Định nghĩa strategy (JSON)</h3><pre>{'{\n  "name": "RSI_BB_LONG_SL2_TP4",\n  "version": "1.0.0",\n  "indicators": ["RSI", "BollingerBands"],\n  "conditions": {\n    "long": { "operator": "<", "value": 30 },\n    "short": { "operator": ">", "value": 70 }\n  },\n  "riskManagement": {\n    "stopLoss": 2, "takeProfit": 4\n  },\n  "timeframe": "1h"\n}'}</pre></section><div className="stack"><section className="panel validation"><h3>Kiểm tra & Validation</h3>{['Đủ trường bắt buộc','Logic hợp lệ','Chỉ báo được hỗ trợ'].map(x=><p key={x}>✓ <b>{x}</b></p>)}<div className="valid">✓ Hợp lệ để lưu</div></section><section className="panel save"><h3>Lưu vào Strategy Library</h3><label>Name<input defaultValue="RSI_BB_LONG_SL2_TP4"/></label><label>Version<input defaultValue="1.0.0"/></label><button className="primary wide">▣ Lưu Strategy</button></section></div></div></>}
+const logoTitleStyle: React.CSSProperties = {
+  fontSize: '1.25rem',
+  fontWeight: '700',
+  letterSpacing: '-0.025em',
+  margin: 0,
+  background: 'linear-gradient(to right, #ffffff, #94a3b8)',
+  WebkitBackgroundClip: 'text',
+  WebkitTextFillColor: 'transparent',
+};
 
-function Settings(){return <><PageTitle title="Settings" subtitle="Cấu hình kết nối và tùy chọn hệ thống"/><section className="panel settings"><h3>Kết nối Backend</h3><label>API URL<input defaultValue="http://localhost:8080"/></label><label>WebSocket URL<input defaultValue="ws://localhost:8080/ws"/></label><label>Worker hiển thị<input type="number" defaultValue="3"/></label><button className="primary">Lưu cấu hình</button></section></>}
+const badgeStyle: React.CSSProperties = {
+  fontSize: '0.7rem',
+  backgroundColor: '#1e293b',
+  padding: '0.2rem 0.5rem',
+  borderRadius: '9999px',
+  color: '#06b6d4',
+  fontWeight: '600',
+  border: '1px solid #334155',
+};
 
-const nav=[['⚡','Realtime'],['⌘','Strategy Engine'],['⌕','Discovery'],['▥','Backtest'],['▤','News Crawler'],['⚙','Settings']]
-function App(){const [page,setPage]=useState('Discovery');const pages:Record<string,ReactNode>={'Realtime':<Realtime/>,'Strategy Engine':<StrategyEngine/>,'Discovery':<Discovery/>,'Backtest':<Backtest/>,'News Crawler':<News/>,'Settings':<Settings/>};return <div className="app-shell"><aside className="sidebar"><div className="brand"><span>⚗</span><b>Crypto<br/>Strategy Lab</b></div><nav>{nav.map(([icon,name])=><button key={name} onClick={()=>setPage(name)} className={page===name?'active':''}><span>{icon}</span>{name}</button>)}</nav><div className="account"><div className="plan"><span>◇</span><b>Pro Student</b><small>Gói đang dùng<br/>Hết hạn: 20/06/2027</small></div><div className="user"><span>●</span><b>Nguyễn Minh<small>student@example.com</small></b><i>⌄</i></div></div></aside><main>{pages[page]}</main></div>}
-export default App
+const navStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: '0.5rem',
+};
+
+const navBtnStyle: React.CSSProperties = {
+  backgroundColor: 'transparent',
+  color: '#94a3b8',
+  border: 'none',
+  padding: '0.5rem 1rem',
+  borderRadius: '6px',
+  cursor: 'pointer',
+  fontWeight: '500',
+  fontSize: '0.9rem',
+  transition: 'all 0.2s',
+};
+
+const activeNavBtnStyle: React.CSSProperties = {
+  backgroundColor: '#1e293b',
+  color: '#06b6d4', // Cyan
+  border: 'none',
+  padding: '0.5rem 1rem',
+  borderRadius: '6px',
+  cursor: 'pointer',
+  fontWeight: '600',
+  fontSize: '0.9rem',
+  boxShadow: '0 0 10px rgba(6, 182, 212, 0.1)',
+};
+
+const mainStyle: React.CSSProperties = {
+  flexGrow: 1,
+  padding: '2rem',
+  maxWidth: '1200px',
+  width: '100%',
+  margin: '0 auto',
+  boxSizing: 'border-box',
+};
+
+const footerStyle: React.CSSProperties = {
+  textAlign: 'center',
+  padding: '1.5rem',
+  borderTop: '1px solid #1e293b',
+  backgroundColor: '#0b0f19',
+  color: '#475569',
+  fontSize: '0.8rem',
+};
+
+export default App;
