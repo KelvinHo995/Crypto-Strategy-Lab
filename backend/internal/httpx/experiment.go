@@ -68,6 +68,11 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+		req.Pair = strings.ToUpper(strings.TrimSpace(req.Pair))
+		req.TimeFrame = strings.TrimSpace(req.TimeFrame)
+		for i := range req.Strategies {
+			req.Strategies[i] = strings.TrimSpace(req.Strategies[i])
+		}
 		if err := req.Validate(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

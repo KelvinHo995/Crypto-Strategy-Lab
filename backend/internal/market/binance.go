@@ -29,6 +29,8 @@ func NewBinance(client *http.Client) *Binance {
 }
 
 func (b *Binance) FetchHistoricalCandles(ctx context.Context, symbol, timeframe string, from, to int64) ([]Candle, error) {
+	symbol = strings.ToUpper(strings.TrimSpace(symbol))
+	timeframe = strings.TrimSpace(timeframe)
 	if symbol == "" || !validTimeframe(timeframe) || from <= 0 || to <= from {
 		return nil, errors.New("invalid historical candle request")
 	}
@@ -126,6 +128,11 @@ func (b *Binance) StreamLiveCandles(ctx context.Context, symbol, timeframe strin
 	out := make(chan Candle)
 	go func() {
 		defer close(out)
+		symbol = strings.ToUpper(strings.TrimSpace(symbol))
+		timeframe = strings.TrimSpace(timeframe)
+		if symbol == "" || !validTimeframe(timeframe) {
+			return
+		}
 		backoff := time.Second
 		for ctx.Err() == nil {
 			endpoint := strings.TrimRight(b.WSBaseURL, "/") + "/" + strings.ToLower(symbol) + "@kline_" + timeframe
@@ -137,8 +144,12 @@ func (b *Binance) StreamLiveCandles(ctx context.Context, symbol, timeframe strin
 					if err = wsjson.Read(ctx, conn, &event); err != nil {
 						break
 					}
+					candle, parseErr := event.candle()
+					if parseErr != nil {
+						continue
+					}
 					select {
-					case out <- event.candle():
+					case out <- candle:
 					case <-ctx.Done():
 						conn.CloseNow()
 						return
@@ -175,7 +186,17 @@ type binanceKlineEvent struct {
 	} `json:"k"`
 }
 
-func (e binanceKlineEvent) candle() Candle {
-	parse := func(v string) float64 { n, _ := strconv.ParseFloat(v, 64); return n }
-	return Candle{Symbol: e.K.Symbol, Timeframe: e.K.Interval, OpenTime: e.K.Start, Open: parse(e.K.Open), High: parse(e.K.High), Low: parse(e.K.Low), Close: parse(e.K.Close), Volume: parse(e.K.Volume), IsClosed: e.K.Closed}
+func (e binanceKlineEvent) candle() (Candle, error) {
+	values := make([]float64, 5)
+	for i, raw := range []string{e.K.Open, e.K.High, e.K.Low, e.K.Close, e.K.Volume} {
+		value, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return Candle{}, fmt.Errorf("invalid live kline number: %w", err)
+		}
+		values[i] = value
+	}
+	if e.K.Symbol == "" || !validTimeframe(e.K.Interval) || e.K.Start <= 0 {
+		return Candle{}, errors.New("invalid live kline identity")
+	}
+	return Candle{Symbol: e.K.Symbol, Timeframe: e.K.Interval, OpenTime: e.K.Start, Open: values[0], High: values[1], Low: values[2], Close: values[3], Volume: values[4], IsClosed: e.K.Closed}, nil
 }
