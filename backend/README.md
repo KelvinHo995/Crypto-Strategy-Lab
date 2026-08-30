@@ -7,8 +7,9 @@ Go API server — Market Data, Strategy, Experiment domains.
 go run ./cmd/server
 ```
 
-Required environment: `DATABASE_URL` and a random `JWT_SECRET` of at least 32
-characters. Apply `migrations/0001_init.sql` once before starting.
+Required environment: `DATABASE_URL` and `JWT_SECRET` (minimum 16 characters;
+the current team value is shown in `.env.example`). Apply
+`migrations/0001_init.sql` once before starting.
 
 Backfill the fixed two-year dataset manually (safe to rerun):
 

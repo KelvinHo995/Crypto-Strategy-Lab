@@ -12,7 +12,7 @@ import (
 )
 
 func TestAuthProtectsRoutesAndLoginSetsCookie(t *testing.T) {
-	svc, _ := auth.NewService(auth.NewMemoryRepository(), "01234567890123456789012345678901")
+	svc, _ := auth.NewService(auth.NewMemoryRepository(), "ronaldothuamessi")
 	router := httpx.NewRouterWithContext(context.Background(), newTestRegistry(), newFakeRepo(), httpx.Dependencies{Auth: svc})
 	defer router.Close()
 	srv := httptest.NewServer(router)

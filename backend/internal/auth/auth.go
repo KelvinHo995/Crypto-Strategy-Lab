@@ -47,14 +47,14 @@ func NewService(repo Repository, secret string) (*Service, error) {
 	if repo == nil {
 		return nil, errors.New("auth repository is required")
 	}
-	if len(secret) < 32 {
-		return nil, errors.New("JWT secret must contain at least 32 characters")
+	if len(secret) < 16 {
+		return nil, errors.New("JWT secret must contain at least 16 characters")
 	}
 	return &Service{repo: repo, secret: []byte(secret), now: time.Now}, nil
 }
 
 func (s *Service) Register(ctx context.Context, username, password string) (User, error) {
-	username = strings.TrimSpace(username)
+	username = strings.ToLower(strings.TrimSpace(username))
 	if len(username) < 3 || len(username) > 50 {
 		return User{}, errors.New("username must contain 3-50 characters")
 	}
@@ -78,7 +78,7 @@ func (s *Service) Register(ctx context.Context, username, password string) (User
 }
 
 func (s *Service) Login(ctx context.Context, username, password string) (string, error) {
-	user, err := s.repo.ByUsername(ctx, strings.TrimSpace(username))
+	user, err := s.repo.ByUsername(ctx, strings.ToLower(strings.TrimSpace(username)))
 	if err != nil {
 		return "", ErrInvalidCredentials
 	}
