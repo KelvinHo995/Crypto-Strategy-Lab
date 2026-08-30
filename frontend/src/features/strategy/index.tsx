@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SingleStrategyList } from './components/SingleStrategyList';
 import { CompositeStrategyBuilder } from './components/CompositeStrategyBuilder';
 import { LoopDiscoveryPanel } from './components/LoopDiscoveryPanel';
@@ -10,11 +10,30 @@ import {
   type SingleStrategyInstance,
   type DiscoveryStats,
 } from './services/mockStrategyData';
+import { fetchStrategies, startSearch } from '../../shared/api';
+import { useWebSocketSubscription } from '../../shared/hooks';
+import type { WSSearchProgressPayload } from '../../types/websocket';
 
 export function StrategyDiscoveryPage() {
   const [instances, setInstances] = useState<SingleStrategyInstance[]>(DEFAULT_SINGLE_STRATEGIES);
   const [stats, setStats] = useState<DiscoveryStats>(DEFAULT_DISCOVERY_STATS);
   const [miniLeaderboard] = useState(MINI_LEADERBOARD_DATA);
+
+  useEffect(() => {
+    fetchStrategies().then(names => {
+      setInstances(current => current.filter(instance => names.includes(instance.type)));
+    }).catch(() => undefined);
+  }, []);
+
+  useWebSocketSubscription<WSSearchProgressPayload>('SEARCH_PROGRESS', progress => {
+    setStats(current => ({
+      ...current,
+      iteration: progress.tested,
+      totalIterations: progress.total,
+      testedCandidates: progress.tested,
+      status: progress.tested >= progress.total ? 'COMPLETED' : 'RUNNING',
+    }));
+  });
 
   const handleCreateInstance = (newInstance: SingleStrategyInstance) => {
     setInstances((prev) => [...prev, newInstance]);
@@ -35,7 +54,7 @@ export function StrategyDiscoveryPage() {
     }));
   };
 
-  const handleStartBacktest = (config: {
+  const handleStartBacktest = async (config: {
     strategies: string[];
     weights: Record<string, number>;
     policy: 'majority' | 'weighted';
@@ -45,21 +64,16 @@ export function StrategyDiscoveryPage() {
       .map(id => instances.find(inst => inst.id === id)?.name || id)
       .join(' + ');
 
-    alert(`🚀 Backtesting initiated on Go Backend!\nStrategy: ${activeNames}\nPolicy: ${config.policy}\n\nActivating Loop Discovery Panel...`);
-    
-    // Reset and trigger simulated loop discovery panel
-    setStats({
-      iteration: 0,
-      totalIterations: 200,
-      testedCandidates: 0,
-      status: 'RUNNING',
-      bestStrategy: {
-        name: activeNames + (config.policy === 'weighted' ? ' (Weighted)' : ' (Majority)'),
-        profit: Number((Math.random() * 1500 + 800).toFixed(2)),
-        winrate: Number((Math.random() * 15 + 55).toFixed(2)),
-        mdd: Number((Math.random() * 8 + 6).toFixed(2)),
-      }
-    });
+    const strategyNames = [...new Set(config.strategies.map(id => instances.find(inst => inst.id === id)?.type).filter((name): name is string => Boolean(name)))];
+    if (strategyNames.length === 0) return;
+    setStats(current => ({ ...current, iteration: 0, totalIterations: 1, testedCandidates: 0, status: 'RUNNING' }));
+    try {
+      await startSearch({ pair: 'BTCUSDT', timeframe: '1h', from: Date.now() - 180 * 86400000, to: Date.now(), capital: 10000, strategies: strategyNames });
+      alert(`Đã gửi backtest thật: ${activeNames}. Theo dõi tiến độ qua WebSocket.`);
+    } catch (error) {
+      setStats(current => ({ ...current, status: 'IDLE' }));
+      alert(`Không thể gửi backtest: ${String(error)}. Cần migration và backfill trước.`);
+    }
   };
 
   return (

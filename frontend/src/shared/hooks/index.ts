@@ -21,7 +21,7 @@ export function useWebSocketState() {
  * Custom hook to subscribe to a specific WebSocket message type.
  * Automatically unsubscribes when the component unmounts or parameters change.
  */
-export function useWebSocketSubscription<T = any>(
+export function useWebSocketSubscription<T = unknown>(
   type: WSMessageType,
   onMessage: (payload: T) => void
 ) {

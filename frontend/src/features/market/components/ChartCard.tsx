@@ -3,6 +3,7 @@ import { useWebSocketState, useWebSocketSubscription } from '../../../shared/hoo
 import type { Candle } from '../../../types/candle';
 import { TradingChart, type SRZone, type ChartMarker } from './TradingChart';
 import { fetchMarketDataDTO, generateNextTick } from '../services/mockMarketData';
+import { fetchCandles } from '../../../shared/api';
 
 interface ChartCardProps {
   id: number;
@@ -28,21 +29,36 @@ export function ChartCard({
   const [srZones, setSrZones] = useState<SRZone[]>([]);
   const [markers, setMarkers] = useState<ChartMarker[]>([]);
   const [priceTrend, setPriceTrend] = useState<'UP' | 'DOWN' | 'NEUTRAL'>('NEUTRAL');
+  const [dataMode, setDataMode] = useState<'API' | 'MOCK'>('MOCK');
 
   // 1. Fetch initial historical data on mount or when symbol/timeframe changes
-  const loadHistory = useCallback(() => {
-    const dto = fetchMarketDataDTO(symbol, timeframe, 200);
-    Promise.resolve().then(() => {
+  const loadHistory = useCallback(async () => {
+    const to = Date.now();
+    const from = to - 366 * 24 * 60 * 60 * 1000;
+    try {
+      const apiCandles = await fetchCandles(symbol, timeframe, from, to, 500);
+      if (apiCandles.length < 20) throw new Error('insufficient candles');
+      const closes = apiCandles.map(c => c.close);
+      const ma = closes.map((_, i) => i < 19 ? Number.NaN : closes.slice(i - 19, i + 1).reduce((a,b)=>a+b,0) / 20);
+      setCandles(apiCandles);
+      setMa20Line(ma);
+      setBbands(undefined);
+      setSrZones([]);
+      setMarkers([]);
+      setDataMode('API');
+    } catch {
+      const dto = fetchMarketDataDTO(symbol, timeframe, 200);
       setCandles(dto.candles);
       setMa20Line(dto.ma20Line);
       setBbands(dto.bbands);
       setSrZones(dto.srZones);
       setMarkers(dto.markers);
-    });
+      setDataMode('MOCK');
+    }
   }, [symbol, timeframe]);
 
   useEffect(() => {
-    loadHistory();
+    void Promise.resolve().then(loadHistory);
   }, [loadHistory]);
 
   function handleRealtimeUpdate(candle: Candle) {
@@ -164,14 +180,11 @@ export function ChartCard({
             style={selectStyle}
           >
             <option value="BTCUSDT">BTC/USDT</option>
-            <option value="ETHUSDT">ETH/USDT</option>
-            <option value="SOLUSDT">SOL/USDT</option>
-            <option value="BNBUSDT">BNB/USDT</option>
           </select>
 
           {/* Timeframe Selector */}
           <div style={tabsStyle}>
-            {['1m', '5m', '15m', '1h', '4h'].map((tf) => (
+            {['5m', '15m', '1h', '4h'].map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
@@ -200,15 +213,15 @@ export function ChartCard({
           {/* Live vs Mock indicator dot */}
           <div style={indicatorAreaStyle} title={wsState === 'CONNECTED' ? 'Live WebSocket data' : 'Simulating market ticks locally'}>
             <span style={wsState === 'CONNECTED' ? liveDotStyle : mockDotStyle} />
-            <span style={indicatorTextStyle}>{wsState === 'CONNECTED' ? 'LIVE' : 'MOCK'}</span>
+            <span style={indicatorTextStyle}>{wsState === 'CONNECTED' ? `LIVE/${dataMode}` : 'MOCK'}</span>
           </div>
 
           {/* Maximize and reload action button */}
           <button onClick={loadHistory} style={actionBtnStyle} title="Reload historical data">
-            🔄
+            ↻
           </button>
           <button onClick={() => onToggleMaximize(id)} style={actionBtnStyle}>
-            {isMaximized ? '🗗' : '🗖'}
+            {isMaximized ? '−' : '□'}
           </button>
         </div>
       </div>
@@ -235,8 +248,8 @@ export function ChartCard({
 // CSS STYLING
 // ==========================================
 const cardContainerStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   display: 'flex',
   flexDirection: 'column',
@@ -251,8 +264,8 @@ const cardHeaderStyle: React.CSSProperties = {
   justifyContent: 'space-between',
   alignItems: 'center',
   padding: '0.5rem 1rem',
-  backgroundColor: '#1e293b',
-  borderBottom: '1px solid #334155',
+  backgroundColor: '#ffffff',
+  borderBottom: '1px solid #e2e8f0',
   flexWrap: 'wrap',
   gap: '0.5rem',
 };
@@ -270,9 +283,9 @@ const rightHeaderStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  color: '#ffffff',
-  border: '1px solid #475569',
+  backgroundColor: '#ffffff',
+  color: '#0f172a',
+  border: '1px solid #cbd5e1',
   borderRadius: '4px',
   padding: '0.25rem 0.5rem',
   fontWeight: '600',
@@ -283,10 +296,10 @@ const selectStyle: React.CSSProperties = {
 
 const tabsStyle: React.CSSProperties = {
   display: 'flex',
-  backgroundColor: '#0f172a',
+  backgroundColor: '#ffffff',
   borderRadius: '4px',
   padding: '2px',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
 };
 
 const tabBtnStyle: React.CSSProperties = {
@@ -313,7 +326,7 @@ const activeTabBtnStyle: React.CSSProperties = {
 };
 
 const getPriceStyle = (trend: 'UP' | 'DOWN' | 'NEUTRAL'): React.CSSProperties => {
-  let color = '#f8fafc';
+  let color = '#0f172a';
   if (trend === 'UP') color = '#10b981'; // Green
   else if (trend === 'DOWN') color = '#ef4444'; // Red
 
@@ -351,10 +364,10 @@ const indicatorAreaStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: '0.25rem',
-  backgroundColor: '#0f172a',
+  backgroundColor: '#ffffff',
   padding: '0.15rem 0.4rem',
   borderRadius: '4px',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
 };
 
 const liveDotStyle: React.CSSProperties = {
@@ -402,7 +415,7 @@ const chartBodyStyle: React.CSSProperties = {
   flexGrow: 1,
   position: 'relative',
   minHeight: '260px',
-  backgroundColor: '#0f172a',
+  backgroundColor: '#ffffff',
 };
 
 const loadingStyle: React.CSSProperties = {

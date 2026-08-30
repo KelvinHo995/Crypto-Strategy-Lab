@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BacktestConfigPanel } from './components/BacktestConfigPanel';
 import { ExperimentLeaderboard } from './components/ExperimentLeaderboard';
 import { ProvenanceModal } from './components/ProvenanceModal';
@@ -6,6 +6,8 @@ import { PerformanceSummaryCard } from './components/PerformanceSummaryCard';
 import { TradeHistoryTable } from './components/TradeHistoryTable';
 import { MOCK_EXPERIMENTS, generateMockTrades } from './services/mockExperimentData';
 import type { ExperimentResult, Trade } from '../../types/backtest';
+import { fetchExperiments, startSearch } from '../../shared/api';
+import { useWebSocketSubscription } from '../../shared/hooks';
 
 export function ExperimentDashboard() {
   const [experiments, setExperiments] = useState<ExperimentResult[]>(MOCK_EXPERIMENTS);
@@ -17,7 +19,19 @@ export function ExperimentDashboard() {
   
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleRunBacktest = (config: {
+  const applyExperiments = useCallback((items: ExperimentResult[]) => {
+    if (items.length === 0) return;
+    setExperiments(items);
+    setActiveExp(current => current ? items.find(item => item.id === current.id) ?? items[0] : items[0]);
+  }, []);
+
+  useEffect(() => {
+    fetchExperiments().then(applyExperiments).catch(() => undefined);
+  }, [applyExperiments]);
+
+  useWebSocketSubscription<ExperimentResult[]>('LEADERBOARD_UPDATE', applyExperiments);
+
+  const handleRunBacktest = async (config: {
     symbol: string;
     timeframe: string;
     fromDate: string;
@@ -26,44 +40,33 @@ export function ExperimentDashboard() {
     fee: number;
   }) => {
     setIsLoading(true);
-
-    // Simulate backend backtest run
-    setTimeout(() => {
-      const newId = `exp-${Date.now().toString().slice(-4)}`;
-      const returnPct = Number((Math.random() * 80 - 25).toFixed(2)); // Random -25% to +55%
-      const mdd = Number((Math.random() * 25 + 3).toFixed(2)); // Random 3% to 28%
-      const tradeCount = Math.floor(Math.random() * 80) + 15;
-      const wins = Math.floor(tradeCount * (Math.random() * 0.3 + 0.45)); // 45% - 75% winrate
-      const losses = tradeCount - wins;
-      const winRate = Number(((wins / tradeCount) * 100).toFixed(2));
-      const totalProfit = Number((config.capital * (returnPct / 100)).toFixed(2));
-
-      const newExp: ExperimentResult = {
-        id: newId,
-        candidateId: `cand-${Date.now().toString().slice(-3)}`,
-        strategies: ['MA', 'RSI'], // Constituent strategy placeholder
-        params: { maWindow: 20, rsiPeriod: 14, capital: config.capital, fee: config.fee },
-        policy: 'weighted',
-        strategyVersions: { MA: 'v1.2.0', RSI: 'v2.0.1' },
-        datasetPeriod: `${config.fromDate} to ${config.toDate}`,
-        return: returnPct,
-        mdd,
-        tradeCount,
-        winRate,
-        wins,
-        losses,
-        totalProfit,
-        status: 'COMPLETED',
-        createdAt: Date.now(),
-      };
-
-      setExperiments((prev) => [newExp, ...prev]);
-      setActiveExp(newExp);
-      setActiveTrades(generateMockTrades(newId, tradeCount));
+    try {
+      const started = await startSearch({
+        pair: config.symbol,
+        timeframe: config.timeframe,
+        from: new Date(config.fromDate).getTime(),
+        to: new Date(config.toDate).getTime(),
+        capital: config.capital,
+        strategies: ['MA'],
+      });
+      for (let attempt = 0; attempt < 15; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const items = await fetchExperiments();
+        applyExperiments(items);
+        const result = items.find(item => item.id === started.searchId);
+        if (result?.status === 'COMPLETED' || result?.status === 'FAILED') {
+          if (result.status === 'COMPLETED') {
+            setActiveExp(result);
+            setActiveTrades(generateMockTrades(result.id, result.tradeCount));
+          }
+          break;
+        }
+      }
+    } catch (error) {
+      alert(`Không thể chạy backtest thật: ${String(error)}. Hãy chạy migration/backfill trước.`);
+    } finally {
       setIsLoading(false);
-      
-      alert(`🎉 Backtest #${newId} Completed successfully!\nReturn: ${returnPct > 0 ? '+' : ''}${returnPct}%\nTrades: ${tradeCount}`);
-    }, 2000);
+    }
   };
 
   const handleSelectExperimentForMeta = (exp: ExperimentResult) => {
@@ -73,12 +76,12 @@ export function ExperimentDashboard() {
   const handleLoadToChart = (exp: ExperimentResult) => {
     setActiveExp(exp);
     setActiveTrades(generateMockTrades(exp.id, exp.tradeCount));
-    alert(`📈 Loaded Strategy parameters from #${exp.id} to Chart Canvas and Performance Summary.`);
+    alert(`Loaded Strategy parameters from #${exp.id} to Chart Canvas and Performance Summary.`);
   };
 
   const handleReplicate = (exp: ExperimentResult) => {
     setSelectedExpForMeta(null);
-    alert(`⚙️ Replicated Strategy combination [${exp.strategies.join(' + ')}] into Builder state!`);
+    alert(`Replicated Strategy combination [${exp.strategies.join(' + ')}] into Builder state!`);
     // In production, this would sync with a global strategy builder state/store
   };
 
@@ -96,6 +99,7 @@ export function ExperimentDashboard() {
 
   return (
     <div style={dashboardContainerStyle}>
+      <div style={{color:'#f59e0b',fontSize:'0.75rem'}}>Metrics/leaderboard ưu tiên API; trade detail dùng demo vì backend MVP chưa lưu từng trade.</div>
       {/* 1. Top Section: Run Simulation & Performance Overview */}
       <div style={topSectionStyle}>
         <div style={configColStyle}>
@@ -123,7 +127,7 @@ export function ExperimentDashboard() {
 
       {/* 2. Middle Section: Leaderboard */}
       <div style={leaderboardSectionStyle}>
-        <h3 style={sectionTitleStyle}>🏆 Strategy Experiment Leaderboard</h3>
+        <h3 style={sectionTitleStyle}>Strategy Experiment Leaderboard</h3>
         <ExperimentLeaderboard
           experiments={experiments}
           onSelectExperiment={handleSelectExperimentForMeta}
@@ -179,8 +183,8 @@ const summaryColStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '0.75rem',
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1.25rem',
   boxSizing: 'border-box',
@@ -190,13 +194,13 @@ const summaryHeaderStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.5rem',
   marginBottom: '0.5rem',
 };
 
 const activeIdStyle: React.CSSProperties = {
-  color: '#06b6d4',
+  color: '#2563eb',
   fontFamily: 'monospace',
   fontWeight: '700',
 };
@@ -216,7 +220,7 @@ const leaderboardSectionStyle: React.CSSProperties = {
 const sectionTitleStyle: React.CSSProperties = {
   fontSize: '0.9rem',
   fontWeight: '700',
-  color: '#e2e8f0',
+  color: '#0f172a',
   margin: 0,
   textTransform: 'uppercase',
   letterSpacing: '0.05em',

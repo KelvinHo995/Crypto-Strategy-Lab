@@ -3,9 +3,9 @@ import { ChartCard } from './ChartCard';
 
 const CHART_CONFIGS = [
   { id: 1, defaultSymbol: 'BTCUSDT', defaultTimeframe: '5m' },
-  { id: 2, defaultSymbol: 'ETHUSDT', defaultTimeframe: '15m' },
-  { id: 3, defaultSymbol: 'SOLUSDT', defaultTimeframe: '1h' },
-  { id: 4, defaultSymbol: 'BNBUSDT', defaultTimeframe: '4h' },
+  { id: 2, defaultSymbol: 'BTCUSDT', defaultTimeframe: '15m' },
+  { id: 3, defaultSymbol: 'BTCUSDT', defaultTimeframe: '1h' },
+  { id: 4, defaultSymbol: 'BTCUSDT', defaultTimeframe: '4h' },
 ];
 
 export function MarketGrid() {
@@ -69,7 +69,7 @@ export function MarketGrid() {
       {/* Grid Controls Toolbar */}
       <div style={toolbarStyle}>
         <div style={toolbarTitleStyle}>
-          <span style={titleIconStyle}>📊</span> Multi-Timeframe Dashboard
+          <span style={titleIconStyle}></span> Multi-Timeframe Dashboard
         </div>
         
         {maximizedId === null && (
@@ -100,7 +100,7 @@ export function MarketGrid() {
 
         {maximizedId !== null && (
           <button onClick={() => setMaximizedId(null)} style={restoreButtonStyle}>
-            🗗 Restore Grid View
+            Restore Grid View
           </button>
         )}
       </div>
@@ -138,28 +138,28 @@ const toolbarStyle: React.CSSProperties = {
   justifyContent: 'space-between',
   alignItems: 'center',
   padding: '0.5rem 1rem',
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
 };
 
 const toolbarTitleStyle: React.CSSProperties = {
   fontSize: '0.9rem',
   fontWeight: '600',
-  color: '#e2e8f0',
+  color: '#0f172a',
   display: 'flex',
   alignItems: 'center',
   gap: '0.5rem',
 };
 
 const titleIconStyle: React.CSSProperties = {
-  color: '#06b6d4',
+  color: '#2563eb',
 };
 
 const layoutButtonGroupStyle: React.CSSProperties = {
   display: 'flex',
   gap: '0.35rem',
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   padding: '3px',
   borderRadius: '6px',
 };
@@ -178,8 +178,8 @@ const buttonStyle: React.CSSProperties = {
 };
 
 const activeButtonStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  color: '#06b6d4',
+  backgroundColor: '#ffffff',
+  color: '#2563eb',
   border: 'none',
   padding: '0.25rem 0.6rem',
   borderRadius: '4px',

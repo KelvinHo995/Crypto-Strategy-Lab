@@ -17,7 +17,7 @@ export interface ExperimentResult {
   id: string;
   candidateId: string;
   strategies: string[]; // constituents snapshot
-  params: Record<string, any>; // parameters snapshot
+  params: Record<string, unknown>; // parameters snapshot
   policy: string; // combination policy snapshot
   strategyVersions: Record<string, string>; // code/model versions (provenance tracking)
   datasetPeriod: string; // e.g. "fromTimestamp-toTimestamp"
