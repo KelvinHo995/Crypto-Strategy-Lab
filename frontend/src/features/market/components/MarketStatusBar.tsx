@@ -76,8 +76,8 @@ const statusBarContainerStyle: React.CSSProperties = {
   flexDirection: 'column',
   gap: '0.85rem',
   padding: '1rem',
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
 };
 
@@ -86,7 +86,7 @@ const itemStyle: React.CSSProperties = {
   justifyContent: 'space-between',
   alignItems: 'center',
   fontSize: '0.75rem',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.5rem',
 };
 
@@ -96,7 +96,7 @@ const labelStyle: React.CSSProperties = {
 };
 
 const valueStyle: React.CSSProperties = {
-  color: '#e2e8f0',
+  color: '#0f172a',
   fontWeight: '600',
 };
 

@@ -75,6 +75,7 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	protected.HandleFunc("GET /experiments", listExperiments(repo))
 	protected.HandleFunc("GET /experiments/{id}", getExperiment(repo))
 	protected.HandleFunc("GET /strategies", strategyHandler.ListStrategies)
+	protected.HandleFunc("GET /candles", listCandles(deps.Candles))
 	protected.HandleFunc("GET /ws", serveWebSocket(hub))
 
 	public.Handle("/", requireAuth(authService, protected))

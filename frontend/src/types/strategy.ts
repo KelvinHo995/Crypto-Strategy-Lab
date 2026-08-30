@@ -1,7 +1,7 @@
 export interface CandidateStrategy {
   id: string;
   strategies: string[]; // List of constituent strategies (e.g. ["MA", "RSI"])
-  params: Record<string, any>; // Parameters mapped by strategy keys
+  params: Record<string, unknown>; // Parameters mapped by strategy keys
   policy: string; // e.g. "majority" | "weighted"
 }
 
@@ -10,7 +10,7 @@ export interface StrategyInfo {
   description?: string;
   parameters?: Record<string, {
     type: 'number' | 'string' | 'boolean';
-    default: any;
+    default: string | number | boolean;
     description?: string;
   }>;
 }

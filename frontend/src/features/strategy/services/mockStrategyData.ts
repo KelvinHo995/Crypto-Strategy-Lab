@@ -5,7 +5,7 @@ export interface SingleStrategyInstance {
   name: string;
   type: string; // "RSI" | "MA" | "Bollinger" | "SR" | "SMC"
   description: string;
-  params: Record<string, any>;
+  params: Record<string, unknown>;
   currentSignal: 'BUY' | 'SELL' | 'HOLD';
 }
 
@@ -63,7 +63,7 @@ export const AVAILABLE_STRATEGIES_META: StrategyInfo[] = [
     },
   },
   {
-    name: 'SupportResistance',
+    name: 'SR',
     description: 'Support / Resistance zones - Traces structural high/low pivots to detect bounces or breakouts.',
     parameters: {
       srSensitivity: { type: 'number', default: 3, description: 'Pivot search strength' },
@@ -115,7 +115,7 @@ export const DEFAULT_SINGLE_STRATEGIES: SingleStrategyInstance[] = [
   {
     id: 'sr-3',
     name: 'Support & Resistance',
-    type: 'SupportResistance',
+    type: 'SR',
     description: 'Structural pivots (sensitivity: 3)',
     params: { srSensitivity: 3 },
     currentSignal: 'HOLD',

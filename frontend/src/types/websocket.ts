@@ -7,7 +7,7 @@ export type WSMessageType =
   | 'LEADERBOARD_UPDATE' 
   | 'LEADERBOARD_UPDATED';
 
-export interface WSMessage<T = any> {
+export interface WSMessage<T = unknown> {
   type: WSMessageType;
   payload: T;
   timestamp?: number;

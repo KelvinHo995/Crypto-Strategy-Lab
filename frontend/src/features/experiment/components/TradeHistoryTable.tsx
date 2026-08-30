@@ -126,7 +126,7 @@ export function TradeHistoryTable({
             disabled={currentPage === totalPages}
             style={currentPage === totalPages ? disabledPageBtnStyle : pageBtnStyle}
           >
-            Next ▶
+            Next
           </button>
         </div>
       )}
@@ -138,8 +138,8 @@ export function TradeHistoryTable({
 // STYLING PRESET
 // ==========================================
 const containerStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1.25rem',
   boxSizing: 'border-box',
@@ -152,7 +152,7 @@ const titleStyle: React.CSSProperties = {
   margin: '0 0 1rem 0',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.5rem',
 };
 
@@ -167,7 +167,7 @@ const tableStyle: React.CSSProperties = {
 };
 
 const trStyle: React.CSSProperties = {
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   transition: 'background-color 0.15s ease',
   cursor: 'crosshair',
 };
@@ -177,7 +177,7 @@ const thLeftStyle: React.CSSProperties = {
   textAlign: 'left',
   padding: '0.65rem 0.5rem',
   fontWeight: '600',
-  borderBottom: '1px solid #334155',
+  borderBottom: '1px solid #cbd5e1',
 };
 
 const thRightStyle: React.CSSProperties = {
@@ -185,7 +185,7 @@ const thRightStyle: React.CSSProperties = {
   textAlign: 'right',
   padding: '0.65rem 0.5rem',
   fontWeight: '600',
-  borderBottom: '1px solid #334155',
+  borderBottom: '1px solid #cbd5e1',
 };
 
 const thCenterStyle: React.CSSProperties = {
@@ -193,7 +193,7 @@ const thCenterStyle: React.CSSProperties = {
   textAlign: 'center',
   padding: '0.65rem 0.5rem',
   fontWeight: '600',
-  borderBottom: '1px solid #334155',
+  borderBottom: '1px solid #cbd5e1',
 };
 
 const tdLeftStyle: React.CSSProperties = {
@@ -260,9 +260,9 @@ const paginationStyle: React.CSSProperties = {
 };
 
 const pageBtnStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#cbd5e1',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   borderRadius: '4px',
   padding: '0.3rem 0.65rem',
   fontSize: '0.75rem',
@@ -274,7 +274,7 @@ const pageBtnStyle: React.CSSProperties = {
 const disabledPageBtnStyle: React.CSSProperties = {
   backgroundColor: 'transparent',
   color: '#475569',
-  border: '1px solid #1e293b',
+  border: '1px solid #e2e8f0',
   borderRadius: '4px',
   padding: '0.3rem 0.65rem',
   fontSize: '0.75rem',

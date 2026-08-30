@@ -72,7 +72,9 @@ func (h *Hub) JobUpdated(result experiment.Result) {
 }
 func serveWebSocket(hub *Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+			OriginPatterns: []string{"localhost:*", "127.0.0.1:*"},
+		})
 		if err != nil {
 			return
 		}

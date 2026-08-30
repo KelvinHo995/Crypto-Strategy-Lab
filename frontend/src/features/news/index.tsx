@@ -40,7 +40,7 @@ export function NewsCrawlerDashboard() {
 
       setNewsFeed((prev) => [newArticle, ...prev]);
       setIsCrawling(false);
-      alert(`✓ Crawl success: Extracted 1 new article [ID: ${newId}]. Sentiment analysis score: Positive (87%)`);
+      alert(`Crawl success: Extracted 1 new article [ID: ${newId}]. Sentiment analysis score: Positive (87%)`);
     }, 2000);
   };
 
@@ -48,13 +48,14 @@ export function NewsCrawlerDashboard() {
     <ErrorBoundary
       fallback={
         <div style={degradedContainerStyle}>
-          <h4>⚠️ News Crawler Feed Unavailable</h4>
+          <h4>News Crawler Feed Unavailable</h4>
           <p>The Sentiment Model or Crawler Service is currently undergoing self-healing. Rest of the Strategy Lab remains operational.</p>
           <button onClick={() => window.location.reload()} style={retryBtnStyle}>Retry Connection</button>
         </div>
       }
     >
       <div style={dashboardContainerStyle}>
+        <div style={{color:'#f59e0b',fontSize:'0.75rem'}}>DEMO: News collector/sentiment feed chưa có endpoint production trong MVP.</div>
         {/* Top Controls Bar */}
         <NewsCrawlerHeader onCrawlStart={handleCrawlStart} isCrawling={isCrawling} />
 

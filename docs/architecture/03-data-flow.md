@@ -40,8 +40,10 @@ a design gap today, it's a documented scope cut.
 
 The search HTTP orchestrator reads the requested candle range through
 `market.CandleRepository` and passes the normalized slice into
-`internal/experiment`'s Backtester. Live chart
-rendering does **not** go through this table — see
+`internal/experiment`'s Backtester. The authenticated `GET /candles` endpoint
+also reads this repository to seed frontend charts; if the API is unavailable
+or the requested range was not backfilled, the UI explicitly labels and uses
+its demo fixture. Live chart updates do **not** go through this table — see
 [04-realtime-flow.md](04-realtime-flow.md) for the separate, unbuffered path
 live ticks take to the frontend. Indicator calculation (MA, RSI, Bollinger)
 happens in `internal/strategy` over whatever candle slice it's given,

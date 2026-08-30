@@ -162,7 +162,7 @@ export function CompositeStrategyBuilder({
       case 'SHORT':
         return { backgroundColor: '#7f1d1d', color: '#ef4444', border: '1px solid #ef4444' };
       default:
-        return { backgroundColor: '#1e293b', color: '#94a3b8', border: '1px solid #475569' };
+        return { backgroundColor: '#e2e8f0', color: '#94a3b8', border: '1px solid #475569' };
     }
   };
 
@@ -240,7 +240,7 @@ export function CompositeStrategyBuilder({
             <span>Sum of raw weights: <strong>{sumOfWeights.toFixed(2)}</strong></span>
             {Math.abs(sumOfWeights - 1.0) > 0.01 && (
               <span style={{ color: '#f59e0b', fontSize: '0.7rem' }}>
-                ⚠️ Weights will be automatically normalized to 1.00 for backtests.
+                Weights will be automatically normalized to 1.00 for backtests.
               </span>
             )}
           </div>
@@ -299,7 +299,7 @@ export function CompositeStrategyBuilder({
           Save Composite Strategy
         </button>
         <button onClick={handleBacktestSubmit} style={backtestButtonStyle}>
-          ▷ Run Backtest Now
+          Run Backtest Now
         </button>
       </div>
     </div>
@@ -310,8 +310,8 @@ export function CompositeStrategyBuilder({
 // STYLING PRESET
 // ==========================================
 const panelContainerStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1rem',
   height: '100%',
@@ -324,11 +324,11 @@ const panelContainerStyle: React.CSSProperties = {
 const titleStyle: React.CSSProperties = {
   fontSize: '0.9rem',
   fontWeight: '700',
-  color: '#e2e8f0',
+  color: '#0f172a',
   margin: 0,
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.5rem',
 };
 
@@ -351,9 +351,9 @@ const presetButtonGroupStyle: React.CSSProperties = {
 };
 
 const presetButtonStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#94a3b8',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   borderRadius: '4px',
   padding: '0.25rem 0.5rem',
   fontSize: '0.7rem',
@@ -372,7 +372,7 @@ const builderSectionStyle: React.CSSProperties = {
 const sectionHeaderStyle: React.CSSProperties = {
   fontSize: '0.8rem',
   fontWeight: '700',
-  color: '#06b6d4',
+  color: '#2563eb',
   margin: 0,
   textTransform: 'uppercase',
 };
@@ -391,7 +391,7 @@ const rowStyle: React.CSSProperties = {
   alignItems: 'center',
   padding: '0.5rem',
   backgroundColor: 'transparent',
-  border: '1px solid #1e293b',
+  border: '1px solid #e2e8f0',
   borderRadius: '6px',
 };
 
@@ -400,8 +400,8 @@ const activeRowStyle: React.CSSProperties = {
   justifyContent: 'space-between',
   alignItems: 'center',
   padding: '0.5rem',
-  backgroundColor: '#1e293b',
-  border: '1px solid #334155',
+  backgroundColor: '#e2e8f0',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
 };
 
@@ -420,7 +420,7 @@ const checkboxStyle: React.CSSProperties = {
 const instNameStyle: React.CSSProperties = {
   fontSize: '0.8rem',
   fontWeight: '600',
-  color: '#f8fafc',
+  color: '#0f172a',
 };
 
 const instSignalStyle: React.CSSProperties = {
@@ -445,12 +445,12 @@ const sliderStyle: React.CSSProperties = {
 
 const weightBadgeStyle: React.CSSProperties = {
   fontSize: '0.7rem',
-  backgroundColor: '#0f172a',
-  color: '#06b6d4',
+  backgroundColor: '#ffffff',
+  color: '#2563eb',
   padding: '0.1rem 0.3rem',
   borderRadius: '4px',
   fontFamily: 'monospace',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
 };
 
 const weightValidationStyle: React.CSSProperties = {
@@ -461,7 +461,7 @@ const weightValidationStyle: React.CSSProperties = {
 };
 
 const policySectionStyle: React.CSSProperties = {
-  borderTop: '1px solid #1e293b',
+  borderTop: '1px solid #e2e8f0',
   paddingTop: '0.75rem',
   display: 'flex',
   flexDirection: 'column',
@@ -487,7 +487,7 @@ const labelStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#ffffff',
   border: '1px solid #475569',
   borderRadius: '4px',
@@ -498,7 +498,7 @@ const selectStyle: React.CSSProperties = {
 };
 
 const numInputStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#ffffff',
   border: '1px solid #475569',
   borderRadius: '4px',
@@ -560,7 +560,7 @@ const statusLabelStyle: React.CSSProperties = {
 const actionsContainerStyle: React.CSSProperties = {
   display: 'flex',
   gap: '0.75rem',
-  borderTop: '1px solid #1e293b',
+  borderTop: '1px solid #e2e8f0',
   paddingTop: '1rem',
 };
 

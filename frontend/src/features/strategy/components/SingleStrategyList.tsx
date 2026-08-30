@@ -16,7 +16,7 @@ export function SingleStrategyList({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedType, setSelectedType] = useState('RSI');
   const [customName, setCustomName] = useState('');
-  const [paramValues, setParamValues] = useState<Record<string, any>>({});
+  const [paramValues, setParamValues] = useState<Record<string, string | number | boolean>>({});
 
   // Resolve metadata for the selected strategy type
   const activeMeta = AVAILABLE_STRATEGIES_META.find((m) => m.name === selectedType);
@@ -25,7 +25,7 @@ export function SingleStrategyList({
     setSelectedType(type);
     const meta = AVAILABLE_STRATEGIES_META.find((m) => m.name === type);
     // Initialize default parameter values
-    const defaults: Record<string, any> = {};
+    const defaults: Record<string, string | number | boolean> = {};
     if (meta?.parameters) {
       Object.keys(meta.parameters).forEach((key) => {
         defaults[key] = meta.parameters![key].default;
@@ -35,7 +35,7 @@ export function SingleStrategyList({
     setCustomName('');
   };
 
-  const handleParamChange = (key: string, value: any) => {
+  const handleParamChange = (key: string, value: string | number | boolean) => {
     setParamValues((prev) => ({
       ...prev,
       [key]: value,
@@ -171,7 +171,7 @@ export function SingleStrategyList({
                       </div>
                       <input
                         type={config.type === 'number' ? 'number' : 'text'}
-                        value={paramValues[key] ?? config.default}
+                        value={String(paramValues[key] ?? config.default)}
                         step={config.type === 'number' ? 'any' : undefined}
                         onChange={(e) =>
                           handleParamChange(
@@ -207,8 +207,8 @@ export function SingleStrategyList({
 // STYLING PRESET
 // ==========================================
 const panelContainerStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1rem',
   height: '100%',
@@ -222,23 +222,23 @@ const panelHeaderStyle: React.CSSProperties = {
   justifyContent: 'space-between',
   alignItems: 'center',
   marginBottom: '1rem',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.5rem',
 };
 
 const titleStyle: React.CSSProperties = {
   fontSize: '0.9rem',
   fontWeight: '700',
-  color: '#e2e8f0',
+  color: '#0f172a',
   margin: 0,
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
 };
 
 const addButtonStyle: React.CSSProperties = {
-  backgroundColor: '#334155',
-  color: '#06b6d4',
-  border: '1px solid #06b6d4',
+  backgroundColor: '#cbd5e1',
+  color: '#2563eb',
+  border: '1px solid #2563eb',
   borderRadius: '4px',
   padding: '0.25rem 0.6rem',
   fontSize: '0.75rem',
@@ -257,8 +257,8 @@ const listStyle: React.CSSProperties = {
 };
 
 const cardStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
-  border: '1px solid #334155',
+  backgroundColor: '#e2e8f0',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.75rem',
 };
@@ -272,7 +272,7 @@ const cardTopStyle: React.CSSProperties = {
 
 const typeBadgeStyle: React.CSSProperties = {
   fontSize: '0.65rem',
-  backgroundColor: '#0f172a',
+  backgroundColor: '#ffffff',
   color: '#94a3b8',
   padding: '0.1rem 0.3rem',
   borderRadius: '4px',
@@ -283,7 +283,7 @@ const typeBadgeStyle: React.CSSProperties = {
 const instanceNameStyle: React.CSSProperties = {
   fontSize: '0.85rem',
   fontWeight: '600',
-  color: '#f8fafc',
+  color: '#0f172a',
   margin: '0.25rem 0 0 0',
   display: 'inline-block',
 };
@@ -309,14 +309,14 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const modalStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #334155',
+  backgroundColor: '#ffffff',
+  border: '1px solid #cbd5e1',
   borderRadius: '8px',
   width: '100%',
   maxWidth: '480px',
   padding: '1.5rem',
   boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
-  color: '#e2e8f0',
+  color: '#0f172a',
   fontFamily: 'system-ui, sans-serif',
 };
 
@@ -324,7 +324,7 @@ const modalHeaderStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.75rem',
   marginBottom: '1rem',
 };
@@ -356,7 +356,7 @@ const labelStyle: React.CSSProperties = {
 };
 
 const inputStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#ffffff',
   border: '1px solid #475569',
   borderRadius: '4px',
@@ -366,7 +366,7 @@ const inputStyle: React.CSSProperties = {
 };
 
 const paramsSectionStyle: React.CSSProperties = {
-  borderTop: '1px solid #1e293b',
+  borderTop: '1px solid #e2e8f0',
   paddingTop: '0.75rem',
   marginTop: '0.5rem',
 };
@@ -374,7 +374,7 @@ const paramsSectionStyle: React.CSSProperties = {
 const sectionTitleStyle: React.CSSProperties = {
   fontSize: '0.8rem',
   fontWeight: '700',
-  color: '#06b6d4',
+  color: '#2563eb',
   margin: '0 0 0.75rem 0',
   textTransform: 'uppercase',
   letterSpacing: '0.03em',
@@ -405,7 +405,7 @@ const paramDescStyle: React.CSSProperties = {
 };
 
 const paramInputStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#ffffff',
   border: '1px solid #475569',
   borderRadius: '4px',
@@ -420,7 +420,7 @@ const modalActionsStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'flex-end',
   gap: '0.75rem',
-  borderTop: '1px solid #1e293b',
+  borderTop: '1px solid #e2e8f0',
   paddingTop: '1rem',
   marginTop: '0.5rem',
 };
@@ -437,8 +437,8 @@ const cancelBtnStyle: React.CSSProperties = {
 };
 
 const submitBtnStyle: React.CSSProperties = {
-  backgroundColor: '#06b6d4',
-  color: '#0f172a',
+  backgroundColor: '#2563eb',
+  color: '#ffffff',
   border: 'none',
   borderRadius: '4px',
   padding: '0.5rem 1rem',

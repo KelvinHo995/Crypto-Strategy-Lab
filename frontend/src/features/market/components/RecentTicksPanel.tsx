@@ -125,8 +125,8 @@ const panelContainerStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '1rem',
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1rem',
   height: '100%',
@@ -138,7 +138,7 @@ const sectionTitleStyle: React.CSSProperties = {
   fontWeight: '700',
   color: '#94a3b8',
   margin: '0 0 0.5rem 0',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.25rem',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
@@ -157,7 +157,7 @@ const tableStyle: React.CSSProperties = {
 };
 
 const trStyle: React.CSSProperties = {
-  borderBottom: '1px solid #0f172a',
+  borderBottom: '1px solid #ffffff',
 };
 
 const thLeftStyle: React.CSSProperties = {

@@ -35,7 +35,7 @@ export function PerformanceSummaryCard({
       {/* 2. Win Rate Card */}
       <div style={cardStyle}>
         <span style={labelStyle}>Win Rate</span>
-        <span style={{ ...valueStyle, color: '#f8fafc' }}>
+        <span style={{ ...valueStyle, color: '#0f172a' }}>
           {winRate.toFixed(2)}%
         </span>
         <span style={subLabelStyle}>
@@ -50,14 +50,14 @@ export function PerformanceSummaryCard({
           {mdd.toFixed(2)}%
         </span>
         <span style={subLabelStyle}>
-          {mdd >= 20 ? '⚠️ High Risk Exposure' : '✓ Normal Risk Level'}
+          {mdd >= 20 ? 'High Risk Exposure' : 'Normal Risk Level'}
         </span>
       </div>
 
       {/* 4. Total Trades Card */}
       <div style={cardStyle}>
         <span style={labelStyle}>Total Trades Executed</span>
-        <span style={{ ...valueStyle, color: '#06b6d4' }}>
+        <span style={{ ...valueStyle, color: '#2563eb' }}>
           {tradeCount}
         </span>
         <span style={subLabelStyle}>
@@ -79,8 +79,8 @@ const containerStyle: React.CSSProperties = {
 };
 
 const cardStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1rem',
   display: 'flex',

@@ -1,6 +1,6 @@
 import type { WSMessage, WSMessageType } from '../../types/websocket';
 
-type MessageListener<T = any> = (payload: T) => void;
+type MessageListener = (payload: unknown) => void;
 type ConnectionState = 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED';
 type ConnectionStateListener = (state: ConnectionState) => void;
 
@@ -13,13 +13,13 @@ class WebSocketManager {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
   private baseReconnectDelay = 1000; // Start with 1 second delay
-  private reconnectTimeoutId: any = null;
+  private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private intentionallyClosed = false;
 
   constructor() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     // During dev, point to backend on port 8080; in production, use standard host
-    const wsHost = import.meta.env.VITE_WS_HOST || 'localhost:8080';
+    const wsHost = import.meta.env.VITE_WS_HOST || window.location.host;
     this.url = `${wsProtocol}//${wsHost}/ws`;
   }
 
@@ -97,7 +97,7 @@ class WebSocketManager {
   /**
    * Send a command message to the backend.
    */
-  public send(type: string, payload: any): boolean {
+  public send(type: string, payload: unknown): boolean {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('Cannot send WebSocket message: Socket is not open.');
       return false;
@@ -128,17 +128,18 @@ class WebSocketManager {
   /**
    * Register a listener for a specific WS message type.
    */
-  public subscribe<T = any>(type: WSMessageType, callback: MessageListener<T>): () => void {
+  public subscribe<T = unknown>(type: WSMessageType, callback: (payload: T) => void): () => void {
+    const listener: MessageListener = payload => callback(payload as T);
     if (!this.listeners.has(type)) {
       this.listeners.set(type, new Set());
     }
-    this.listeners.get(type)!.add(callback);
+    this.listeners.get(type)!.add(listener);
 
     // Return an unsubscribe function
     return () => {
       const typeListeners = this.listeners.get(type);
       if (typeListeners) {
-        typeListeners.delete(callback);
+        typeListeners.delete(listener);
         if (typeListeners.size === 0) {
           this.listeners.delete(type);
         }
@@ -187,7 +188,7 @@ class WebSocketManager {
     }, delay);
   }
 
-  private triggerListeners(type: WSMessageType, payload: any): void {
+  private triggerListeners(type: WSMessageType, payload: unknown): void {
     const typeListeners = this.listeners.get(type);
     if (typeListeners) {
       typeListeners.forEach((callback) => {

@@ -27,6 +27,10 @@ go run ./cmd/backfill
 with `STARTED`; use `GET /experiments/{searchId}` to observe
 `PENDING|RUNNING|COMPLETED|FAILED`.
 
+Authenticated frontend endpoints include `GET /strategies`, `GET /experiments`,
+`POST /search/start`, `GET /candles`, and `GET /ws`. Run the backfill before
+opening charts or starting searches so the requested candle ranges exist.
+
 ## Contracts
 
 The shared contracts are defined in [`PLAN.md`](../PLAN.md#3-contract--interface-dùng-chung)

@@ -4,7 +4,7 @@ export function SentimentAnalyticsPanel() {
   const data = MOCK_SENTIMENT_OVERVIEW;
 
   const handleApplyStrategy = () => {
-    alert('⚡ NewsSentimentStrategy has been integrated!\nThis adds a sentiment threshold filter (score > 0.8 to buy, score < 0.2 to sell) as an entry constraint to the strategy builder.');
+    alert('NewsSentimentStrategy has been integrated!\nThis adds a sentiment threshold filter (score > 0.8 to buy, score < 0.2 to sell) as an entry constraint to the strategy builder.');
   };
 
   return (
@@ -71,7 +71,7 @@ export function SentimentAnalyticsPanel() {
 
       {/* KHỐI 2: STRATEGY ENGINE INTEGRATION */}
       <div style={integrationCardStyle}>
-        <h4 style={{ ...titleStyle, color: '#06b6d4' }}>Strategy Engine Integration</h4>
+        <h4 style={{ ...titleStyle, color: '#2563eb' }}>Strategy Engine Integration</h4>
         
         {/* Visual pipeline representation */}
         <div style={pipeContainerStyle}>
@@ -87,7 +87,7 @@ export function SentimentAnalyticsPanel() {
         {/* Strategy plugin trigger */}
         <div style={actionRowStyle}>
           <span style={strategyBadgeStyle}>
-            ⚡ NewsSentimentStrategy
+            NewsSentimentStrategy
           </span>
           <button onClick={handleApplyStrategy} style={applyBtnStyle}>
             Apply to Builder
@@ -102,8 +102,8 @@ export function SentimentAnalyticsPanel() {
 // STYLING PRESET
 // ==========================================
 const panelContainerStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1rem',
   height: '100%',
@@ -127,7 +127,7 @@ const titleStyle: React.CSSProperties = {
   margin: 0,
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.5rem',
 };
 
@@ -144,10 +144,10 @@ const gaugeAreaStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '0.4rem',
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   padding: '0.6rem',
   borderRadius: '6px',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
 };
 
 const gaugeLabelsStyle: React.CSSProperties = {
@@ -205,7 +205,7 @@ const distValStyle: React.CSSProperties = {
 
 const distBarContainerStyle: React.CSSProperties = {
   height: '4px',
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   borderRadius: '9999px',
   overflow: 'hidden',
 };
@@ -220,7 +220,7 @@ const mlopsAreaStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '0.5rem',
-  borderTop: '1px solid #1e293b',
+  borderTop: '1px solid #e2e8f0',
   paddingTop: '0.75rem',
 };
 
@@ -228,10 +228,10 @@ const mlopsGridStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '0.4rem',
-  backgroundColor: '#070a13',
+  backgroundColor: '#ffffff',
   padding: '0.5rem 0.75rem',
   borderRadius: '6px',
-  border: '1px solid #1e293b',
+  border: '1px solid #e2e8f0',
 };
 
 const mlopsRowStyle: React.CSSProperties = {
@@ -264,7 +264,7 @@ const pipeContainerStyle: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   gap: '0.5rem',
-  backgroundColor: '#070a13',
+  backgroundColor: '#ffffff',
   padding: '0.4rem',
   borderRadius: '4px',
 };
@@ -272,16 +272,16 @@ const pipeContainerStyle: React.CSSProperties = {
 const pipeBoxStyle: React.CSSProperties = {
   fontSize: '0.7rem',
   color: '#94a3b8',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   padding: '0.2rem 0.4rem',
   borderRadius: '4px',
 };
 
 const pipeBoxActiveStyle: React.CSSProperties = {
   fontSize: '0.7rem',
-  color: '#0f172a',
-  backgroundColor: '#06b6d4',
-  border: '1px solid #06b6d4',
+  color: '#ffffff',
+  backgroundColor: '#2563eb',
+  border: '1px solid #2563eb',
   padding: '0.2rem 0.4rem',
   borderRadius: '4px',
   fontWeight: '700',
@@ -309,16 +309,16 @@ const actionRowStyle: React.CSSProperties = {
 const strategyBadgeStyle: React.CSSProperties = {
   fontSize: '0.65rem',
   backgroundColor: 'rgba(6, 182, 212, 0.1)',
-  border: '1px solid #06b6d4',
-  color: '#06b6d4',
+  border: '1px solid #2563eb',
+  color: '#2563eb',
   padding: '0.2rem 0.4rem',
   borderRadius: '4px',
   fontWeight: '700',
 };
 
 const applyBtnStyle: React.CSSProperties = {
-  backgroundColor: '#06b6d4',
-  color: '#0f172a',
+  backgroundColor: '#2563eb',
+  color: '#ffffff',
   border: 'none',
   borderRadius: '4px',
   padding: '0.35rem 0.65rem',

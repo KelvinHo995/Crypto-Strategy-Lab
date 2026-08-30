@@ -71,3 +71,15 @@ no UI/UX source was changed in this review pass.
 - The agreed JWT value is intentionally retained for team compatibility. Because
   `.env.example` is public, it must be replaced with a private random value before
   any Internet-facing production deployment where forged sessions would matter.
+
+## Fullstack integration update
+
+- Added authenticated `GET /candles` for chart bootstrap data.
+- Added frontend Auth Gate and same-origin Vite REST/WebSocket proxy.
+- Connected strategy registry, historical charts, search, experiment leaderboard,
+  realtime candles and search/leaderboard events to the Go backend.
+- Aligned frontend runtime choices with backend BTCUSDT timeframes (`5m`, `15m`,
+  `1h`, `4h`) and normalized strategy name `SR`.
+- Retained explicit mock fallback for market outages and for News/trade-detail
+  screens whose source endpoints are outside MVP.
+- Updated the previously stale pnpm lockfile and removed frontend lint errors.

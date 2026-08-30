@@ -14,7 +14,7 @@ export function ExtractionPipelinePanel() {
     setTimeout(() => {
       setTemplateVersion('v1.4.3');
       setIsApplying(false);
-      alert('✓ Self-healing success: Applied new Extraction Template version v1.4.3. Expected error rate reduced to 4.1%!');
+      alert('Self-healing success: Applied new Extraction Template version v1.4.3. Expected error rate reduced to 4.1%!');
     }, 1500);
   };
 
@@ -24,7 +24,7 @@ export function ExtractionPipelinePanel() {
       <div style={sectionStyle}>
         <div style={sectionHeaderStyle}>
           <h4 style={titleStyle}>LLM-Assisted Extraction</h4>
-          <span style={versionBadgeStyle}>Template: {templateVersion} ✓</span>
+          <span style={versionBadgeStyle}>Template: {templateVersion} </span>
         </div>
 
         {/* 4-step flowchart */}
@@ -58,13 +58,13 @@ export function ExtractionPipelinePanel() {
           </div>
           <div style={metricBoxStyle}>
             <span style={metricLabelStyle}>Mapped Fields</span>
-            <span style={{ ...metricValueStyle, color: '#06b6d4' }}>{MOCK_EXTRACTION_TEMPLATE.extractedFields} / 5</span>
+            <span style={{ ...metricValueStyle, color: '#2563eb' }}>{MOCK_EXTRACTION_TEMPLATE.extractedFields} / 5</span>
           </div>
         </div>
       </div>
 
       {/* SECTION 2: SELF-HEALING EXTRACTION */}
-      <div style={{ ...sectionStyle, borderTop: '1px solid #1e293b', paddingTop: '1rem' }}>
+      <div style={{ ...sectionStyle, borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
         <div style={sectionHeaderStyle}>
           <h4 style={titleStyle}>Self-Healing Pipeline</h4>
           <label style={switchLabelStyle}>
@@ -112,7 +112,7 @@ export function ExtractionPipelinePanel() {
         {templateVersion === 'v1.4.2' && (
           <div style={healingProposalCardStyle}>
             <div style={proposalHeaderStyle}>
-              <span>🔧 Proposed Template Version (v1.4.3)</span>
+              <span>Proposed Template Version (v1.4.3)</span>
               <span style={{ color: '#10b981', fontSize: '0.7rem' }}>Expected error: 4.1%</span>
             </div>
             <pre style={proposalCodeStyle}>{MOCK_SELF_HEALING_STATS.proposedTemplate}</pre>
@@ -121,7 +121,7 @@ export function ExtractionPipelinePanel() {
               disabled={isApplying}
               style={isApplying ? activeApplyBtnStyle : applyBtnStyle}
             >
-              {isApplying ? 'Applying Template...' : '✓ Áp dụng ngay (v1.4.3)'}
+              {isApplying ? 'Applying Template...' : 'Áp dụng ngay (v1.4.3)'}
             </button>
           </div>
         )}
@@ -134,8 +134,8 @@ export function ExtractionPipelinePanel() {
 // STYLING PRESET
 // ==========================================
 const panelContainerStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1rem',
   height: '100%',
@@ -180,17 +180,17 @@ const flowContainerStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
-  backgroundColor: '#070a13',
+  backgroundColor: '#ffffff',
   padding: '0.4rem 0.5rem',
   borderRadius: '6px',
-  border: '1px solid #1e293b',
+  border: '1px solid #e2e8f0',
 };
 
 const flowStepStyle: React.CSSProperties = {
   fontSize: '0.65rem',
   fontWeight: '700',
   color: '#94a3b8',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   padding: '0.15rem 0.35rem',
   borderRadius: '4px',
 };
@@ -214,11 +214,11 @@ const codeHeaderStyle: React.CSSProperties = {
 };
 
 const codePreviewStyle: React.CSSProperties = {
-  backgroundColor: '#070a13',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '4px',
   padding: '0.5rem',
-  color: '#06b6d4',
+  color: '#2563eb',
   fontSize: '0.65rem',
   margin: 0,
   fontFamily: 'monospace',
@@ -233,7 +233,7 @@ const metricFlexStyle: React.CSSProperties = {
 
 const metricBoxStyle: React.CSSProperties = {
   flex: 1,
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   borderRadius: '6px',
   padding: '0.4rem',
   display: 'flex',
@@ -309,8 +309,8 @@ const errorValueStyle: React.CSSProperties = {
 };
 
 const healingProposalCardStyle: React.CSSProperties = {
-  backgroundColor: '#070a13',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '6px',
   padding: '0.5rem',
   display: 'flex',
@@ -327,14 +327,14 @@ const proposalHeaderStyle: React.CSSProperties = {
 };
 
 const proposalCodeStyle: React.CSSProperties = {
-  backgroundColor: '#070a13',
+  backgroundColor: '#ffffff',
   color: '#f59e0b',
   fontSize: '0.65rem',
   margin: 0,
   fontFamily: 'monospace',
   maxHeight: '100px',
   overflow: 'auto',
-  border: '1px dashed #334155',
+  border: '1px dashed #cbd5e1',
   padding: '0.4rem',
   borderRadius: '4px',
 };
@@ -353,9 +353,9 @@ const applyBtnStyle: React.CSSProperties = {
 };
 
 const activeApplyBtnStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#475569',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   borderRadius: '4px',
   padding: '0.4rem',
   fontSize: '0.75rem',

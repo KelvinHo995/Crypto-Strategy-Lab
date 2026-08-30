@@ -36,8 +36,8 @@ export function MiniLeaderboard({ items }: MiniLeaderboardProps) {
 // STYLING PRESET
 // ==========================================
 const containerStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1rem',
   boxSizing: 'border-box',
@@ -59,11 +59,11 @@ const tableStyle: React.CSSProperties = {
 };
 
 const trStyle: React.CSSProperties = {
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
 };
 
 const topRowStyle: React.CSSProperties = {
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   backgroundColor: 'rgba(6, 182, 212, 0.03)', // Light cyan background for #1
 };
 
@@ -72,7 +72,7 @@ const thStyle: React.CSSProperties = {
   textAlign: 'center',
   padding: '0.35rem',
   fontWeight: '600',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
 };
 
 const thLeftStyle: React.CSSProperties = {
@@ -80,7 +80,7 @@ const thLeftStyle: React.CSSProperties = {
   textAlign: 'left',
   padding: '0.35rem',
   fontWeight: '600',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
 };
 
 const thRightStyle: React.CSSProperties = {
@@ -88,7 +88,7 @@ const thRightStyle: React.CSSProperties = {
   textAlign: 'right',
   padding: '0.35rem',
   fontWeight: '600',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
 };
 
 const tdRankStyle = (rank: number): React.CSSProperties => {
@@ -116,7 +116,7 @@ const tdRankStyle = (rank: number): React.CSSProperties => {
 };
 
 const tdNameStyle: React.CSSProperties = {
-  color: '#e2e8f0',
+  color: '#0f172a',
   fontWeight: '500',
   padding: '0.5rem 0.35rem',
 };

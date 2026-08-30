@@ -50,9 +50,6 @@ export function BacktestConfigPanel({
               disabled={isLoading}
             >
               <option value="BTCUSDT">BTC/USDT</option>
-              <option value="ETHUSDT">ETH/USDT</option>
-              <option value="SOLUSDT">SOL/USDT</option>
-              <option value="BNBUSDT">BNB/USDT</option>
             </select>
           </div>
 
@@ -65,7 +62,6 @@ export function BacktestConfigPanel({
               style={selectStyle}
               disabled={isLoading}
             >
-              <option value="1m">1m</option>
               <option value="5m">5m</option>
               <option value="15m">15m</option>
               <option value="1h">1h</option>
@@ -138,7 +134,7 @@ export function BacktestConfigPanel({
               <span style={spinnerStyle} /> Processing Backtest...
             </span>
           ) : (
-            '▷ Kích hoạt Backtest'
+            'Kích hoạt Backtest'
           )}
         </button>
       </form>
@@ -150,8 +146,8 @@ export function BacktestConfigPanel({
 // STYLING PRESET
 // ==========================================
 const panelContainerStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1.25rem',
   boxSizing: 'border-box',
@@ -164,7 +160,7 @@ const titleStyle: React.CSSProperties = {
   margin: '0 0 1rem 0',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.5rem',
 };
 
@@ -193,9 +189,9 @@ const labelStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#ffffff',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.5rem',
   fontSize: '0.8rem',
@@ -204,9 +200,9 @@ const selectStyle: React.CSSProperties = {
 };
 
 const inputStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#ffffff',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.45rem',
   fontSize: '0.8rem',
@@ -227,9 +223,9 @@ const submitBtnStyle: React.CSSProperties = {
 };
 
 const activeSubmitBtnStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#475569',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.65rem',
   fontSize: '0.85rem',

@@ -16,7 +16,7 @@ export function LoopDiscoveryPanel({
 
   // Simulated Loop Discovery updates when running
   useEffect(() => {
-    if (stats.status !== 'RUNNING') return;
+    if (stats.status !== 'RUNNING' || stats.totalIterations <= 1) return;
 
     const interval = setInterval(() => {
       if (stats.iteration >= stats.totalIterations) {
@@ -33,7 +33,7 @@ export function LoopDiscoveryPanel({
     }, 1500);
 
     return () => clearInterval(interval);
-  }, [stats.status, stats.iteration, stats.totalIterations]);
+  }, [stats.status, stats.iteration, stats.totalIterations, stats.testedCandidates, onStatusChange, onUpdateIteration]);
 
   const handleStart = () => {
     if (stats.status === 'COMPLETED') {
@@ -56,6 +56,7 @@ export function LoopDiscoveryPanel({
   return (
     <div style={panelContainerStyle}>
       <h3 style={titleStyle}>Loop Discovery Engine</h3>
+      <small style={{color:'#f59e0b'}}>Backend MVP chạy 1 candidate/request; loop nhiều iteration là demo.</small>
 
       {/* Visual Flow diagram of Discovery Loop */}
       <div style={flowDiagramStyle}>
@@ -143,7 +144,7 @@ export function LoopDiscoveryPanel({
         {stats.iteration > 0 && (
           <div style={bestStrategyCardStyle}>
             <div style={bestHeaderStyle}>
-              ⭐ Best Candidate So Far
+              Best Candidate So Far
             </div>
             <div style={bestNameStyle}>{stats.bestStrategy.name}</div>
             <div style={bestStatsGridStyle}>
@@ -168,11 +169,11 @@ export function LoopDiscoveryPanel({
       <div style={controlsContainerStyle}>
         {stats.status === 'RUNNING' ? (
           <button onClick={handlePause} style={pauseButtonStyle}>
-            ⏸ Pause Discovery
+            Pause Discovery
           </button>
         ) : (
           <button onClick={handleStart} style={startButtonStyle}>
-            {stats.status === 'COMPLETED' ? '🔁 Restart Loop' : '▶ Start Loop Discovery'}
+            {stats.status === 'COMPLETED' ? 'Restart Loop' : 'Start Loop Discovery'}
           </button>
         )}
         <button onClick={handleReset} style={resetButtonStyle}>
@@ -187,8 +188,8 @@ export function LoopDiscoveryPanel({
 // STYLING PRESET
 // ==========================================
 const panelContainerStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1rem',
   height: '100%',
@@ -201,11 +202,11 @@ const panelContainerStyle: React.CSSProperties = {
 const titleStyle: React.CSSProperties = {
   fontSize: '0.9rem',
   fontWeight: '700',
-  color: '#e2e8f0',
+  color: '#0f172a',
   margin: 0,
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.5rem',
 };
 
@@ -213,18 +214,18 @@ const flowDiagramStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
-  backgroundColor: '#070a13',
+  backgroundColor: '#ffffff',
   padding: '0.5rem 0.75rem',
   borderRadius: '6px',
-  border: '1px solid #1e293b',
+  border: '1px solid #e2e8f0',
 };
 
 const flowStepStyle: React.CSSProperties = {
   fontSize: '0.7rem',
   fontWeight: '700',
-  color: '#06b6d4',
-  backgroundColor: '#0f172a',
-  border: '1px solid #334155',
+  color: '#2563eb',
+  backgroundColor: '#ffffff',
+  border: '1px solid #cbd5e1',
   padding: '0.2rem 0.4rem',
   borderRadius: '4px',
   cursor: 'help',
@@ -259,8 +260,8 @@ const radioLabelStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',
   gap: '0.5rem',
-  backgroundColor: '#1e293b',
-  border: '1px solid #334155',
+  backgroundColor: '#e2e8f0',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.5rem',
   cursor: 'pointer',
@@ -275,7 +276,7 @@ const radioTitleStyle: React.CSSProperties = {
   display: 'block',
   fontSize: '0.8rem',
   fontWeight: '700',
-  color: '#f8fafc',
+  color: '#0f172a',
 };
 
 const radioDescStyle: React.CSSProperties = {
@@ -289,7 +290,7 @@ const progressSectionStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '0.75rem',
-  borderTop: '1px solid #1e293b',
+  borderTop: '1px solid #e2e8f0',
   paddingTop: '0.75rem',
 };
 
@@ -301,7 +302,7 @@ const progressHeaderStyle: React.CSSProperties = {
 
 const statusBadgeStyle = (status: string): React.CSSProperties => {
   let color = '#94a3b8';
-  let bgColor = '#1e293b';
+  let bgColor = '#e2e8f0';
 
   if (status === 'RUNNING') {
     color = '#10b981';
@@ -328,15 +329,15 @@ const statusBadgeStyle = (status: string): React.CSSProperties => {
 
 const progressBarContainerStyle: React.CSSProperties = {
   height: '6px',
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   borderRadius: '9999px',
   overflow: 'hidden',
 };
 
 const progressBarFillStyle: React.CSSProperties = {
   height: '100%',
-  backgroundColor: '#06b6d4',
-  backgroundImage: 'linear-gradient(90deg, #06b6d4, #3b82f6)',
+  backgroundColor: '#2563eb',
+  backgroundImage: 'linear-gradient(90deg, #2563eb, #3b82f6)',
   borderRadius: '9999px',
   transition: 'width 0.3s ease',
 };
@@ -348,7 +349,7 @@ const statsGridStyle: React.CSSProperties = {
 
 const statBoxStyle: React.CSSProperties = {
   flex: 1,
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   borderRadius: '6px',
   padding: '0.4rem 0.5rem',
   display: 'flex',
@@ -364,7 +365,7 @@ const statLabelStyle: React.CSSProperties = {
 const statValueStyle: React.CSSProperties = {
   fontSize: '0.85rem',
   fontWeight: '700',
-  color: '#f8fafc',
+  color: '#0f172a',
   fontFamily: 'monospace',
 };
 
@@ -378,7 +379,7 @@ const bestStrategyCardStyle: React.CSSProperties = {
 const bestHeaderStyle: React.CSSProperties = {
   fontSize: '0.65rem',
   fontWeight: '700',
-  color: '#06b6d4',
+  color: '#2563eb',
   textTransform: 'uppercase',
   marginBottom: '0.25rem',
 };
@@ -386,7 +387,7 @@ const bestHeaderStyle: React.CSSProperties = {
 const bestNameStyle: React.CSSProperties = {
   fontSize: '0.75rem',
   fontWeight: '700',
-  color: '#f8fafc',
+  color: '#0f172a',
   marginBottom: '0.25rem',
 };
 
@@ -419,14 +420,14 @@ const bestProfitStyle: React.CSSProperties = {
 const controlsContainerStyle: React.CSSProperties = {
   display: 'flex',
   gap: '0.5rem',
-  borderTop: '1px solid #1e293b',
+  borderTop: '1px solid #e2e8f0',
   paddingTop: '1rem',
 };
 
 const startButtonStyle: React.CSSProperties = {
   flexGrow: 2,
-  backgroundColor: '#06b6d4',
-  color: '#0f172a',
+  backgroundColor: '#2563eb',
+  color: '#ffffff',
   border: 'none',
   borderRadius: '4px',
   padding: '0.5rem',
@@ -439,7 +440,7 @@ const startButtonStyle: React.CSSProperties = {
 const pauseButtonStyle: React.CSSProperties = {
   flexGrow: 2,
   backgroundColor: '#f59e0b',
-  color: '#0f172a',
+  color: '#ffffff',
   border: 'none',
   borderRadius: '4px',
   padding: '0.5rem',
