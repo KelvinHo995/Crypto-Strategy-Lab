@@ -1,12 +1,13 @@
-import { useEffect, useState, type ComponentType } from 'react';
+import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
 import { BarChart3, ChartCandlestick, FlaskConical, Newspaper, Radio, Trophy } from 'lucide-react';
 import { ErrorBoundary, WebSocketStateBanner } from './shared/components/index';
 import { AuthGate } from './shared/components/AuthGate';
 import { wsManager } from './shared/ws';
-import { MarketDashboard } from './features/market/index';
-import { StrategyDiscoveryPage } from './features/strategy/index';
-import { ExperimentDashboard } from './features/experiment/index';
-import { NewsCrawlerDashboard } from './features/news/index';
+
+const MarketDashboard = lazy(() => import('./features/market/index').then((module) => ({ default: module.MarketDashboard })));
+const StrategyDiscoveryPage = lazy(() => import('./features/strategy/index').then((module) => ({ default: module.StrategyDiscoveryPage })));
+const ExperimentDashboard = lazy(() => import('./features/experiment/index').then((module) => ({ default: module.ExperimentDashboard })));
+const NewsCrawlerDashboard = lazy(() => import('./features/news/index').then((module) => ({ default: module.NewsCrawlerDashboard })));
 
 type Tab = 'charts' | 'leaderboard' | 'builder' | 'news';
 const navigation: Array<{ id: Tab; label: string; caption: string; icon: ComponentType<{ size?: number }> }> = [
@@ -49,10 +50,12 @@ function AuthenticatedApp() {
           </header>
           <WebSocketStateBanner />
           <main className="app-main">
-            {activeTab === 'charts' && <MarketDashboard />}
-            {activeTab === 'builder' && <StrategyDiscoveryPage />}
-            {activeTab === 'leaderboard' && <ExperimentDashboard />}
-            {activeTab === 'news' && <NewsCrawlerDashboard />}
+            <Suspense fallback={<div className="screen-loading">Loading workspace…</div>}>
+              {activeTab === 'charts' && <MarketDashboard />}
+              {activeTab === 'builder' && <StrategyDiscoveryPage />}
+              {activeTab === 'leaderboard' && <ExperimentDashboard />}
+              {activeTab === 'news' && <NewsCrawlerDashboard />}
+            </Suspense>
           </main>
         </section>
       </div>

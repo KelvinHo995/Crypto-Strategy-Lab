@@ -18,6 +18,8 @@ The application uses a light financial-workstation theme: neutral white/slate su
 
 The unauthenticated screen offers an explicit offline demo. API-backed screens continue to label mock fallbacks so simulated values cannot be mistaken for production market data.
 
+Feature workspaces are loaded on demand with React `lazy`/`Suspense`. The production build emits separate Market, Strategy, Backtest, and News chunks so the initial application bundle stays below the Vite 500 kB warning threshold.
+
 Vite proxies `/auth`, `/candles`, `/strategies`, `/search`, `/experiments`, and
 `/ws` to the backend, keeping the JWT cookie and WebSocket same-origin. For a
 production deployment, serve both behind the same origin or set
