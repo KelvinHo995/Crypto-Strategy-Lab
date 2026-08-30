@@ -66,19 +66,19 @@ export function TradingChart({
     // 1. Initialize Chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { color: '#0f172a' }, // Slate-900 matching dashboard
-        textColor: '#94a3b8', // Slate-400
+        background: { color: '#ffffff' },
+        textColor: '#64748b',
       },
       grid: {
-        vertLines: { color: '#1e293b' },
-        horzLines: { color: '#1e293b' },
+        vertLines: { color: '#f1f5f9' },
+        horzLines: { color: '#f1f5f9' },
       },
       rightPriceScale: {
-        borderColor: '#334155',
+        borderColor: '#0f172a',
         autoScale: true,
       },
       timeScale: {
-        borderColor: '#334155',
+        borderColor: '#0f172a',
         timeVisible: true,
         secondsVisible: false,
       },

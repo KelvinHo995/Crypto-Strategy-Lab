@@ -47,7 +47,7 @@ export function ProvenanceModal({
               </div>
               <div style={metaRowStyle}>
                 <span style={metaLabelStyle}>Combination Policy:</span>
-                <span style={{ ...metaValueStyle, textTransform: 'uppercase', color: '#06b6d4' }}>
+                <span style={{ ...metaValueStyle, textTransform: 'uppercase', color: '#2563eb' }}>
                   {experiment.policy}
                 </span>
               </div>
@@ -82,7 +82,7 @@ export function ProvenanceModal({
             Close
           </button>
           <button onClick={() => onReplicate(experiment)} style={submitBtnStyle}>
-            ⚙️ Tái lập vào Strategy Builder
+            Tái lập vào Strategy Builder
           </button>
         </div>
       </div>
@@ -108,21 +108,21 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const modalStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #334155',
+  backgroundColor: '#ffffff',
+  border: '1px solid #cbd5e1',
   borderRadius: '8px',
   width: '95%',
   maxWidth: '520px',
   padding: '1.5rem',
   boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4)',
-  color: '#e2e8f0',
+  color: '#0f172a',
 };
 
 const modalHeaderStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'flex-start',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.75rem',
   marginBottom: '1rem',
 };
@@ -130,7 +130,7 @@ const modalHeaderStyle: React.CSSProperties = {
 const titleStyle: React.CSSProperties = {
   fontSize: '1rem',
   fontWeight: '700',
-  color: '#f8fafc',
+  color: '#0f172a',
   margin: 0,
 };
 
@@ -177,8 +177,8 @@ const metaGridStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '0.4rem',
-  backgroundColor: '#1e293b',
-  border: '1px solid #334155',
+  backgroundColor: '#e2e8f0',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.6rem 0.75rem',
 };
@@ -206,15 +206,15 @@ const versionGridStyle: React.CSSProperties = {
 
 const versionBadgeStyle: React.CSSProperties = {
   display: 'flex',
-  backgroundColor: '#1e293b',
-  border: '1px solid #334155',
+  backgroundColor: '#e2e8f0',
+  border: '1px solid #cbd5e1',
   borderRadius: '4px',
   overflow: 'hidden',
   fontSize: '0.7rem',
 };
 
 const versionKeyStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
+  backgroundColor: '#ffffff',
   padding: '0.2rem 0.4rem',
   color: '#94a3b8',
   fontWeight: '600',
@@ -222,14 +222,14 @@ const versionKeyStyle: React.CSSProperties = {
 
 const versionValStyle: React.CSSProperties = {
   padding: '0.2rem 0.4rem',
-  color: '#06b6d4',
+  color: '#2563eb',
   fontWeight: '700',
   fontFamily: 'monospace',
 };
 
 const jsonCodeStyle: React.CSSProperties = {
-  backgroundColor: '#070a13',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '6px',
   padding: '0.75rem',
   fontSize: '0.75rem',
@@ -243,7 +243,7 @@ const footerStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'flex-end',
   gap: '0.75rem',
-  borderTop: '1px solid #1e293b',
+  borderTop: '1px solid #e2e8f0',
   paddingTop: '1rem',
   marginTop: '1rem',
 };

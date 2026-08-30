@@ -55,9 +55,9 @@ export function ExperimentLeaderboard({
 
   const getRankBadge = (rank: number) => {
     switch (rank) {
-      case 1: return <span style={{ ...medalStyle, backgroundColor: '#f59e0b', color: '#000000' }} title="Gold Medal">🥇 1</span>;
-      case 2: return <span style={{ ...medalStyle, backgroundColor: '#cbd5e1', color: '#000000' }} title="Silver Medal">🥈 2</span>;
-      case 3: return <span style={{ ...medalStyle, backgroundColor: '#b45309', color: '#ffffff' }} title="Bronze Medal">🥉 3</span>;
+      case 1: return <span style={{ ...medalStyle, backgroundColor: '#f59e0b', color: '#000000' }} title="Gold Medal">1</span>;
+      case 2: return <span style={{ ...medalStyle, backgroundColor: '#cbd5e1', color: '#000000' }} title="Silver Medal">2</span>;
+      case 3: return <span style={{ ...medalStyle, backgroundColor: '#b45309', color: '#ffffff' }} title="Bronze Medal">3</span>;
       default: return <span style={rankTextStyle}>{rank}</span>;
     }
   };
@@ -70,7 +70,7 @@ export function ExperimentLeaderboard({
           {/* Search Filter */}
           <input
             type="text"
-            placeholder="🔍 Filter strategies..."
+            placeholder="Filter strategies..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={searchStyle}
@@ -151,7 +151,7 @@ export function ExperimentLeaderboard({
                     <td style={tdRightStyle}>{exp.winRate.toFixed(2)}%</td>
                     <td style={isWarningMDD ? tdWarnStyle : tdRightStyle}>
                       {exp.mdd.toFixed(2)}%
-                      {isWarningMDD && ' ⚠️'}
+                      {isWarningMDD && ' '}
                     </td>
                     <td style={tdRightStyle}>{exp.tradeCount}</td>
                     {sortBy === 'overallScore' && (
@@ -164,14 +164,14 @@ export function ExperimentLeaderboard({
                           style={actionBtnStyle}
                           title="View Provenance Metadata"
                         >
-                          👁️ Details
+                          Details
                         </button>
                         <button
                           onClick={() => onLoadToChart(exp)}
-                          style={{ ...actionBtnStyle, backgroundColor: '#06b6d4', color: '#0f172a' }}
+                          style={{ ...actionBtnStyle, backgroundColor: '#2563eb', color: '#ffffff' }}
                           title="Load strategy signals onto chart"
                         >
-                          📈 Load
+                          Load
                         </button>
                       </div>
                     </td>
@@ -196,8 +196,8 @@ export function ExperimentLeaderboard({
 // STYLING PRESET
 // ==========================================
 const containerStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1.25rem',
   boxSizing: 'border-box',
@@ -224,9 +224,9 @@ const rightToolbarStyle: React.CSSProperties = {
 };
 
 const searchStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#ffffff',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.45rem 0.75rem',
   fontSize: '0.8rem',
@@ -247,9 +247,9 @@ const labelStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#ffffff',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.4rem 0.65rem',
   fontSize: '0.8rem',
@@ -268,7 +268,7 @@ const tableStyle: React.CSSProperties = {
 };
 
 const trStyle: React.CSSProperties = {
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   transition: 'background-color 0.2s',
   cursor: 'pointer',
 };
@@ -278,7 +278,7 @@ const thLeftStyle: React.CSSProperties = {
   textAlign: 'left',
   padding: '0.75rem 0.5rem',
   fontWeight: '600',
-  borderBottom: '2px solid #1e293b',
+  borderBottom: '2px solid #e2e8f0',
 };
 
 const thRightStyle: React.CSSProperties = {
@@ -286,7 +286,7 @@ const thRightStyle: React.CSSProperties = {
   textAlign: 'right',
   padding: '0.75rem 0.5rem',
   fontWeight: '600',
-  borderBottom: '2px solid #1e293b',
+  borderBottom: '2px solid #e2e8f0',
 };
 
 const thCenterStyle: React.CSSProperties = {
@@ -294,22 +294,22 @@ const thCenterStyle: React.CSSProperties = {
   textAlign: 'center',
   padding: '0.75rem 0.5rem',
   fontWeight: '600',
-  borderBottom: '2px solid #1e293b',
+  borderBottom: '2px solid #e2e8f0',
 };
 
 const tdLeftStyle: React.CSSProperties = {
-  color: '#e2e8f0',
+  color: '#0f172a',
   padding: '0.75rem 0.5rem',
 };
 
 const tdRightStyle: React.CSSProperties = {
-  color: '#e2e8f0',
+  color: '#0f172a',
   textAlign: 'right',
   padding: '0.75rem 0.5rem',
 };
 
 const tdCenterStyle: React.CSSProperties = {
-  color: '#e2e8f0',
+  color: '#0f172a',
   textAlign: 'center',
   padding: '0.75rem 0.5rem',
 };
@@ -336,7 +336,7 @@ const tdWarnStyle: React.CSSProperties = {
 };
 
 const tdScoreStyle: React.CSSProperties = {
-  color: '#06b6d4', // Cyan
+  color: '#2563eb', // Cyan
   fontWeight: '700',
   textAlign: 'right',
   padding: '0.75rem 0.5rem',
@@ -372,18 +372,18 @@ const expIdStyle: React.CSSProperties = {
 
 const versionBadgeStyle: React.CSSProperties = {
   fontSize: '0.65rem',
-  backgroundColor: '#1e293b',
-  color: '#06b6d4',
+  backgroundColor: '#e2e8f0',
+  color: '#2563eb',
   padding: '0.05rem 0.25rem',
   borderRadius: '4px',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   fontFamily: 'monospace',
   display: 'inline-block',
 };
 
 const compositionStyle: React.CSSProperties = {
   fontWeight: '600',
-  color: '#f8fafc',
+  color: '#0f172a',
   display: 'block',
 };
 
@@ -401,9 +401,9 @@ const actionGroupStyle: React.CSSProperties = {
 };
 
 const actionBtnStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#94a3b8',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   borderRadius: '4px',
   padding: '0.25rem 0.5rem',
   fontSize: '0.75rem',

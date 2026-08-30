@@ -36,7 +36,7 @@ export function NewsInputList({ news }: NewsInputListProps) {
       color = '#6366f1';
     } else if (title.toUpperCase().includes('SOL') || title.toUpperCase().includes('SOLANA')) {
       bgColor = 'rgba(6, 182, 212, 0.15)';
-      color = '#06b6d4';
+      color = '#2563eb';
     } else if (title.toUpperCase().includes('BNB')) {
       bgColor = 'rgba(234, 179, 8, 0.15)';
       color = '#eab308';
@@ -91,7 +91,7 @@ export function NewsInputList({ news }: NewsInputListProps) {
                   {item.sentiment.sentiment} ({(item.sentiment.score * 100).toFixed(0)}%)
                 </span>
                 <span style={modelMetaStyle} title="MLOps Traceability Model Information">
-                  🤖 {item.sentiment.model.name} ({item.sentiment.model.version})
+                  {item.sentiment.model.name} ({item.sentiment.model.version})
                 </span>
               </div>
             )}
@@ -111,8 +111,8 @@ export function NewsInputList({ news }: NewsInputListProps) {
 // STYLING PRESET
 // ==========================================
 const panelContainerStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '1rem',
   height: '100%',
@@ -125,7 +125,7 @@ const headerStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  borderBottom: '1px solid #1e293b',
+  borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.5rem',
   marginBottom: '1rem',
 };
@@ -155,8 +155,8 @@ const listStyle: React.CSSProperties = {
 };
 
 const cardStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
-  border: '1px solid #334155',
+  backgroundColor: '#e2e8f0',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.75rem',
 };
@@ -180,7 +180,7 @@ const dateStyle: React.CSSProperties = {
 const newsTitleStyle: React.CSSProperties = {
   fontSize: '0.85rem',
   fontWeight: '700',
-  color: '#f8fafc',
+  color: '#0f172a',
   margin: '0 0 0.4rem 0',
   lineHeight: '1.3',
 };
@@ -196,7 +196,7 @@ const sentimentRowStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  borderTop: '1px dashed #334155',
+  borderTop: '1px dashed #cbd5e1',
   paddingTop: '0.5rem',
 };
 
@@ -217,13 +217,13 @@ const modelMetaStyle: React.CSSProperties = {
 const viewAllStyle: React.CSSProperties = {
   backgroundColor: 'transparent',
   border: 'none',
-  color: '#06b6d4',
+  color: '#2563eb',
   cursor: 'pointer',
   fontSize: '0.8rem',
   fontWeight: '600',
   textAlign: 'center',
   paddingTop: '1rem',
-  borderTop: '1px solid #1e293b',
+  borderTop: '1px solid #e2e8f0',
   marginTop: '0.5rem',
   width: '100%',
 };

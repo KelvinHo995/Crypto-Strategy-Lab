@@ -70,11 +70,11 @@ export function WebSocketStateBanner() {
       <span style={bannerTextStyle}>
         {isConnecting ? (
           <>
-            ⚠️ Connection lost. Attempting to reconnect...
+            Connecting to realtime market data...
           </>
         ) : (
           <>
-            🚨 Disconnected from Strategy Lab server. Checking server status...
+            Realtime server unavailable. Dashboard data may be delayed.
           </>
         )}
       </span>
@@ -90,26 +90,26 @@ const errorContainerStyle: React.CSSProperties = {
   margin: '2rem auto',
   maxWidth: '500px',
   textAlign: 'center',
-  backgroundColor: '#1a1a1a',
-  border: '1px solid #ff4a4a',
+  backgroundColor: '#ffffff',
+  border: '1px solid #fecaca',
   borderRadius: '8px',
   color: '#ffffff',
   fontFamily: 'system-ui, -apple-system, sans-serif',
 };
 
 const errorTitleStyle: React.CSSProperties = {
-  color: '#ff4a4a',
+  color: '#dc2626',
   marginBottom: '1rem',
 };
 
 const errorMsgStyle: React.CSSProperties = {
-  color: '#cccccc',
+  color: '#64748b',
   marginBottom: '1.5rem',
   fontSize: '0.9rem',
 };
 
 const errorBtnStyle: React.CSSProperties = {
-  backgroundColor: '#ff4a4a',
+  backgroundColor: '#dc2626',
   color: 'white',
   border: 'none',
   padding: '0.5rem 1rem',
@@ -126,33 +126,23 @@ const bannerTextStyle: React.CSSProperties = {
 };
 
 const bannerConnectingStyle: React.CSSProperties = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  backgroundColor: '#f59e0b', // Yellow-500
-  color: '#000000',
-  padding: '0.5rem',
+  backgroundColor: '#fffbeb',
+  color: '#92400e',
+  padding: '0.55rem',
   textAlign: 'center',
   fontWeight: '600',
   fontSize: '0.9rem',
-  zIndex: 9999,
-  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+  borderBottom: '1px solid #fde68a',
   fontFamily: 'system-ui, -apple-system, sans-serif',
 };
 
 const bannerDisconnectedStyle: React.CSSProperties = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  backgroundColor: '#ef4444', // Red-500
-  color: '#ffffff',
-  padding: '0.5rem',
+  backgroundColor: '#fff7ed',
+  color: '#9a3412',
+  padding: '0.55rem',
   textAlign: 'center',
   fontWeight: '600',
   fontSize: '0.9rem',
-  zIndex: 9999,
-  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+  borderBottom: '1px solid #fed7aa',
   fontFamily: 'system-ui, -apple-system, sans-serif',
 };

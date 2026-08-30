@@ -23,21 +23,21 @@ export function NewsCrawlerHeader({
             style={activeSource === 'website' ? activeTabStyle : tabStyle}
             disabled={isCrawling}
           >
-            🕸️ Website Scraper
+            Website Scraper
           </button>
           <button
             onClick={() => setActiveSource('rss')}
             style={activeSource === 'rss' ? activeTabStyle : tabStyle}
             disabled={isCrawling}
           >
-            📡 RSS Feeds
+            RSS Feeds
           </button>
           <button
             onClick={() => setActiveSource('html')}
             style={activeSource === 'html' ? activeTabStyle : tabStyle}
             disabled={isCrawling}
           >
-            📄 Raw HTML Import
+            Raw HTML Import
           </button>
         </div>
       </div>
@@ -79,7 +79,7 @@ export function NewsCrawlerHeader({
 
         {/* Action buttons */}
         <button style={configBtnStyle} disabled={isCrawling}>
-          ⚙️ Source Config
+          Source Config
         </button>
 
         <button
@@ -92,7 +92,7 @@ export function NewsCrawlerHeader({
               <span style={spinnerStyle} /> Crawling Live Feeds...
             </span>
           ) : (
-            '▷ Bắt đầu crawl'
+            'Bắt đầu crawl'
           )}
         </button>
       </div>
@@ -107,8 +107,8 @@ const containerStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  backgroundColor: '#0f172a',
-  border: '1px solid #1e293b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
   borderRadius: '8px',
   padding: '0.75rem 1.25rem',
   flexWrap: 'wrap',
@@ -122,8 +122,8 @@ const leftSectionStyle: React.CSSProperties = {
 
 const tabsGroupStyle: React.CSSProperties = {
   display: 'flex',
-  backgroundColor: '#070a13',
-  border: '1px solid #334155',
+  backgroundColor: '#ffffff',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '2px',
 };
@@ -142,8 +142,8 @@ const tabStyle: React.CSSProperties = {
 };
 
 const activeTabStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
-  color: '#06b6d4',
+  backgroundColor: '#e2e8f0',
+  color: '#2563eb',
   border: 'none',
   padding: '0.4rem 0.85rem',
   borderRadius: '4px',
@@ -173,9 +173,9 @@ const labelStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = {
-  backgroundColor: '#070a13',
+  backgroundColor: '#ffffff',
   color: '#ffffff',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   borderRadius: '4px',
   padding: '0.35rem 0.5rem',
   fontSize: '0.8rem',
@@ -184,9 +184,9 @@ const selectStyle: React.CSSProperties = {
 };
 
 const configBtnStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
+  backgroundColor: '#e2e8f0',
   color: '#cbd5e1',
-  border: '1px solid #334155',
+  border: '1px solid #cbd5e1',
   borderRadius: '4px',
   padding: '0.4rem 0.75rem',
   fontSize: '0.8rem',
@@ -209,9 +209,9 @@ const crawlBtnStyle: React.CSSProperties = {
 };
 
 const activeCrawlBtnStyle: React.CSSProperties = {
-  backgroundColor: '#070a13',
+  backgroundColor: '#ffffff',
   color: '#475569',
-  border: '1px solid #1e293b',
+  border: '1px solid #e2e8f0',
   borderRadius: '4px',
   padding: '0.4rem 1rem',
   fontSize: '0.8rem',
