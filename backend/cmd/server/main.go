@@ -1,16 +1,24 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/auth"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/experiment"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/httpx"
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/strategy"
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	registry := strategy.NewRegistry()
 	registry.Register(strategy.NewMAStrategy(20, 50))
 	registry.RegisterFactory("MA", strategy.MAFactory)
@@ -39,9 +47,28 @@ func main() {
 	}
 	defer db.Close()
 	repo := experiment.NewPostgresRepository(db)
+	candleRepo := market.NewPostgresCandleRepository(db)
+	binance := market.NewBinance(nil)
+	jwtSecret := os.Getenv("JWT_SECRET")
+	authService, err := auth.NewService(auth.NewPostgresRepository(db), jwtSecret)
+	if err != nil {
+		log.Fatalf("configure auth: %v", err)
+	}
 
-	router := httpx.NewRouter(registry, repo)
+	router := httpx.NewRouterWithContext(ctx, registry, repo, httpx.Dependencies{Auth: authService, Candles: candleRepo, Live: binance})
+	defer router.Close()
 
 	log.Println("listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", router))
+	server := &http.Server{Addr: ":8080", Handler: router, ReadHeaderTimeout: 5 * time.Second}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("server shutdown: %v", err)
+		}
+	}()
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
 }

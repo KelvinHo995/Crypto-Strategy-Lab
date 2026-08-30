@@ -46,12 +46,12 @@ func TestBollingerStrategy_Analyze(t *testing.T) {
 				}
 				// change one of previous to create variance
 				c[0] = market.Candle{Close: 120.0}
-				
+
 				// drop current price significantly
 				c[19] = market.Candle{Close: 80.0}
 				return c
 			}(),
-			want: strategy.Buy, 
+			want: strategy.Buy,
 		},
 		{
 			name: "sell - price above upper band",
@@ -62,12 +62,12 @@ func TestBollingerStrategy_Analyze(t *testing.T) {
 				}
 				// change one of previous to create variance
 				c[0] = market.Candle{Close: 80.0}
-				
+
 				// raise current price significantly
 				c[19] = market.Candle{Close: 120.0}
 				return c
 			}(),
-			want: strategy.Sell, 
+			want: strategy.Sell,
 		},
 	}
 

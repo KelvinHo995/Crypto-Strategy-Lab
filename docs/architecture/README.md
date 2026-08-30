@@ -19,7 +19,10 @@ as individual ADRs, not here — this folder describes the shape of the system a
 agreed; the ADRs argue for *why* it has that shape.
 
 Source of truth for cross-language contracts (Candle, Strategy interface,
-ExperimentResult, Sentiment API, WebSocket messages) is `docs/contracts.md`
+ExperimentResult, Sentiment API, WebSocket messages) is [contracts.md](../contracts.md)
 (referenced by the root and backend READMEs). These architecture docs describe
 flow and ownership, not wire formats — don't duplicate struct definitions here,
 link to the contract instead.
+
+The implementation delta and its verified project impact are recorded in
+[backend-implementation-review.md](../backend-implementation-review.md).

@@ -1,7 +1,7 @@
 # ADR-0007: Minimal username/password accounts + short-lived JWT (1h)
 
 **Status:** Accepted
-**Owner:** unassigned — new scope, not part of the original 14-day plan (see [PLAN.md](../../PLAN.md) §0)
+**Owner:** shared backend infrastructure (implemented)
 
 ## Context
 
@@ -87,10 +87,8 @@ a 1-hour expiry was judged an acceptable exposure window on its own.
   invalidates *all* outstanding tokens, not just one.
 - **New requirement:** a JWT signing secret must be generated and kept in
   env config, not committed to the repo.
-- **Cost:** new package needed (`internal/auth` or similar) — see
-  [02-modules.md](../architecture/02-modules.md) — not yet assigned to
-  anyone in the current 14-day plan (buffer days 8–9 are the natural slot,
-  PLAN.md §2).
+- **Implementation:** `internal/auth` contains bcrypt/JWT and user repository;
+  `internal/httpx` contains register/login/logout and the uniform middleware.
 - **Cost:** frontend needs a login/register form and must handle `401`
   (redirect to login) globally.
 - **Consequence for the demo (spec ch.46):** the scripted demo flow now

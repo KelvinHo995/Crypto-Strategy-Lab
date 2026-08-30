@@ -30,7 +30,7 @@ func (s *RSIStrategy) Name() string {
 }
 
 func (s *RSIStrategy) Analyze(candles []market.Candle) Signal {
-	if len(candles) <= s.Period {
+	if s.Period <= 0 || s.OversoldThreshold < 0 || s.OverboughtThreshold > 100 || s.OversoldThreshold >= s.OverboughtThreshold || len(candles) <= s.Period {
 		return Hold
 	}
 
@@ -59,7 +59,7 @@ func (s *RSIStrategy) calculateRSI(candles []market.Candle) float64 {
 	// We only use the last (Period * 2) candles to save calculation time if the array is huge,
 	// but to be precise, RSI typically uses all available historical data to calculate smoothed moving average.
 	// For simplicity in this lab, we'll calculate it from the beginning of the available slice.
-	
+
 	// Start index to ensure we have enough data to calculate smoothed RSI
 	// We'll just calculate from start of array.
 	for i := 1; i <= s.Period; i++ {
@@ -95,6 +95,6 @@ func (s *RSIStrategy) calculateRSI(candles []market.Candle) float64 {
 
 	rs := avgGain / avgLoss
 	rsi := 100.0 - (100.0 / (1.0 + rs))
-	
+
 	return rsi
 }

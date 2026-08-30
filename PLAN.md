@@ -11,15 +11,15 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ Repo scaffold xong (backend/frontend/sentiment-service), README từng phần đã có
 - ✅ `Candle` struct chốt xong, có thêm field `IsClosed` (candle đang hình thành vs đã đóng)
 - ✅ `Binance.StreamLiveCandles` — WS thật, chạy được, đã test qua `/ws` endpoint (branch `feat/market-data-websocket`, đang chờ merge)
-- ✅ sentiment-service scaffold FastAPI chạy được, `/analyze` mới là placeholder, chưa có model thật
-- ✅ `internal/experiment`: Backtester + Evaluator xong, có test (14 case, `go vet`/`go test` sạch) — SL/TP, fee, slippage, tránh lookahead bias. Xem ADR-0003, ADR-0009.
-- ✅ `internal/httpx`: router skeleton xong (2-mux public/protected sau `requireAuth` stub), `cmd/server/main.go` chỉ còn compose, không định nghĩa route. `POST /search/start` đã parse + validate request thật (decode → `Validate()` → 400 nếu sai field, còn lại 501 vì chưa có Queue/Registry để chạy thật). Các route khác vẫn 501.
-- ⬜ `Binance.FetchHistoricalCandles` (REST klines) — mới có code mẫu, chưa chạy thật
-- ⬜ `repository.go`, DB thật (Postgres, Supabase-hosted — xem ADR-0012), backfill script — chưa làm
-- ✅ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện, coverage 100% test.
-- ✅ Queue/Worker pool in-memory (3 workers), pipeline Candidate→Backtest→Evaluate→Rank, trạng thái `PENDING→RUNNING→COMPLETED/FAILED`, và provenance snapshot đã hoàn thiện; `POST /search/start` trả `202 STARTED` ngay. `SEARCH_PROGRESS` qua WebSocket và vòng lặp sinh nhiều candidate/stop condition vẫn chờ tích hợp với Search/WS (ADR-0011).
+- ✅ sentiment-service FastAPI chạy được; `/analyze` dùng model lexicon xác định `crypto-lexicon/v1`, validate input, trả score/model version/timestamp thật và có test. FinBERT vẫn là nâng cấp ngoài MVP.
+- ✅ `internal/experiment`: Backtester + Evaluator xong, có test; `go vet`/`go test` sạch — SL/TP, gap fill, fee, slippage, tránh lookahead bias và same-candle re-entry. Xem ADR-0003, ADR-0009.
+- ✅ `internal/httpx`: router 2-mux public/protected; `POST /search/start`, `GET /experiments`, `GET /experiments/{id}`, `GET /strategies`, `/health` chạy thật. Request search giới hạn 1 MiB, reject field lạ/trailing JSON và trả `202 STARTED`. Auth dùng JWT cookie thật; `/ws` là server-push channel có xác thực cho candle, tiến độ search và leaderboard.
+- ✅ `Binance.FetchHistoricalCandles` REST thật: pagination 1000 klines, normalize `Candle`, chỉ nhận candle đã đóng; live kline WebSocket có reconnect/backoff và phát `CANDLE_UPDATE`.
+- ✅ Postgres repositories cho experiments/users/candles và `cmd/backfill` 2 năm đã hoàn thiện; candle upsert idempotent theo `(symbol,timeframe,open_time)`, search production đọc range từ DB.
+- ✅ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện; package strategy đạt 82.5% statement coverage trong lượt kiểm tra 2026-08-30.
+- ✅ Queue/Worker pool in-memory (3 workers), pipeline Candidate→Backtest→Evaluate→Rank, trạng thái `PENDING→RUNNING→COMPLETED/FAILED`, provenance snapshot và WebSocket `SEARCH_PROGRESS`/`LEADERBOARD_UPDATE` đã hoàn thiện cho một candidate/request. Batch nhiều candidate/user-cancel vẫn là stretch theo ADR-0011.
 - ✅ Frontend UI responsive đã hoàn thiện theo design mẫu: Realtime, Strategy Engine, Discovery, Backtest, News Crawler và Settings; navigation/controls chạy được với demo data. Kết nối API/WebSocket thật vẫn chờ các endpoint backend tương ứng hoàn tất.
-- ⬜ **Auth (users/session)** — MỚI, chưa gán người, chưa lên lịch trong bảng 14 ngày. Quyết định đã chốt (username/password + JWT 1h, xem `docs/adr/0007-simple-session-auth.md`), còn thiếu: ai làm + slot vào ngày nào (buffer 8–9 là ứng viên tự nhiên). `requireAuth` hiện là middleware rỗng, chưa verify JWT thật.
+- ✅ **Auth (users/session)** — bcrypt, Postgres user repository, JWT HS256 1h, httpOnly SameSite=Lax cookie, protected-route middleware và logout cookie clearing đã hoàn thiện; `JWT_SECRET` tối thiểu 16 ký tự là biến môi trường bắt buộc.
 
 ## 1. Phân công (đã điều chỉnh so với bản đầu)
 
@@ -41,11 +41,11 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 |---|---|---|---|---|
 | 1 | Họp chung: chốt contract (Candle, Strategy interface, ExperimentResult, Sentiment API, WS message) — **bắt buộc xong trong ngày**, không thì cả nhóm code lệch pha | | | |
 | 2–3 | Binance Adapter → Candle chuẩn | ✅ 5 strategy: MA/RSI/BB/SR + SMC (SMC bản tối giản — swing high/low structure break, không cần đúng 100% lý thuyết SMC, xem PDF ch.11) (chạy với mock data, không chờ Người 1) | Backtester + Evaluator (mock signal, gồm SL/TP/transaction cost/slippage 5bps) | React skeleton + chart component (mock WS data) |
-| 4–5 | Nối WebSocket thật → Backend; reconnect logic | ✅ StrategyRegistry.register() + extension test | Nối signal thật từ Người 3; bắt đầu transaction boundary | Nối chart vào WS thật; UI chọn strategy |
+| 4–5 | ✅ Nối Binance WebSocket thật → Backend; reconnect/backoff | ✅ StrategyRegistry.register() + extension test | Nối signal thật từ Người 3; bắt đầu transaction boundary | Nối chart vào WS thật; UI chọn strategy |
 | 6 | Bắt đầu Sentiment Service (FastAPI) | ✅ CandidateStrategy generator (Random) | Experiment pipeline: Candidate→Backtest→Evaluate→Rank + provenance field | Leaderboard UI |
 | 7 | Sentiment API hoàn chỉnh + test | Nhảy sang hỗ trợ Người 3: Job Queue/Worker pool | ✅ Job Queue/Worker pool (cùng Người 2) | UI search progress / observability panel |
 | 8–9 | **Buffer chung — fix bug tích hợp toàn hệ thống** | | | |
-| 10 | Nối Sentiment → Go backend (REST, xử lý service-down) | SentimentStrategy (nhận SentimentResult làm input) | ✅ Experiment snapshot `strategyVersions` cùng Result; model version sẽ được thêm khi Sentiment client cung cấp metadata thật | News panel UI + gắn Sentiment vào chart/leaderboard |
+| 10 | ✅ Go sentiment REST client + lỗi service-down rõ ràng | ✅ SentimentStrategy fallback về base strategy khi service lỗi | ✅ Experiment snapshot `strategyVersions`; sentiment client trả model name/version thật | News panel UI + gắn Sentiment vào chart/leaderboard |
 | 11 | Test failure case: News/Sentiment down | Đo throughput khi tăng worker 1→3 (cùng Người 3) | ✅ Worker count là scaling knob (mặc định 3); còn benchmark với dataset lịch sử thật sau khi Market Data hoàn tất | Đảm bảo FE không sập khi News down |
 | 12 | **Architecture Proof cả nhóm** — mỗi người test domain mình (Extensibility / Replaceability / Scalability & Failure) | | | |
 | 13 | Viết ADR (5–6 cái quan trọng), chuẩn bị data demo | | | |
@@ -71,6 +71,7 @@ type Candle struct {
     Low       float64 `json:"low"`
     Close     float64 `json:"close"`
     Volume    float64 `json:"volume"`
+    IsClosed  bool    `json:"isClosed"` // false khi candle vẫn đang hình thành
 }
 ```
 

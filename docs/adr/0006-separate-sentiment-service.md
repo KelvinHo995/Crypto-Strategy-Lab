@@ -44,7 +44,7 @@ the text came from. Neither is coupled to the other's implementation.
   cleanly, and couples Go binary builds to a Python runtime being present.
 - **Rewrite the model in Go or use a Go-native sentiment library.** Rejected
   for MVP — Go's NLP tooling is far less mature; not worth the accuracy cost
-  for a 2-week scope where the model exists as a placeholder to prove the
+  for a 2-week scope where the MVP uses a deterministic versioned lexicon model to prove the
   architecture, not to be state-of-the-art (spec ch.47: the goal is proving
   the pipeline shape, not a maximally accurate model).
 - **Crawler calls the model directly, inline** (`Crawler → BERT model`).
@@ -68,8 +68,7 @@ the text came from. Neither is coupled to the other's implementation.
 - **Cost:** one more process to run for local dev and demo, one more network
   hop (Go → Python REST call) with its own latency/failure mode that must be
   explicitly handled (timeout + graceful degradation), not assumed away.
-- **Open item:** the graceful-degradation behavior when `sentiment-service`
-  is unreachable (skip sentiment silently? mark News as
-  `sentiment: unavailable`? retry?) is not yet decided — this should be
-  resolved and, if non-trivial, documented as a follow-up ADR rather than
-  left as an implicit assumption.
+- **Implemented degradation:** the Go REST client returns an explicit error
+  for unavailable/non-200 responses; `SentimentStrategy` falls back to its
+  base technical strategy (or `HOLD` without one). It does not silently use
+  a stale score or retry a deterministic request.

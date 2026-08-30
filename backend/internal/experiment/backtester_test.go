@@ -181,6 +181,46 @@ func TestBacktester_BothSLAndTPHit_SLWins(t *testing.T) {
 	}
 }
 
+func TestBacktester_StopGapUsesOpenAndDoesNotReenterSameCandle(t *testing.T) {
+	cfg := experiment.Config{
+		Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
+		StopLossPct: 0.05, TakeProfitPct: 0.5, Window: 2,
+	}
+	candles := []market.Candle{
+		candle(0, 100, 101, 99, 100), candle(1, 100, 101, 99, 100),
+		candle(2, 100, 101, 99, 100), // buy at 100, SL=95
+		candle(3, 90, 94, 88, 91),    // gaps through SL
+		candle(4, 92, 93, 91, 92),
+	}
+	strat := &scriptedStrategy{signals: []strategy.Signal{strategy.Buy, strategy.Buy}}
+	trades := experiment.NewBacktester(cfg).Run(strat, candles)
+	if len(trades) != 2 {
+		t.Fatalf("got %d trades, want gap exit plus a later re-entry", len(trades))
+	}
+	if !almostEqual(trades[0].ExitPrice, 90) {
+		t.Fatalf("ExitPrice = %v, want gap open 90", trades[0].ExitPrice)
+	}
+	if strat.calls != 2 {
+		t.Fatalf("Analyze calls = %d, want 2 (no call on stop candle)", strat.calls)
+	}
+	if trades[1].EntryTime != 4 {
+		t.Fatalf("second entry time = %d, want 4 (must not re-enter on stop candle 3)", trades[1].EntryTime)
+	}
+}
+
+func TestBacktester_InvalidInputsReturnNoTrades(t *testing.T) {
+	valid := experiment.Config{StartingCapital: 1000, PositionSizePct: 1, StopLossPct: .02, TakeProfitPct: .04, Window: 2}
+	candles := []market.Candle{candle(0, 100, 101, 99, 100), candle(1, 100, 101, 99, 100), candle(2, 100, 101, 99, 100)}
+	if got := experiment.NewBacktester(valid).Run(nil, candles); len(got) != 0 {
+		t.Fatal("nil strategy should not trade")
+	}
+	invalid := valid
+	invalid.PositionSizePct = 2
+	if got := experiment.NewBacktester(invalid).Run(&scriptedStrategy{signals: []strategy.Signal{strategy.Buy}}, candles); len(got) != 0 {
+		t.Fatal("invalid config should not trade")
+	}
+}
+
 func TestBacktester_SellWithNoPosition_NoOp(t *testing.T) {
 	cfg := experiment.Config{
 		Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,

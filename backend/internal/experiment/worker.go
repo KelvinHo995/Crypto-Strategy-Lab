@@ -3,6 +3,7 @@ package experiment
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -15,6 +16,14 @@ type WorkerPool struct {
 	repo     Repository
 	workers  int
 	wg       sync.WaitGroup
+	observer func(Result)
+}
+
+func (p *WorkerPool) SetObserver(observer func(Result)) { p.observer = observer }
+func (p *WorkerPool) notify(r Result) {
+	if p.observer != nil {
+		p.observer(r)
+	}
 }
 
 func NewWorkerPool(queue Queue, registry *strategy.Registry, repo Repository, workers int) *WorkerPool {
@@ -45,12 +54,17 @@ func (p *WorkerPool) Wait() { p.wg.Wait() }
 func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
 	result := resultFromJob(job, "RUNNING")
 	if err := p.repo.Save(ctx, result); err != nil {
+		log.Printf("experiment worker: save RUNNING for %s: %v", job.ID, err)
 		return
 	}
+	p.notify(result)
 	combined, err := strategy.BuildFromCandidate(p.registry, job.Candidate)
 	if err != nil {
 		result.Status = "FAILED"
-		_ = p.repo.Save(ctx, result)
+		if saveErr := p.repo.Save(ctx, result); saveErr != nil {
+			log.Printf("experiment worker: save FAILED for %s: %v", job.ID, saveErr)
+		}
+		p.notify(result)
 		return
 	}
 	trades := NewBacktester(job.Config).Run(combined, job.Candles)
@@ -59,7 +73,10 @@ func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
 	result.TradeCount, result.WinRate = metrics.TradeCount, metrics.WinRate
 	result.Wins, result.Losses = metrics.Wins, metrics.Losses
 	result.TotalProfit, result.Status = metrics.TotalProfit, "COMPLETED"
-	_ = p.repo.Save(ctx, result)
+	if err := p.repo.Save(ctx, result); err != nil {
+		log.Printf("experiment worker: save COMPLETED for %s: %v", job.ID, err)
+	}
+	p.notify(result)
 }
 
 func resultFromJob(job BacktestJob, status string) Result {

@@ -31,11 +31,11 @@ func TestWeightedPolicy_Combine(t *testing.T) {
 		signals  []Signal
 		expected Signal
 	}{
-		{[]Signal{Buy, Sell, Sell}, Buy},        // 0.6 - 0.3 - 0.1 = 0.2 -> Buy
-		{[]Signal{Sell, Buy, Buy}, Sell},         // -0.6 + 0.3 + 0.1 = -0.2 -> Sell
-		{[]Signal{Hold, Buy, Sell}, Buy},         // 0 + 0.3 - 0.1 = 0.2 -> Buy
-		{[]Signal{Hold, Hold, Hold}, Hold},       // 0 -> Hold
-		{[]Signal{Buy, Buy, Sell}, Buy},          // 0.6 + 0.3 - 0.1 = 0.8 -> Buy
+		{[]Signal{Buy, Sell, Sell}, Buy},   // 0.6 - 0.3 - 0.1 = 0.2 -> Buy
+		{[]Signal{Sell, Buy, Buy}, Sell},   // -0.6 + 0.3 + 0.1 = -0.2 -> Sell
+		{[]Signal{Hold, Buy, Sell}, Buy},   // 0 + 0.3 - 0.1 = 0.2 -> Buy
+		{[]Signal{Hold, Hold, Hold}, Hold}, // 0 -> Hold
+		{[]Signal{Buy, Buy, Sell}, Buy},    // 0.6 + 0.3 - 0.1 = 0.8 -> Buy
 	}
 
 	for _, tt := range tests {
