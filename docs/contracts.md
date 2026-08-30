@@ -50,3 +50,12 @@ cookie. Vite proxies REST and WebSocket paths to port 8080 in development.
 `POST /analyze` accepts `{newsId,text}` and returns
 `{newsId,sentiment,score,model:{name,version},createdAt}`. The Go client treats
 service errors explicitly; `SentimentStrategy` degrades to its base strategy.
+
+The authenticated Go endpoint `POST /sentiment/analyze` accepts
+`{newsId,text,publishedAt}` where `publishedAt` is Unix milliseconds. It sends
+the text to the Python service and persists only the returned observation, not
+the article text. Strategy lookup uses the latest observation published at or
+before the candle open time, bounded to the previous 24 hours to prevent
+look-ahead and stale sentiment. The stored model confidence is translated to
+the strategy's directional `0..1` contract: positive keeps the confidence,
+negative uses `1-confidence`, and neutral is `0.5`.

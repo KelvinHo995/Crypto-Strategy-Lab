@@ -20,9 +20,10 @@ type Router struct {
 	closeOnce sync.Once
 }
 type Dependencies struct {
-	Auth    *auth.Service
-	Candles market.CandleRepository
-	Live    market.LiveProvider
+	Auth      *auth.Service
+	Candles   market.CandleRepository
+	Live      market.LiveProvider
+	Sentiment SentimentService
 }
 
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) { r.handler.ServeHTTP(w, req) }
@@ -76,6 +77,7 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	protected.HandleFunc("GET /experiments/{id}", getExperiment(repo))
 	protected.HandleFunc("GET /strategies", strategyHandler.ListStrategies)
 	protected.HandleFunc("GET /candles", listCandles(deps.Candles))
+	protected.HandleFunc("POST /sentiment/analyze", analyzeSentiment(deps.Sentiment))
 	protected.HandleFunc("GET /ws", serveWebSocket(hub))
 
 	public.Handle("/", requireAuth(authService, protected))

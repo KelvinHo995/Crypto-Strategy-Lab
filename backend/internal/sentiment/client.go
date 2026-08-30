@@ -53,7 +53,8 @@ func (c *Client) Analyze(ctx context.Context, newsID, text string) (Result, erro
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return Result{}, err
 	}
-	if result.Model.Name == "" || result.Model.Version == "" || result.Score < 0 || result.Score > 1 {
+	validSentiment := result.Sentiment == "POSITIVE" || result.Sentiment == "NEGATIVE" || result.Sentiment == "NEUTRAL"
+	if result.NewsID != newsID || !validSentiment || result.Model.Name == "" || result.Model.Version == "" || result.Score < 0 || result.Score > 1 || result.CreatedAt <= 0 {
 		return Result{}, errors.New("invalid sentiment response")
 	}
 	return result, nil

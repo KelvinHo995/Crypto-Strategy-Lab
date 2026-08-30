@@ -9,9 +9,8 @@ import (
 
 var _ Strategy = (*SentimentStrategy)(nil)
 
-// SentimentClient represents a way to fetch sentiment.
-// In reality, Person 1 will implement this client in the market/sentiment package
-// and we just inject it here.
+// SentimentClient provides a directional score in the range 0..1.
+// Values above 0.5 are positive, values below 0.5 are negative, and 0.5 is neutral.
 type SentimentClient interface {
 	FetchSentiment(ctx context.Context, timestamp int64) (float64, error)
 }
@@ -41,6 +40,18 @@ func NewSentimentStrategy(base Strategy, client SentimentClient, threshold float
 		BaseStrategy: base,
 		Client:       client,
 		Threshold:    threshold,
+	}
+}
+
+// NewSentimentFactory creates standalone sentiment strategies when baseFactory
+// is nil, or reusable sentiment decorators around any supplied strategy factory.
+func NewSentimentFactory(baseFactory StrategyFactory, client SentimentClient, threshold float64) StrategyFactory {
+	return func(params map[string]any) Strategy {
+		var base Strategy
+		if baseFactory != nil {
+			base = baseFactory(params)
+		}
+		return NewSentimentStrategy(base, client, threshold)
 	}
 }
 
