@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/news"
 )
 
 var (
-	ErrAnalyze = errors.New("analyze sentiment")
-	ErrStore   = errors.New("store sentiment")
+	ErrAnalyze   = errors.New("analyze sentiment")
+	ErrFetchNews = errors.New("fetch news")
+	ErrStore     = errors.New("store sentiment")
 )
 
 type Analyzer interface {
@@ -51,4 +54,34 @@ func (s *Service) AnalyzeAndStore(ctx context.Context, newsID, text string, publ
 		return Observation{}, fmt.Errorf("%w: %v", ErrStore, err)
 	}
 	return observation, nil
+}
+
+func (s *Service) IngestNews(ctx context.Context, items []news.NewsItem) ([]Observation, error) {
+	observations := make([]Observation, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		item.ID = strings.TrimSpace(item.ID)
+		if _, duplicate := seen[item.ID]; duplicate {
+			continue
+		}
+		seen[item.ID] = struct{}{}
+
+		observation, err := s.AnalyzeAndStore(ctx, item.ID, item.Text, item.PublishedAt)
+		if err != nil {
+			return observations, fmt.Errorf("ingest news %q: %w", item.ID, err)
+		}
+		observations = append(observations, observation)
+	}
+	return observations, nil
+}
+
+func (s *Service) IngestFromProvider(ctx context.Context, provider news.NewsProvider, sinceTimestamp int64) ([]Observation, error) {
+	if provider == nil {
+		return nil, fmt.Errorf("%w: provider is required", ErrFetchNews)
+	}
+	items, err := provider.Fetch(ctx, sinceTimestamp)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrFetchNews, err)
+	}
+	return s.IngestNews(ctx, items)
 }

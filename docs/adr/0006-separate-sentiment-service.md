@@ -16,10 +16,16 @@ preference.
 
 `sentiment-service` is a standalone FastAPI (Python) process with its own
 `/analyze` and `/health` endpoints, reached from the Go backend over REST.
-It has its own dependency lifecycle (`uv`), its own possible datastore if
-one is ever needed ("database per service" — PLAN.md §3c explicitly rules
-out sharing the Go backend's Postgres instance), and can be deployed,
+It owns model inference and any model-internal cache or state. If those
+concerns ever need persistence, the service uses its own datastore rather
+than sharing the Go backend's Postgres instance. It can be deployed,
 restarted, or scaled independently of the Go backend.
+
+The Go backend owns the returned sentiment observations required by its
+domain. It persists them in `sentiment_results` and performs bounded,
+time-aligned lookup for `SentimentStrategy`. This table is a Go-owned
+observation projection, not a Python model cache or a database shared with
+`sentiment-service`; the Python process never connects to it.
 
 ```
 News Collector (Go, inside internal/*)

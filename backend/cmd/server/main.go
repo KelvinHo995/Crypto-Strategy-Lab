@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -15,9 +16,12 @@ import (
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/sentiment"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/strategy"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	loadLocalEnv()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	registry := strategy.NewRegistry()
@@ -83,5 +87,22 @@ func main() {
 	}()
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
+	}
+}
+
+func loadLocalEnv() {
+	loadEnvFiles(".env", "backend/.env")
+}
+
+func loadEnvFiles(paths ...string) {
+	for _, path := range paths {
+		err := godotenv.Load(path)
+		if err == nil {
+			return
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			log.Printf("load %s: %v", path, err)
+			return
+		}
 	}
 }
