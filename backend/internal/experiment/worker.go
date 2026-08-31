@@ -51,7 +51,21 @@ func (p *WorkerPool) Start(ctx context.Context) {
 
 func (p *WorkerPool) Wait() { p.wg.Wait() }
 
+// run must not let a panic escape: it runs on a long-lived pool goroutine
+// with no recover() above it, so an unrecovered panic here would crash the
+// whole server process, not just fail this one job.
 func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("experiment worker: panic on job %s: %v", job.ID, r)
+			result := resultFromJob(job, "FAILED")
+			if err := p.repo.Save(ctx, result); err != nil {
+				log.Printf("experiment worker: save FAILED after panic for %s: %v", job.ID, err)
+			}
+			p.notify(result)
+		}
+	}()
+
 	result := resultFromJob(job, "RUNNING")
 	if err := p.repo.Save(ctx, result); err != nil {
 		log.Printf("experiment worker: save RUNNING for %s: %v", job.ID, err)
