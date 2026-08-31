@@ -64,3 +64,19 @@ func TestSentimentStrategy_Analyze(t *testing.T) {
 		})
 	}
 }
+
+func TestSentimentFactorySupportsStandaloneAndDecoratedStrategies(t *testing.T) {
+	client := &mockSentimentClient{score: 0.5}
+	standalone := strategy.NewSentimentFactory(nil, client, 0.8)(nil)
+	if standalone.Name() != "Sentiment" {
+		t.Fatalf("standalone name = %q", standalone.Name())
+	}
+
+	baseFactory := func(map[string]any) strategy.Strategy {
+		return &DummyStrategy{AlwaysSignal: strategy.Buy}
+	}
+	decorated := strategy.NewSentimentFactory(baseFactory, client, 0.8)(nil)
+	if decorated.Name() != "Sentiment+Dummy" {
+		t.Fatalf("decorated name = %q", decorated.Name())
+	}
+}

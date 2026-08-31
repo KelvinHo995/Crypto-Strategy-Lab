@@ -13,6 +13,7 @@ import (
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/experiment"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/httpx"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/sentiment"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/strategy"
 )
 
@@ -31,12 +32,6 @@ func main() {
 	registry.Register(strategy.NewSMCStrategy(10))
 	registry.RegisterFactory("SMC", strategy.SMCFactory)
 
-	// Architecture Proof (ADR-0002): Assert expected strategies are registered
-	expectedStrategies := 5 // MA, RSI, Bollinger, SR, SMC
-	if len(registry.List()) != expectedStrategies {
-		log.Fatalf("expected %d strategies, got %d", expectedStrategies, len(registry.List()))
-	}
-
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		log.Fatal("DATABASE_URL is required — see backend/migrations/0001_init.sql and ADR-0012")
@@ -48,6 +43,22 @@ func main() {
 	defer db.Close()
 	repo := experiment.NewPostgresRepository(db)
 	candleRepo := market.NewPostgresCandleRepository(db)
+	sentimentRepo := sentiment.NewPostgresRepository(db)
+	sentimentURL := os.Getenv("SENTIMENT_SERVICE_URL")
+	if sentimentURL == "" {
+		sentimentURL = "http://localhost:8000"
+	}
+	sentimentClient := sentiment.NewClient(sentimentURL, &http.Client{Timeout: 3 * time.Second})
+	sentimentService := sentiment.NewService(sentimentClient, sentimentRepo)
+	sentimentLookup := sentiment.NewTimeLookup(sentimentRepo, sentiment.DefaultMaxAge)
+	registry.Register(strategy.NewSentimentStrategy(nil, sentimentLookup, 0.7))
+	registry.RegisterFactory("Sentiment", strategy.NewSentimentFactory(nil, sentimentLookup, 0.7))
+
+	// Architecture Proof (ADR-0002): Assert expected strategies are registered
+	expectedStrategies := 6 // MA, RSI, Bollinger, SR, SMC, Sentiment
+	if len(registry.List()) != expectedStrategies {
+		log.Fatalf("expected %d strategies, got %d", expectedStrategies, len(registry.List()))
+	}
 	binance := market.NewBinance(nil)
 	jwtSecret := os.Getenv("JWT_SECRET")
 	authService, err := auth.NewService(auth.NewPostgresRepository(db), jwtSecret)
@@ -55,7 +66,9 @@ func main() {
 		log.Fatalf("configure auth: %v", err)
 	}
 
-	router := httpx.NewRouterWithContext(ctx, registry, repo, httpx.Dependencies{Auth: authService, Candles: candleRepo, Live: binance})
+	router := httpx.NewRouterWithContext(ctx, registry, repo, httpx.Dependencies{
+		Auth: authService, Candles: candleRepo, Live: binance, Sentiment: sentimentService,
+	})
 	defer router.Close()
 
 	log.Println("listening on :8080")

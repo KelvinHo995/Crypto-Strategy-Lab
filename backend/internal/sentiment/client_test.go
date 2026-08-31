@@ -2,10 +2,11 @@ package sentiment_test
 
 import (
 	"context"
-	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/sentiment"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/sentiment"
 )
 
 func TestClientAnalyze(t *testing.T) {
@@ -27,5 +28,16 @@ func TestClientServiceDown(t *testing.T) {
 	defer s.Close()
 	if _, err := sentiment.NewClient(s.URL, s.Client()).Analyze(context.Background(), "n1", "text"); err == nil {
 		t.Fatal("service error ignored")
+	}
+}
+
+func TestClientRejectsInvalidSentimentContract(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"newsId":"different-news","sentiment":"UP","score":0.9,"model":{"name":"crypto-lexicon","version":"v1"},"createdAt":1}`))
+	}))
+	defer s.Close()
+	if _, err := sentiment.NewClient(s.URL, s.Client()).Analyze(context.Background(), "n1", "text"); err == nil {
+		t.Fatal("invalid response accepted")
 	}
 }
