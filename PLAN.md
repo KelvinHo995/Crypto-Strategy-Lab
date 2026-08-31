@@ -227,7 +227,7 @@ phụ thuộc `InMemoryQueue` — nhờ đó sau này có thể thay bằng
 
 **Không có form validate phức tạp** — chỉ 2-3 request body cần check (`StartSearchRequest`, `AnalyzeRequest`), dùng pattern `Validate() error` viết tay trên struct (xem mục 6), không cần thư viện `validator`.
 
-## 3c. DB schema — Postgres (Supabase-hosted, xem ADR-0012), chỉ 3 bảng bên Go backend
+## 3c. DB schema — Postgres (Supabase-hosted, xem ADR-0012), dữ liệu thuộc Go backend
 
 Lưu ý: cột lưu unix-millisecond timestamp phải là `BIGINT`, không phải
 `INTEGER` — `INTEGER` trong Postgres chỉ 32-bit (tối đa ~2.1 tỷ), unix ms
@@ -263,11 +263,28 @@ CREATE TABLE candles (
     open REAL, high REAL, low REAL, close REAL, volume REAL,
     PRIMARY KEY (symbol, timeframe, open_time)
 );
+
+-- Projection do Go backend sở hữu để lookup sentiment theo thời gian candle.
+-- Đây không phải cache/model state của sentiment-service.
+CREATE TABLE sentiment_results (
+    news_id       TEXT PRIMARY KEY,
+    published_at  BIGINT NOT NULL,
+    sentiment     TEXT NOT NULL,
+    score         REAL NOT NULL,
+    model_name    TEXT NOT NULL,
+    model_version TEXT NOT NULL,
+    analyzed_at   BIGINT NOT NULL
+);
 ```
 
 **Backfill dataset: cố định 2 năm, không cho user chọn range tùy ý** — chạy `cmd/backfill` một lần thủ công (không phải mỗi lần server restart), upsert theo primary key nên chạy lại an toàn. Quyết định này được ghi lại như một ADR — bỏ gap-check/dynamic-range logic vì không có driver nào bắt buộc cho scope 2 tuần này.
 
-**Không cần bảng riêng cho:** strategies (là code, sống trong `StrategyRegistry` in-memory), sentiment cache (nếu có, sống độc lập trong `sentiment-service`, không chung DB với Go backend — "database per service", xem mục 6).
+**Không cần bảng riêng cho strategies** vì strategy là code trong
+`StrategyRegistry`. `sentiment-service` sở hữu model inference và mọi
+model-internal cache/state; nếu cần persistence riêng cho các concern đó thì
+nó không dùng chung Postgres của Go. Go backend chỉ sở hữu
+`sentiment_results`: observation projection nhận từ API để lookup theo thời
+gian cho strategy, không phải cache của Python service.
 
 ```sql
 -- Đăng nhập tối giản — không role, không password reset, không OAuth

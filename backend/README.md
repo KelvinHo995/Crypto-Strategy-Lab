@@ -3,13 +3,23 @@
 Go API server — Market Data, Strategy, Experiment domains.
 
 ## Run
+
+Create the local environment file and replace its placeholder values:
+
+```bash
+cp .env.example .env
+```
+
+Set `DATABASE_URL` and a `JWT_SECRET` of at least 16 characters, then start the
+server:
+
 ```bash
 go run ./cmd/server
 ```
 
-Required environment: `DATABASE_URL` and `JWT_SECRET` (minimum 16 characters;
-the current team value is shown in `.env.example`). Apply
-`migrations/0001_init.sql` once before starting.
+The server loads `.env` for local development without overriding variables
+already set in the process environment. `SENTIMENT_SERVICE_URL` defaults to
+`http://localhost:8000`. Apply the migrations before starting.
 
 Backfill the fixed two-year dataset manually (safe to rerun):
 
