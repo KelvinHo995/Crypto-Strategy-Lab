@@ -1,22 +1,9 @@
-import { useState, useEffect } from 'react';
 import { useWebSocketState } from '../../../shared/hooks';
+import { useAppMode } from '../../../shared/auth';
 
 export function MarketStatusBar() {
   const wsState = useWebSocketState();
-  const [latency, setLatency] = useState(32);
-
-  // Simulate a fluctuating network latency for visual realism
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLatency((prev) => {
-        const change = Math.floor(Math.random() * 9) - 4; // change by -4 to +4
-        const next = prev + change;
-        return Math.max(12, Math.min(68, next)); // Keep latency between 12ms and 68ms
-      });
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, []);
+  const mode = useAppMode();
 
   const getStatusColor = () => {
     switch (wsState) {
@@ -50,13 +37,13 @@ export function MarketStatusBar() {
       {/* Latency display */}
       <div style={itemStyle}>
         <span style={labelStyle}>Latency:</span>
-        <span style={valueStyle}>{wsState === 'CONNECTED' ? `${latency} ms` : '--'}</span>
+        <span style={valueStyle}>{wsState === 'CONNECTED' ? 'Streaming' : '--'}</span>
       </div>
 
       {/* Provider Details */}
       <div style={itemStyle}>
         <span style={labelStyle}>Feed Provider:</span>
-        <span style={{ ...valueStyle, color: '#3b82f6' }}>Binance API</span>
+        <span style={{ ...valueStyle, color: '#3b82f6' }}>{mode === 'LIVE' ? 'Binance API' : 'Offline fixture'}</span>
       </div>
 
       {/* Adapter Interface */}

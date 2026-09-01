@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChartCard } from './ChartCard';
+import type { MarketInfo } from '../../../types/candle';
 
 const CHART_CONFIGS = [
   { id: 1, defaultSymbol: 'BTCUSDT', defaultTimeframe: '5m' },
@@ -8,7 +9,7 @@ const CHART_CONFIGS = [
   { id: 4, defaultSymbol: 'BTCUSDT', defaultTimeframe: '4h' },
 ];
 
-export function MarketGrid() {
+export function MarketGrid({ markets }: { markets: MarketInfo[] }) {
   const [layout, setLayout] = useState<1 | 2 | 4>(4);
   const [maximizedId, setMaximizedId] = useState<number | null>(null);
 
@@ -115,6 +116,7 @@ export function MarketGrid() {
             defaultTimeframe={chart.defaultTimeframe}
             isMaximized={maximizedId === chart.id}
             onToggleMaximize={handleToggleMaximize}
+            markets={markets}
           />
         ))}
       </div>

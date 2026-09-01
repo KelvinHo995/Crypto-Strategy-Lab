@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWebSocketState, useWebSocketSubscription } from '../../../shared/hooks';
-import type { Candle } from '../../../types/candle';
+import type { Candle, MarketInfo } from '../../../types/candle';
 import { TradingChart, type SRZone, type ChartMarker } from './TradingChart';
 import { fetchMarketDataDTO, generateNextTick } from '../services/mockMarketData';
 import { fetchCandles } from '../../../shared/api';
+import { wsManager } from '../../../shared/ws';
+import { useAppMode } from '../../../shared/auth';
 
 interface ChartCardProps {
   id: number;
@@ -11,6 +13,7 @@ interface ChartCardProps {
   defaultTimeframe: string;
   isMaximized: boolean;
   onToggleMaximize: (id: number) => void;
+  markets: MarketInfo[];
 }
 
 export function ChartCard({
@@ -19,7 +22,9 @@ export function ChartCard({
   defaultTimeframe,
   isMaximized,
   onToggleMaximize,
+  markets,
 }: ChartCardProps) {
+  const mode = useAppMode();
   const wsState = useWebSocketState();
   const [symbol, setSymbol] = useState(defaultSymbol);
   const [timeframe, setTimeframe] = useState(defaultTimeframe);
@@ -29,10 +34,22 @@ export function ChartCard({
   const [srZones, setSrZones] = useState<SRZone[]>([]);
   const [markers, setMarkers] = useState<ChartMarker[]>([]);
   const [priceTrend, setPriceTrend] = useState<'UP' | 'DOWN' | 'NEUTRAL'>('NEUTRAL');
-  const [dataMode, setDataMode] = useState<'API' | 'MOCK'>('MOCK');
+  const [dataMode, setDataMode] = useState<'API' | 'MOCK' | 'ERROR'>(mode === 'DEMO' ? 'MOCK' : 'API');
+  const [loadError, setLoadError] = useState('');
 
   // 1. Fetch initial historical data on mount or when symbol/timeframe changes
   const loadHistory = useCallback(async () => {
+    if (mode === 'DEMO') {
+      const dto = fetchMarketDataDTO(symbol, timeframe, 200);
+      setCandles(dto.candles);
+      setMa20Line(dto.ma20Line);
+      setBbands(dto.bbands);
+      setSrZones(dto.srZones);
+      setMarkers(dto.markers);
+      setDataMode('MOCK');
+      setLoadError('');
+      return;
+    }
     const to = Date.now();
     const from = to - 366 * 24 * 60 * 60 * 1000;
     try {
@@ -46,16 +63,17 @@ export function ChartCard({
       setSrZones([]);
       setMarkers([]);
       setDataMode('API');
-    } catch {
-      const dto = fetchMarketDataDTO(symbol, timeframe, 200);
-      setCandles(dto.candles);
-      setMa20Line(dto.ma20Line);
-      setBbands(dto.bbands);
-      setSrZones(dto.srZones);
-      setMarkers(dto.markers);
-      setDataMode('MOCK');
+      setLoadError('');
+    } catch (error) {
+      setCandles([]);
+      setMa20Line([]);
+      setBbands(undefined);
+      setSrZones([]);
+      setMarkers([]);
+      setDataMode('ERROR');
+      setLoadError(`Không có historical data cho ${symbol}/${timeframe}: ${String(error)}`);
     }
-  }, [symbol, timeframe]);
+  }, [mode, symbol, timeframe]);
 
   useEffect(() => {
     void Promise.resolve().then(loadHistory);
@@ -87,9 +105,15 @@ export function ChartCard({
     }
   });
 
+  useEffect(() => {
+    if (mode !== 'LIVE') return;
+    wsManager.subscribeCandles(symbol, timeframe);
+    return () => wsManager.unsubscribeCandles(symbol, timeframe);
+  }, [mode, symbol, timeframe]);
+
   // 3. Fallback Mock tick interval (Runs ONLY if WebSocket is not connected)
   useEffect(() => {
-    if (wsState === 'CONNECTED') return;
+    if (mode !== 'DEMO') return;
 
     const interval = setInterval(() => {
       setCandles((prev) => {
@@ -155,7 +179,7 @@ export function ChartCard({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [wsState, symbol, timeframe]);
+  }, [mode, symbol, timeframe]);
 
 
 
@@ -179,7 +203,7 @@ export function ChartCard({
             onChange={(e) => setSymbol(e.target.value)}
             style={selectStyle}
           >
-            <option value="BTCUSDT">BTC/USDT</option>
+            {markets.map(market => <option key={market.symbol} value={market.symbol}>{market.baseAsset}/{market.quoteAsset}</option>)}
           </select>
 
           {/* Timeframe Selector */}
@@ -211,9 +235,9 @@ export function ChartCard({
           </div>
 
           {/* Live vs Mock indicator dot */}
-          <div style={indicatorAreaStyle} title={wsState === 'CONNECTED' ? 'Live WebSocket data' : 'Simulating market ticks locally'}>
-            <span style={wsState === 'CONNECTED' ? liveDotStyle : mockDotStyle} />
-            <span style={indicatorTextStyle}>{wsState === 'CONNECTED' ? `LIVE/${dataMode}` : 'MOCK'}</span>
+          <div style={indicatorAreaStyle} title={mode === 'DEMO' ? 'Offline demo data' : wsState === 'CONNECTED' ? 'Binance realtime stream' : 'Historical API only'}>
+            <span style={mode === 'DEMO' ? mockDotStyle : wsState === 'CONNECTED' ? liveDotStyle : errorDotStyle} />
+            <span style={indicatorTextStyle}>{mode === 'DEMO' ? 'DEMO' : wsState === 'CONNECTED' ? `LIVE/${dataMode}` : dataMode === 'API' ? 'API/OFFLINE' : 'ERROR'}</span>
           </div>
 
           {/* Maximize and reload action button */}
@@ -237,7 +261,7 @@ export function ChartCard({
             markers={markers}
           />
         ) : (
-          <div style={loadingStyle}>Loading historical data...</div>
+          <div style={loadingStyle}>{loadError || 'Loading historical data...'}</div>
         )}
       </div>
     </div>
@@ -386,6 +410,12 @@ const mockDotStyle: React.CSSProperties = {
   borderRadius: '50%',
   display: 'inline-block',
   boxShadow: '0 0 6px #f59e0b',
+};
+
+const errorDotStyle: React.CSSProperties = {
+  ...mockDotStyle,
+  backgroundColor: '#ef4444',
+  boxShadow: '0 0 6px #ef4444',
 };
 
 const indicatorTextStyle: React.CSSProperties = {

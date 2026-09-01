@@ -1,16 +1,20 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { authApi } from '../api';
 import { ArrowRight, BarChart3, Database, LineChart, ShieldCheck } from 'lucide-react';
+import { AppModeContext, type AppMode } from '../auth';
 
 export function AuthGate({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(false);
+  const [mode, setMode] = useState<AppMode | null>(null);
   const [username, setUsername] = useState('demo');
   const [password, setPassword] = useState('demo-password');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    authApi.probe().then(() => setReady(true)).catch(() => setReady(false));
+    authApi.probe().then(() => setMode('LIVE')).catch(() => setMode(null));
+    const unauthorized = () => setMode(current => current === 'LIVE' ? null : current);
+    window.addEventListener('auth:unauthorized', unauthorized);
+    return () => window.removeEventListener('auth:unauthorized', unauthorized);
   }, []);
 
   async function submit(event: FormEvent, register: boolean) {
@@ -22,7 +26,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
         try { await authApi.register(username, password); } catch { /* existing demo user is fine */ }
       }
       await authApi.login(username, password);
-      setReady(true);
+      setMode('LIVE');
     } catch {
       setError('Không thể đăng nhập. Kiểm tra backend, database và thông tin tài khoản.');
     } finally {
@@ -30,7 +34,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
   }
 
-  if (ready) return <>{children}</>;
+  if (mode) return <AppModeContext.Provider value={mode}>{children}</AppModeContext.Provider>;
   return <main className="auth-page">
     <section className="auth-intro">
       <div className="auth-brand"><BarChart3 size={22} /> Crypto Strategy Lab</div>
@@ -54,7 +58,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <button className="auth-primary" type="submit" disabled={busy}>Sign in <ArrowRight size={16} /></button>
         <button className="auth-secondary" type="button" disabled={busy} onClick={e=>void submit(e,true)}>Create demo account</button>
         <div className="auth-divider"><span>or preview without a server</span></div>
-        <button className="auth-demo" type="button" disabled={busy} onClick={()=>setReady(true)}>Open offline demo</button>
+        <button className="auth-demo" type="button" disabled={busy} onClick={()=>setMode('DEMO')}>Open offline demo</button>
       </form>
     </section>
   </main>;

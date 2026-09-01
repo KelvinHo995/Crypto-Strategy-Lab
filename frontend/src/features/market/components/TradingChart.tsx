@@ -138,7 +138,14 @@ export function TradingChart({
         chartRef.current.remove();
         chartRef.current = null;
       }
+      candlestickSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+      maSeriesRef.current = null;
+      bbUpperSeriesRef.current = null;
+      bbBasisSeriesRef.current = null;
+      bbLowerSeriesRef.current = null;
       markersPluginRef.current = null;
+      srPriceLinesRef.current = [];
     };
   }, []);
 

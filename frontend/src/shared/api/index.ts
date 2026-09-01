@@ -2,6 +2,7 @@ import axios from 'axios';
 import type { Candle } from '../../types/candle';
 import type { ExperimentResult, StartSearchRequest, StartSearchResponse } from '../../types/backtest';
 import type { SentimentObservation } from '../../types/news';
+import type { MarketInfo } from '../../types/candle';
 
 // Get the base API URL from environment variables, fallback to localhost:8080 during development
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -24,7 +25,7 @@ apiClient.interceptors.response.use(
       if (status === 401) {
         // Unauthorized - session expired or token missing
         console.warn('Session expired or unauthorized. Redirecting to login...');
-        // We can handle redirecting or state resetting here if needed
+        window.dispatchEvent(new Event('auth:unauthorized'));
       }
       return Promise.reject(error.response.data || error.message);
     }
@@ -42,6 +43,12 @@ export const authApi = {
 export async function fetchCandles(symbol: string, timeframe: string, from: number, to: number, limit = 1000): Promise<Candle[]> {
   const response = await apiClient.get<Candle[]>('/candles', { params: { symbol, timeframe, from, to, limit } });
   return response.data;
+}
+
+export async function fetchMarkets(): Promise<MarketInfo[]> {
+  const data = (await apiClient.get<MarketInfo[]>('/markets')).data;
+  if (!Array.isArray(data)) throw new Error('invalid market catalog response');
+  return data;
 }
 
 export async function fetchStrategies(): Promise<string[]> {
