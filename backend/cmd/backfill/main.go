@@ -9,9 +9,14 @@ import (
 
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/experiment"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	_ = godotenv.Load(".env")
+	if os.Getenv("DATABASE_URL") == "" {
+		_ = godotenv.Load("backend/.env")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 	dsn := os.Getenv("DATABASE_URL")
