@@ -85,14 +85,6 @@ func (r *CachedRepository) List(ctx context.Context) ([]Result, error) {
 	return cloneResults(results), err
 }
 
-func (r *CachedRepository) MarkStaleRunningFailed(ctx context.Context, olderThan time.Duration) ([]Result, error) {
-	results, err := r.next.MarkStaleRunningFailed(ctx, olderThan)
-	if err == nil && len(results) > 0 {
-		r.invalidate()
-	}
-	return results, err
-}
-
 func (r *CachedRepository) invalidate() {
 	r.mu.Lock()
 	r.generation++

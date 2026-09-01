@@ -34,9 +34,6 @@ func (r *recordingRepo) List(context.Context) ([]experiment.Result, error) { ret
 func (r *recordingRepo) ListBySearch(context.Context, string) ([]experiment.Result, error) {
 	return nil, nil
 }
-func (r *recordingRepo) MarkStaleRunningFailed(context.Context, time.Duration) ([]experiment.Result, error) {
-	return nil, nil
-}
 
 // A malformed/buggy strategy factory (e.g. a bad third-party plugin) panics
 // instead of returning an error. The worker pool must survive this — see

@@ -79,10 +79,6 @@ func (f *fakeRepo) ListBySearch(_ context.Context, searchID string) ([]experimen
 	return out, nil
 }
 
-func (f *fakeRepo) MarkStaleRunningFailed(context.Context, time.Duration) ([]experiment.Result, error) {
-	return nil, nil
-}
-
 func newTestRegistry() *strategy.Registry {
 	reg := strategy.NewRegistry()
 	reg.Register(strategy.NewMAStrategy(5, 10))

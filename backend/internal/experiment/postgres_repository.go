@@ -196,62 +196,6 @@ func scanResult(s scanner) (Result, error) {
 	return r, nil
 }
 
-// MarkStaleRunningFailed fails RUNNING rows that haven't been updated in
-// olderThan. pg_try_advisory_xact_lock guards it: safe under Supabase's
-// transaction-mode pooler (the lock is scoped to and released with this
-// transaction, unlike session-level advisory locks), and safe for multiple
-// server instances to call concurrently — whichever gets the lock does the
-// sweep, everyone else sees it's held and returns immediately, no double work.
-func (p *PostgresRepository) MarkStaleRunningFailed(ctx context.Context, olderThan time.Duration) ([]Result, error) {
-	tx, err := p.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("mark stale running: begin: %w", err)
-	}
-	defer tx.Rollback()
-
-	var locked bool
-	if err := tx.QueryRowContext(ctx,
-		`SELECT pg_try_advisory_xact_lock(hashtext('experiment_stale_sweep')::bigint)`,
-	).Scan(&locked); err != nil {
-		return nil, fmt.Errorf("mark stale running: lock: %w", err)
-	}
-	if !locked {
-		return nil, nil
-	}
-
-	now := time.Now()
-	rows, err := tx.QueryContext(ctx, `
-		UPDATE experiments SET status = 'FAILED', updated_at = $1
-		WHERE status = 'RUNNING' AND updated_at < $2
-		RETURNING id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
-			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
-			total_profit, status, created_at, updated_at
-	`, now.UnixMilli(), now.Add(-olderThan).UnixMilli())
-	if err != nil {
-		return nil, fmt.Errorf("mark stale running: update: %w", err)
-	}
-
-	var results []Result
-	for rows.Next() {
-		r, err := scanResult(rows)
-		if err != nil {
-			rows.Close()
-			return nil, fmt.Errorf("mark stale running: scan: %w", err)
-		}
-		results = append(results, r)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return nil, fmt.Errorf("mark stale running: rows: %w", err)
-	}
-	rows.Close()
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("mark stale running: commit: %w", err)
-	}
-	return results, nil
-}
-
 // An earlier pgx integration wrote []byte parameters into TEXT columns. In
 // simple protocol pgx encoded those values as PostgreSQL bytea literals such
 // as \x5b224d41225d instead of the intended JSON text ["MA"]. Keep reads
