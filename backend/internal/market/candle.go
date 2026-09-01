@@ -11,3 +11,18 @@ type Candle struct {
 	Volume    float64 `json:"volume"`
 	IsClosed  bool    `json:"isClosed"`
 }
+
+type TradeTick struct {
+	Symbol    string  `json:"symbol"`
+	TradeID   int64   `json:"tradeId"`
+	TradeTime int64   `json:"tradeTime"`
+	Price     float64 `json:"price"`
+	Quantity  float64 `json:"quantity"`
+	Side      string  `json:"side"`
+}
+
+type LiveEvent struct {
+	Type   string
+	Candle Candle
+	Trade  TradeTick
+}
