@@ -3,9 +3,11 @@ package experiment
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type PostgresRepository struct {
@@ -119,6 +121,19 @@ func scanResult(s scanner) (Result, error) {
 		return Result{}, err
 	}
 
+	strategies, err = normalizeLegacyJSON(strategies)
+	if err != nil {
+		return Result{}, fmt.Errorf("decode strategies: %w", err)
+	}
+	params, err = normalizeLegacyJSON(params)
+	if err != nil {
+		return Result{}, fmt.Errorf("decode params: %w", err)
+	}
+	versions, err = normalizeLegacyJSON(versions)
+	if err != nil {
+		return Result{}, fmt.Errorf("decode strategy versions: %w", err)
+	}
+
 	if err := json.Unmarshal(strategies, &r.Strategies); err != nil {
 		return Result{}, fmt.Errorf("unmarshal strategies: %w", err)
 	}
@@ -129,4 +144,20 @@ func scanResult(s scanner) (Result, error) {
 		return Result{}, fmt.Errorf("unmarshal strategy versions: %w", err)
 	}
 	return r, nil
+}
+
+// An earlier pgx integration wrote []byte parameters into TEXT columns. In
+// simple protocol pgx encoded those values as PostgreSQL bytea literals such
+// as \x5b224d41225d instead of the intended JSON text ["MA"]. Keep reads
+// compatible while migration 0003 normalizes existing rows.
+func normalizeLegacyJSON(value []byte) ([]byte, error) {
+	text := string(value)
+	if !strings.HasPrefix(text, `\x`) {
+		return value, nil
+	}
+	decoded, err := hex.DecodeString(text[2:])
+	if err != nil {
+		return nil, err
+	}
+	return decoded, nil
 }
