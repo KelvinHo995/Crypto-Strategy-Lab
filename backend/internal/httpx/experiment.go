@@ -108,27 +108,38 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 			}
 		}
 		job := experiment.BacktestJob{
-			ID: id, Candidate: candidate,
-			Candles: candles,
+			ID: id, SearchID: id, SearchTotal: 1, Candidate: candidate,
+			Pair: req.Pair, Timeframe: req.TimeFrame, From: req.From, To: req.To,
 			Config: experiment.Config{Pair: req.Pair, StartingCapital: req.Capital,
 				PositionSizePct: 1, StopLossPct: 0.02, TakeProfitPct: 0.04,
 				FeePct: 0.001, SlippageBps: 5, Window: 20},
 			DatasetPeriod:    fmt.Sprintf("%d-%d", req.From, req.To),
 			StrategyVersions: versions, EnqueuedAt: now.UnixMilli(),
 		}
-		pending := experiment.Result{ID: id, CandidateID: candidate.ID,
+		pending := experiment.Result{ID: id, SearchID: id, SearchTotal: 1, CandidateID: candidate.ID,
 			Strategies: candidate.Strategies, Params: candidate.Params, Policy: candidate.Policy,
 			StrategyVersions: versions, DatasetPeriod: job.DatasetPeriod,
 			Status: "PENDING", CreatedAt: now.UnixMilli()}
-		if err := repo.Save(r.Context(), pending); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := queue.Enqueue(r.Context(), job); err != nil {
-			pending.Status = "FAILED"
-			_ = repo.Save(r.Context(), pending)
-			http.Error(w, "search queue unavailable", http.StatusServiceUnavailable)
-			return
+		if durable, ok := queue.(experiment.PendingQueue); ok {
+			if err := durable.EnqueuePending(r.Context(), job, pending); err != nil {
+				http.Error(w, "search queue unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if invalidator, ok := repo.(interface{ Invalidate() }); ok {
+				invalidator.Invalidate()
+			}
+		} else {
+			job.Candles = candles
+			if err := repo.Save(r.Context(), pending); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if err := queue.Enqueue(r.Context(), job); err != nil {
+				pending.Status = "FAILED"
+				_ = repo.Save(r.Context(), pending)
+				http.Error(w, "search queue unavailable", http.StatusServiceUnavailable)
+				return
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")

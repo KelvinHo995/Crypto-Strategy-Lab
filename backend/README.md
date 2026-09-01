@@ -20,9 +20,12 @@ go run ./cmd/server
 The server and backfill command load `.env` for local development without
 overriding variables already set in the process environment.
 `SENTIMENT_SERVICE_URL` defaults to `http://localhost:8000`. Apply migrations
-`0001` through `0004` in order before starting. Migration `0003` is an
+with `go run ./cmd/migrate` before starting. It runs `0001` through `0007` in
+order. Migration `0003` is an
 idempotent cleanup for experiment rows written by an older pgx binding;
-`0004` adds the experiment update timestamp used by stale-job recovery.
+`0004` adds the experiment update timestamp used by stale-job recovery,
+`0005` indexes leaderboard scoring, `0006` creates the durable job queue, and
+`0007` normalizes per-search metadata (`search_id`, `search_total`).
 
 Backfill the fixed two-year dataset manually (safe to rerun):
 
@@ -39,6 +42,7 @@ symbols fail fast instead of silently filling a different market.
 
 ## Structure
 - `cmd/server` — entrypoint, HTTP/WebSocket wiring only, no business logic
+- `cmd/migrate` — idempotent ordered PostgreSQL/Supabase migration runner
 - `internal/market` — Candle, exchange adapters (owner: Person 1)
 - `internal/strategy` — Strategy interface, registry, generators (owner: Person 2)
 - `internal/experiment` — Backtester, Evaluator, weighted Ranking, Queue + 3-worker pool, Result provenance (owner: Person 3)
@@ -59,6 +63,18 @@ Clients subscribe over the single authenticated `/ws` connection with
 `SUBSCRIBE_CANDLES`/`UNSUBSCRIBE_CANDLES` and
 `SUBSCRIBE_TRADES`/`UNSUBSCRIBE_TRADES`; this prevents every browser from
 opening its own Binance connections.
+
+Production search uses `PostgresQueue`: the PENDING result and compact job
+payload are committed atomically, three workers claim with `SKIP LOCKED`, and
+leases are heartbeated/reclaimed after a crash. Candle payloads stay in
+Postgres and are loaded through a bounded 60-second LRU cache. Leaderboard
+snapshots use a write-invalidated three-second cache; sentiment timestamp
+lookups use a bounded five-minute memoizer. These are process-local caches —
+Postgres remains the source of truth and no Redis dependency is required.
+Queue integration tests operate on the configured database and are opt-in to
+avoid competing with live workers: stop the backend and run
+`$env:RUN_POSTGRES_QUEUE_INTEGRATION='1'; go test ./internal/experiment -run TestPostgresQueue`
+in PowerShell.
 
 ## Contracts
 

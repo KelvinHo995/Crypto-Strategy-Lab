@@ -142,3 +142,36 @@ experiment execution and documentation.
   passed; Python sentiment unittest passed; `git diff --check` reported no
   whitespace errors. Browser verification also confirmed that the Backtest
   default range tracks the latest 90 days instead of a stale hard-coded year.
+
+## 2026-09-01 caching and durable-queue follow-up
+
+- Added bounded process-local caches at repository boundaries: candle range LRU
+  with concurrent miss coalescing, write-invalidated leaderboard snapshot, and
+  sentiment timestamp memoization. Errors are never cached and generation checks
+  prevent an older in-flight read from repopulating stale data.
+- Added migration `0005` for the leaderboard score index and bounded Postgres
+  reads to the Top 100 before the application emits its Top 10 WebSocket view.
+- Replaced the production in-memory channel with `PostgresQueue`. The initial
+  experiment result and compact job commit atomically; workers use `SKIP LOCKED`,
+  retry/backoff, Ack/Nack, renewable leases and stale claim recovery. Candle
+  arrays remain in Postgres instead of being serialized into queue messages.
+  Runtime testing exposed and fixed an integer-overflow in the millisecond
+  backoff expression by making the arithmetic explicitly `BIGINT`; retry
+  exhaustion now marks both the retained diagnostic job and experiment failed.
+- Kept `InMemoryQueue` for unit tests and deliberately did not add Redis/Kafka;
+  the existing Supabase database satisfies the current durability and
+  multi-worker drivers without another operational dependency.
+- Added `cmd/migrate` and applied idempotent migrations `0001` through `0007` to
+  the configured Supabase project. The Postgres runtime integration test proved
+  atomic PENDING+job persistence, compact claim payload decoding, Ack cleanup,
+  and exhausted-retry propagation to the experiment status. Migration `0007`
+  reconciles previously out-of-band `search_id`/`search_total` columns with the
+  source model and gives fresh databases the same schema.
+- Final live E2E after migration and server restart: register/login returned
+  201/200, the authenticated catalog returned eight markets and six strategies,
+  and every catalog symbol returned 491 recent 1h candles. Durable ADAUSDT
+  MA+RSI search `exp-1788276798188744300` reached `COMPLETED` with 13 trades and
+  persisted `searchId` plus `searchTotal: 1`; unsupported pair and missing-data
+  requests returned HTTP 400 and 422. Sentiment analysis persisted successfully.
+  Browser verification showed four `LIVE/API` charts, `WS Connected`, Binance
+  API feed state, and continuously updating real aggregate trades.

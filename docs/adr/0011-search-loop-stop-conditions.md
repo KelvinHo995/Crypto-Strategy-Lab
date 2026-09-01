@@ -65,16 +65,16 @@ condition and wins when any additional optional limit is reached first.
   Observability rubric question.
 - **Rule:** combined stop conditions use OR semantics: the first limit reached
   stops further generation. Already-enqueued jobs finish normally.
-- **Rule:** MVP workers do not retry failed jobs. A deterministic bad
-  candidate would fail identically, while automatic retry could duplicate
-  compute invisibly. Manual resubmission creates a new traceable job ID.
+- **Rule:** deterministic candidate/build failures are terminal. Infrastructure
+  failures while loading or persisting are Nack'ed and may be claimed up to
+  three times with bounded backoff under the same traceable job ID.
 - **Rule:** a `RUNNING` result whose worker or process crashed mid-job would
   otherwise sit stuck forever with nothing to notice it. A periodic sweep
   (`experiment.Sweeper`, on a 1-minute tick) fails any `RUNNING` result whose
   `updated_at` hasn't moved in 15 minutes, via one atomic SQL statement
-  (`Repository.MarkStaleRunningFailed`) — it never touches `Queue`, so
-  swapping `InMemoryQueue` for `RedisQueue`/`KafkaQueue` later needs no
-  change here. Same manual-resubmission path as any other failure.
+  (`Repository.MarkStaleRunningFailed`). `PostgresQueue` workers heartbeat the
+  same `updated_at` while renewing their lease, so live work is not swept.
+  See ADR-0013.
 - **Rule:** `MarkStaleRunningFailed` is guarded by a Postgres advisory
   transaction lock (`pg_try_advisory_xact_lock`), so multiple server
   instances can call it concurrently without duplicating work or racing —

@@ -45,8 +45,9 @@ func main() {
 		log.Fatalf("connect to database: %v", err)
 	}
 	defer db.Close()
-	repo := experiment.NewPostgresRepository(db)
-	candleRepo := market.NewPostgresCandleRepository(db)
+	repo := experiment.NewCachedRepository(experiment.NewPostgresRepository(db), 3*time.Second)
+	candleRepo := market.NewCachedCandleRepository(market.NewPostgresCandleRepository(db), 128, time.Minute)
+	jobQueue := experiment.NewPostgresQueue(db)
 	sentimentRepo := sentiment.NewPostgresRepository(db)
 	sentimentURL := os.Getenv("SENTIMENT_SERVICE_URL")
 	if sentimentURL == "" {
@@ -54,7 +55,7 @@ func main() {
 	}
 	sentimentClient := sentiment.NewClient(sentimentURL, &http.Client{Timeout: 3 * time.Second})
 	sentimentService := sentiment.NewService(sentimentClient, sentimentRepo)
-	sentimentLookup := sentiment.NewTimeLookup(sentimentRepo, sentiment.DefaultMaxAge)
+	sentimentLookup := sentiment.NewMemoizedLookup(sentiment.NewTimeLookup(sentimentRepo, sentiment.DefaultMaxAge), 4096, 5*time.Minute)
 	registry.Register(strategy.NewSentimentStrategy(nil, sentimentLookup, 0.7))
 	registry.RegisterFactory("Sentiment", strategy.NewSentimentFactory(nil, sentimentLookup, 0.7))
 
@@ -71,7 +72,7 @@ func main() {
 	}
 
 	router := httpx.NewRouterWithContext(ctx, registry, repo, httpx.Dependencies{
-		Auth: authService, Candles: candleRepo, Live: binance, Sentiment: sentimentService,
+		Auth: authService, Candles: candleRepo, Live: binance, Sentiment: sentimentService, Queue: jobQueue,
 	})
 	defer router.Close()
 

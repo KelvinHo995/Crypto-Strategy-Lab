@@ -20,6 +20,7 @@ not on the professor's list.
 | [0010](0010-no-cqrs-event-sourcing.md) | CQRS and Event Sourcing are not used | whole team |
 | [0011](0011-search-loop-stop-conditions.md) | Stop conditions and observability of the Search Loop | Experiment / Strategy + Search |
 | [0012](0012-supabase-postgres-not-sqlite.md) | Supabase-hosted Postgres, not SQLite (shared team access, not performance) | unassigned — new scope, see ADR |
+| [0013](0013-postgres-durable-queue-and-local-caches.md) | Durable Postgres jobs and bounded local read caches, not Redis/Kafka | Experiment / Market Data |
 
 ## Cross-reference to the professor's suggested ADR list
 

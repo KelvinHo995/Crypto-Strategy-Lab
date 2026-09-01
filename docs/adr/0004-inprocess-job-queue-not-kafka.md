@@ -1,6 +1,6 @@
 # ADR-0004: In-process job queue behind a `Queue` interface, not Kafka/RabbitMQ
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0013](0013-postgres-durable-queue-and-local-caches.md)
 **Owner:** Strategy + Search (Person 2), Experiment (Person 3)
 
 ## Context
