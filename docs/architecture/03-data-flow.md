@@ -16,7 +16,7 @@ internal/market — Binance Adapter
      │  → []Candle (normalized, exchange-agnostic shape)
      ▼
 cmd/backfill (one-off CLI, run manually)
-     │  upsert by primary key (symbol, timeframe, open_time)
+     │  batch upsert (500 rows) by primary key
      ▼
 Supabase (Postgres) — candles table
      │  read-only from here on
@@ -35,6 +35,10 @@ the team explicitly decided that complexity isn't justified for a fixed
 support arbitrary user-chosen date ranges, gap-checking becomes a real
 requirement and this decision should be revisited via a new ADR — it is not
 a design gap today, it's a documented scope cut.
+
+The repository writes at most 500 candles per SQL statement. This keeps the
+same transaction/idempotency semantics while avoiding hundreds of thousands
+of network round-trips through the Supabase transaction pooler.
 
 ## What consumes this table
 

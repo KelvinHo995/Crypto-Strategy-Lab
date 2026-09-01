@@ -87,9 +87,14 @@ export function NewsInputList({ news }: NewsInputListProps) {
             {/* Sentiment DTO Analytics Badge */}
             {item.sentiment && (
               <div style={sentimentRowStyle}>
-                <span style={{ ...badgeStyle, ...getSentimentStyle(item.sentiment.sentiment) }}>
-                  {item.sentiment.sentiment} ({(item.sentiment.score * 100).toFixed(0)}%)
-                </span>
+                <div style={{display:'flex',gap:'0.35rem',alignItems:'center'}}>
+                  <span style={{ ...sourceBadgeStyle, ...(item.analysisSource === 'LIVE' ? liveSourceStyle : demoSourceStyle) }}>
+                    {item.analysisSource === 'LIVE' ? 'LIVE' : 'DEMO'}
+                  </span>
+                  <span style={{ ...badgeStyle, ...getSentimentStyle(item.sentiment.sentiment) }}>
+                    {item.sentiment.sentiment} ({(item.sentiment.score * 100).toFixed(0)}%)
+                  </span>
+                </div>
                 <span style={modelMetaStyle} title="MLOps Traceability Model Information">
                   {item.sentiment.model.name} ({item.sentiment.model.version})
                 </span>
@@ -207,6 +212,10 @@ const badgeStyle: React.CSSProperties = {
   borderRadius: '4px',
   border: '1px solid transparent',
 };
+
+const sourceBadgeStyle: React.CSSProperties = { fontSize: '0.58rem', fontWeight: 800, padding: '0.1rem 0.3rem', borderRadius: '4px' };
+const liveSourceStyle: React.CSSProperties = { color: '#047857', background: '#d1fae5' };
+const demoSourceStyle: React.CSSProperties = { color: '#92400e', background: '#fef3c7' };
 
 const modelMetaStyle: React.CSSProperties = {
   fontSize: '0.65rem',

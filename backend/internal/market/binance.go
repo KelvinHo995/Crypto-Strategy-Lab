@@ -21,6 +21,11 @@ type Binance struct {
 	Client    *http.Client
 }
 
+const (
+	liveReconnectInitialBackoff = time.Second
+	liveReconnectMaxBackoff     = 30 * time.Second
+)
+
 func NewBinance(client *http.Client) *Binance {
 	if client == nil {
 		client = http.DefaultClient
@@ -133,12 +138,12 @@ func (b *Binance) StreamLiveCandles(ctx context.Context, symbol, timeframe strin
 		if symbol == "" || !validTimeframe(timeframe) {
 			return
 		}
-		backoff := time.Second
+		backoff := liveReconnectInitialBackoff
 		for ctx.Err() == nil {
 			endpoint := strings.TrimRight(b.WSBaseURL, "/") + "/" + strings.ToLower(symbol) + "@kline_" + timeframe
 			conn, _, err := websocket.Dial(ctx, endpoint, nil)
 			if err == nil {
-				backoff = time.Second
+				backoff = liveReconnectInitialBackoff
 				for {
 					var event binanceKlineEvent
 					if err = wsjson.Read(ctx, conn, &event); err != nil {
@@ -164,12 +169,24 @@ func (b *Binance) StreamLiveCandles(ctx context.Context, symbol, timeframe strin
 				return
 			case <-timer.C:
 			}
-			if backoff < 30*time.Second {
-				backoff *= 2
-			}
+			backoff = nextLiveReconnectBackoff(backoff)
 		}
 	}()
 	return out
+}
+
+func nextLiveReconnectBackoff(current time.Duration) time.Duration {
+	if current <= 0 {
+		return liveReconnectInitialBackoff
+	}
+	if current >= liveReconnectMaxBackoff {
+		return liveReconnectMaxBackoff
+	}
+	next := current * 2
+	if next > liveReconnectMaxBackoff {
+		return liveReconnectMaxBackoff
+	}
+	return next
 }
 
 type binanceKlineEvent struct {
