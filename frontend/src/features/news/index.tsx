@@ -6,42 +6,49 @@ import { ExtractionPipelinePanel } from './components/ExtractionPipelinePanel';
 import { SentimentAnalyticsPanel } from './components/SentimentAnalyticsPanel';
 import { MOCK_NEWS_FEED } from './services/mockNewsData';
 import type { NewsItem } from '../../types/news';
+import { analyzeSentiment } from '../../shared/api';
 
 export function NewsCrawlerDashboard() {
   const [newsFeed, setNewsFeed] = useState<NewsItem[]>(MOCK_NEWS_FEED);
   const [isCrawling, setIsCrawling] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState<'DEMO' | 'LIVE' | 'ERROR'>('DEMO');
+  const [analysisMessage, setAnalysisMessage] = useState('Sample articles are local fixtures; analyze a sample to verify the live backend pipeline.');
 
-  const handleCrawlStart = () => {
-    setIsLoadingCrawl();
-  };
-
-  const setIsLoadingCrawl = () => {
+  const handleCrawlStart = async () => {
     setIsCrawling(true);
-
-    // Simulate live crawling and sentiment extraction
-    setTimeout(() => {
-      const newId = `news-${Date.now().toString().slice(-3)}`;
-      const randomCoin = Math.random() > 0.5 ? 'SOL' : 'BTC';
-
+    setAnalysisMessage('Sending sample article through Go API, FastAPI model, and PostgreSQL...');
+    const publishedAt = Date.now();
+    const newId = `live-news-${publishedAt}`;
+    try {
+      const observation = await analyzeSentiment(
+        newId,
+        'Bitcoin records bullish gains after major regulatory approval and strong institutional inflow.',
+        publishedAt,
+      );
       const newArticle: NewsItem = {
         id: newId,
-        title: `${randomCoin} Whale Accumlates over $25 Million in Private Wallet Transactions`,
-        content: `On-chain data indicates a prominent trader address has accumulated massive quantities of ${randomCoin} over the last 48 hours, suggesting positive sentiment.`,
-        source: 'The Block',
-        publishedAt: Date.now(),
+        title: 'Bitcoin institutional inflow strengthens after regulatory approval',
+        content: 'Bitcoin records bullish gains after major regulatory approval and strong institutional inflow.',
+        source: 'Live pipeline sample',
+        publishedAt,
         sentiment: {
           newsId: newId,
-          sentiment: 'POSITIVE',
-          score: 0.87,
-          model: { name: 'FinBERT-Crypto', version: 'v3.1' },
-          createdAt: Date.now(),
-        }
+          sentiment: observation.sentiment,
+          score: observation.score,
+          model: { name: observation.modelName, version: observation.modelVersion },
+          createdAt: observation.analyzedAt,
+        },
+        analysisSource: 'LIVE',
       };
-
       setNewsFeed((prev) => [newArticle, ...prev]);
+      setAnalysisStatus('LIVE');
+      setAnalysisMessage(`Stored ${observation.newsId} with ${observation.modelName}/${observation.modelVersion}.`);
+    } catch (error) {
+      setAnalysisStatus('ERROR');
+      setAnalysisMessage(`Live sentiment failed: ${String(error)}`);
+    } finally {
       setIsCrawling(false);
-      alert(`Crawl success: Extracted 1 new article [ID: ${newId}]. Sentiment analysis score: Positive (87%)`);
-    }, 2000);
+    }
   };
 
   return (
@@ -55,7 +62,9 @@ export function NewsCrawlerDashboard() {
       }
     >
       <div style={dashboardContainerStyle}>
-        <div style={{color:'#f59e0b',fontSize:'0.75rem'}}>DEMO: News collector/sentiment feed chưa có endpoint production trong MVP.</div>
+        <div style={analysisStatus === 'LIVE' ? liveStatusStyle : analysisStatus === 'ERROR' ? errorStatusStyle : demoStatusStyle}>
+          <strong>{analysisStatus}</strong> {analysisMessage}
+        </div>
         {/* Top Controls Bar */}
         <NewsCrawlerHeader onCrawlStart={handleCrawlStart} isCrawling={isCrawling} />
 
@@ -91,6 +100,11 @@ const dashboardContainerStyle: React.CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
 };
+
+const statusBaseStyle: React.CSSProperties = { fontSize: '0.75rem', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid' };
+const demoStatusStyle: React.CSSProperties = { ...statusBaseStyle, color: '#92400e', background: '#fffbeb', borderColor: '#fde68a' };
+const liveStatusStyle: React.CSSProperties = { ...statusBaseStyle, color: '#047857', background: '#ecfdf5', borderColor: '#a7f3d0' };
+const errorStatusStyle: React.CSSProperties = { ...statusBaseStyle, color: '#b91c1c', background: '#fef2f2', borderColor: '#fecaca' };
 
 const gridStyle: React.CSSProperties = {
   display: 'flex',

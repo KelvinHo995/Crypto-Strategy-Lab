@@ -10,6 +10,7 @@ export default defineConfig({
       '/candles': 'http://localhost:8080',
       '/experiments': 'http://localhost:8080',
       '/search': 'http://localhost:8080',
+      '/sentiment': 'http://localhost:8080',
       '/strategies': 'http://localhost:8080',
       '/ws': { target: 'ws://localhost:8080', ws: true },
     },
