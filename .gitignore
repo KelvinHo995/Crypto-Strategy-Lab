@@ -21,3 +21,4 @@ sentiment-service/__pycache__/
 .vscode/
 .idea/
 *.log
+cookies.txt
