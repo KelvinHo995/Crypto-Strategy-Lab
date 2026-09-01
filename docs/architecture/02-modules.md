@@ -34,7 +34,8 @@ Binance
 |---|---|---|---|
 | `internal/market` | Market Data | `Candle` type, Binance adapter (REST historical + WS live), reconnect logic | Strategy logic, DB writes for anything but candles, chart-rendering concerns |
 | `internal/strategy` | Strategy + Search | `Strategy` interface, `Signal` type, `Registry`, individual strategies (MA/RSI/BB/SR...), `StrategyGenerator` (Random/Domain-guided), `CandidateStrategy` composition | Binance calls, DB access, HTTP handlers — a strategy only sees candles in, signal out |
-| `internal/experiment` | Experiment | Backtester (simulate trades), Evaluator (Return/WinRate/MDD/TradeCount), Ranking, `Queue` interface + `InMemoryQueue` + Worker pool for running many candidates concurrently ([ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md)), `Result` provenance ([ADR-0009](../adr/0009-experiment-provenance-storage.md)) | Strategy logic itself, market data fetching |
+| `internal/experiment` | Experiment | Backtester (simulate trades), Evaluator (Return/WinRate/MDD/TradeCount), Ranking, `Queue` interface + `InMemoryQueue` + panic-isolated Worker pool ([ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md)), `Result` provenance ([ADR-0009](../adr/0009-experiment-provenance-storage.md)) | Strategy logic itself, market data fetching |
+| `internal/sentiment` | Market Data / Sentiment | Go client for FastAPI, observation persistence and bounded time lookup used by `SentimentStrategy` | Python model implementation, frontend presentation, raw article storage |
 | `internal/auth` | shared infrastructure ([ADR-0007](../adr/0007-simple-session-auth.md)) | Implemented `User` storage, bcrypt hashing, JWT issuance/verification and Postgres repository; `internal/httpx` owns handlers/cookie middleware | Domain logic from any other package; this package knows nothing about strategies, candles, or experiments |
 | `cmd/server` | shared (composition root) | HTTP/WebSocket route wiring only — constructs and injects the above, contains no business logic | Any domain logic; if `cmd/server` has an `if`/`switch` on strategy type, that's the God-Service anti-pattern (spec ch.44) |
 
@@ -42,21 +43,20 @@ This mirrors the codebase as it stands today: `market.Candle`,
 `strategy.Strategy`/`strategy.Registry`, `experiment.Result` already exist as
 separate packages with no import cycles back into each other except
 `strategy` → `market` (for the `Candle` type) and `experiment` → `strategy`
-(for `Signal`). `experiment` does **not** import `market` — it depends on
-`strategy`'s interface, not on how candles are produced, which is the
-"consumer defines the interface" Go idiom already used in
-`experiment.Strategy`.
+(for `Signal` and composition). `experiment` also imports `market.Candle` as
+the shared historical-data DTO used by backtests and queued jobs; it never
+imports or calls the Binance adapter. Market acquisition therefore remains
+behind `market.LiveProvider`/`market.CandleRepository` at the HTTP composition
+boundary.
 
 ## Frontend feature packages
 
-The current frontend MVP is a compact React dashboard in `frontend/src/App.tsx`
-with six navigable product surfaces: Realtime, Strategy Engine, Discovery,
-Backtest, News Crawler, and Settings. Shared visual rules live in `App.css`.
-The screens currently use representative demo data while the remaining HTTP
-and WebSocket contracts are implemented. When API integration begins, split
-the surfaces into `features/{market,strategy,experiment,news}` and place the
-API/WebSocket clients in `shared/`; that is the intended ownership boundary,
-not a directory structure the repository already claims to have.
+The React dashboard is split into `features/{market,strategy,experiment,news}`
+with REST/WebSocket clients in `shared/`. Authentication, historical candles,
+strategy registry, search/experiments, sentiment analysis, and realtime events
+use backend contracts. Offline market fallback, the news collector/extraction
+visuals, 24-hour sentiment aggregate, and trade-detail rows remain explicitly
+labelled `MOCK`/`DEMO`; they are not presented as production data.
 
 ## Why this shape
 
