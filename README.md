@@ -51,7 +51,9 @@ cd frontend && pnpm run lint && pnpm run build
 cd sentiment-service && uv run python -m unittest discover -s tests -v
 ```
 
-Architecture decisions and runtime contracts live in `docs/`. See `PLAN.md` for scope and ownership.
+Architecture decisions and runtime contracts live in `docs/`. See `PLAN.md` for
+scope and ownership, and [`docs/e2e-testing.md`](docs/e2e-testing.md) for the
+complete Supabase/Binance/fullstack verification runbook.
 
 ## Team ownership
 
