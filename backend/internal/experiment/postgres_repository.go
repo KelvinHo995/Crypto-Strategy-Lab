@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type PostgresRepository struct {
@@ -36,8 +37,8 @@ func (p *PostgresRepository) Save(ctx context.Context, r Result) error {
 		INSERT INTO experiments (
 			id, candidate_id, strategies, params, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
-			total_profit, status, created_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			total_profit, status, created_at, updated_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 		ON CONFLICT (id) DO UPDATE SET
 			candidate_id = EXCLUDED.candidate_id,
 			strategies = EXCLUDED.strategies,
@@ -53,10 +54,11 @@ func (p *PostgresRepository) Save(ctx context.Context, r Result) error {
 			losses = EXCLUDED.losses,
 			total_profit = EXCLUDED.total_profit,
 			status = EXCLUDED.status,
-			created_at = EXCLUDED.created_at
+			created_at = EXCLUDED.created_at,
+			updated_at = EXCLUDED.updated_at
 	`, r.ID, r.CandidateID, string(strategies), string(params), r.Policy, string(versions),
 		r.DatasetPeriod, r.Return, r.MDD, r.TradeCount, r.WinRate, r.Wins, r.Losses,
-		r.TotalProfit, r.Status, r.CreatedAt)
+		r.TotalProfit, r.Status, r.CreatedAt, time.Now().UnixMilli())
 	if err != nil {
 		return fmt.Errorf("save experiment: %w", err)
 	}
@@ -67,7 +69,7 @@ func (p *PostgresRepository) Get(ctx context.Context, id string) (Result, error)
 	row := p.db.QueryRowContext(ctx, `
 		SELECT id, candidate_id, strategies, params, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
-			total_profit, status, created_at
+			total_profit, status, created_at, updated_at
 		FROM experiments WHERE id = $1
 	`, id)
 
@@ -85,7 +87,7 @@ func (p *PostgresRepository) List(ctx context.Context) ([]Result, error) {
 	rows, err := p.db.QueryContext(ctx, `
 		SELECT id, candidate_id, strategies, params, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
-			total_profit, status, created_at
+			total_profit, status, created_at, updated_at
 		FROM experiments ORDER BY return_pct DESC
 	`)
 	if err != nil {
@@ -115,7 +117,7 @@ func scanResult(s scanner) (Result, error) {
 	err := s.Scan(
 		&r.ID, &r.CandidateID, &strategies, &params, &r.Policy, &versions,
 		&r.DatasetPeriod, &r.Return, &r.MDD, &r.TradeCount, &r.WinRate, &r.Wins, &r.Losses,
-		&r.TotalProfit, &r.Status, &r.CreatedAt,
+		&r.TotalProfit, &r.Status, &r.CreatedAt, &r.UpdatedAt,
 	)
 	if err != nil {
 		return Result{}, err
@@ -144,6 +146,62 @@ func scanResult(s scanner) (Result, error) {
 		return Result{}, fmt.Errorf("unmarshal strategy versions: %w", err)
 	}
 	return r, nil
+}
+
+// MarkStaleRunningFailed fails RUNNING rows that haven't been updated in
+// olderThan. pg_try_advisory_xact_lock guards it: safe under Supabase's
+// transaction-mode pooler (the lock is scoped to and released with this
+// transaction, unlike session-level advisory locks), and safe for multiple
+// server instances to call concurrently — whichever gets the lock does the
+// sweep, everyone else sees it's held and returns immediately, no double work.
+func (p *PostgresRepository) MarkStaleRunningFailed(ctx context.Context, olderThan time.Duration) ([]Result, error) {
+	tx, err := p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("mark stale running: begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	var locked bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT pg_try_advisory_xact_lock(hashtext('experiment_stale_sweep')::bigint)`,
+	).Scan(&locked); err != nil {
+		return nil, fmt.Errorf("mark stale running: lock: %w", err)
+	}
+	if !locked {
+		return nil, nil
+	}
+
+	now := time.Now()
+	rows, err := tx.QueryContext(ctx, `
+		UPDATE experiments SET status = 'FAILED', updated_at = $1
+		WHERE status = 'RUNNING' AND updated_at < $2
+		RETURNING id, candidate_id, strategies, params, policy, strategy_versions,
+			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
+			total_profit, status, created_at, updated_at
+	`, now.UnixMilli(), now.Add(-olderThan).UnixMilli())
+	if err != nil {
+		return nil, fmt.Errorf("mark stale running: update: %w", err)
+	}
+
+	var results []Result
+	for rows.Next() {
+		r, err := scanResult(rows)
+		if err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("mark stale running: scan: %w", err)
+		}
+		results = append(results, r)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("mark stale running: rows: %w", err)
+	}
+	rows.Close()
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("mark stale running: commit: %w", err)
+	}
+	return results, nil
 }
 
 // An earlier pgx integration wrote []byte parameters into TEXT columns. In
