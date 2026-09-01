@@ -11,6 +11,8 @@ type Strategy interface {
 
 type Result struct {
 	ID               string            `json:"id"`
+	SearchID         string            `json:"searchId"`
+	SearchTotal      int               `json:"searchTotal"`
 	CandidateID      string            `json:"candidateId"`
 	Strategies       []string          `json:"strategies"`
 	Params           map[string]any    `json:"params"`

@@ -15,11 +15,29 @@ type PostgresRepository struct {
 	db *sql.DB
 }
 
+const DefaultLeaderboardLimit = 100
+
 func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
 func (p *PostgresRepository) Save(ctx context.Context, r Result) error {
+	return saveResult(ctx, p.db, r)
+}
+
+type resultExecer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func saveResult(ctx context.Context, executor resultExecer, r Result) error {
+	searchID := r.SearchID
+	if searchID == "" {
+		searchID = r.ID
+	}
+	searchTotal := r.SearchTotal
+	if searchTotal < 1 {
+		searchTotal = 1
+	}
 	strategies, err := json.Marshal(r.Strategies)
 	if err != nil {
 		return fmt.Errorf("marshal strategies: %w", err)
@@ -33,13 +51,15 @@ func (p *PostgresRepository) Save(ctx context.Context, r Result) error {
 		return fmt.Errorf("marshal strategy versions: %w", err)
 	}
 
-	_, err = p.db.ExecContext(ctx, `
+	_, err = executor.ExecContext(ctx, `
 		INSERT INTO experiments (
-			id, candidate_id, strategies, params, policy, strategy_versions,
+			id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		ON CONFLICT (id) DO UPDATE SET
+			search_id = EXCLUDED.search_id,
+			search_total = EXCLUDED.search_total,
 			candidate_id = EXCLUDED.candidate_id,
 			strategies = EXCLUDED.strategies,
 			params = EXCLUDED.params,
@@ -56,7 +76,7 @@ func (p *PostgresRepository) Save(ctx context.Context, r Result) error {
 			status = EXCLUDED.status,
 			created_at = EXCLUDED.created_at,
 			updated_at = EXCLUDED.updated_at
-	`, r.ID, r.CandidateID, string(strategies), string(params), r.Policy, string(versions),
+	`, r.ID, searchID, searchTotal, r.CandidateID, string(strategies), string(params), r.Policy, string(versions),
 		r.DatasetPeriod, r.Return, r.MDD, r.TradeCount, r.WinRate, r.Wins, r.Losses,
 		r.TotalProfit, r.Status, r.CreatedAt, time.Now().UnixMilli())
 	if err != nil {
@@ -67,7 +87,7 @@ func (p *PostgresRepository) Save(ctx context.Context, r Result) error {
 
 func (p *PostgresRepository) Get(ctx context.Context, id string) (Result, error) {
 	row := p.db.QueryRowContext(ctx, `
-		SELECT id, candidate_id, strategies, params, policy, strategy_versions,
+		SELECT id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
 		FROM experiments WHERE id = $1
@@ -85,11 +105,16 @@ func (p *PostgresRepository) Get(ctx context.Context, id string) (Result, error)
 
 func (p *PostgresRepository) List(ctx context.Context) ([]Result, error) {
 	rows, err := p.db.QueryContext(ctx, `
-		SELECT id, candidate_id, strategies, params, policy, strategy_versions,
+		SELECT id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
-		FROM experiments ORDER BY return_pct DESC
-	`)
+		FROM experiments
+		ORDER BY
+			CASE WHEN status = 'COMPLETED' THEN 0 ELSE 1 END,
+			(0.50 * COALESCE(return_pct, 0) + 0.30 * COALESCE(win_rate, 0) - 0.20 * COALESCE(mdd, 0)) DESC,
+			created_at DESC
+		LIMIT $1
+	`, DefaultLeaderboardLimit)
 	if err != nil {
 		return nil, fmt.Errorf("list experiments: %w", err)
 	}
@@ -115,7 +140,7 @@ func scanResult(s scanner) (Result, error) {
 	var strategies, params, versions []byte
 
 	err := s.Scan(
-		&r.ID, &r.CandidateID, &strategies, &params, &r.Policy, &versions,
+		&r.ID, &r.SearchID, &r.SearchTotal, &r.CandidateID, &strategies, &params, &r.Policy, &versions,
 		&r.DatasetPeriod, &r.Return, &r.MDD, &r.TradeCount, &r.WinRate, &r.Wins, &r.Losses,
 		&r.TotalProfit, &r.Status, &r.CreatedAt, &r.UpdatedAt,
 	)
@@ -175,7 +200,7 @@ func (p *PostgresRepository) MarkStaleRunningFailed(ctx context.Context, olderTh
 	rows, err := tx.QueryContext(ctx, `
 		UPDATE experiments SET status = 'FAILED', updated_at = $1
 		WHERE status = 'RUNNING' AND updated_at < $2
-		RETURNING id, candidate_id, strategies, params, policy, strategy_versions,
+		RETURNING id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
 	`, now.UnixMilli(), now.Add(-olderThan).UnixMilli())

@@ -24,6 +24,7 @@ type Dependencies struct {
 	Candles   market.CandleRepository
 	Live      market.LiveProvider
 	Sentiment SentimentService
+	Queue     experiment.Queue
 }
 
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) { r.handler.ServeHTTP(w, req) }
@@ -46,8 +47,12 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	}
 	authService := deps.Auth
 	ctx, cancel := context.WithCancel(parent)
-	queue := experiment.NewInMemoryQueue(128)
+	queue := deps.Queue
+	if queue == nil {
+		queue = experiment.NewInMemoryQueue(128)
+	}
 	pool := experiment.NewWorkerPool(queue, registry, repo, 3)
+	pool.SetCandleRepository(deps.Candles)
 	hub := NewHub(repo)
 	pool.SetObserver(hub.JobUpdated)
 	pool.Start(ctx)
