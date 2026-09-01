@@ -7,38 +7,43 @@ Binance's wire format (spec ch.4 "Yêu cầu kiến trúc").
 ## Flow
 
 ```
-Binance WebSocket (kline stream)
+Binance combined WebSockets
+     │  one kline connection + one aggregate-trade connection
      │
      ▼
 internal/market — Binance Adapter
-     │  StreamLiveCandles(symbol, timeframe) → chan Candle
+     │  StreamMarketEvents(catalog symbols, timeframes) → chan LiveEvent
      │  (candle.IsClosed = false while still forming, true once the
      │   interval closes — see contracts.md)
      ▼
 cmd/server — /ws handler
-     │  wraps each Candle in { "type": "CANDLE_UPDATE", "payload": Candle }
+     │  CANDLE_UPDATE and TRADE_TICK
+     │  per-client subscription filtering + separate bounded trade queue
      ▼
 WebSocket (Go ↔ React, single connection, multiple message types)
      │
      ▼
 Frontend — shared WS client
-     │  demuxes by "type", routes CANDLE_UPDATE to the chart(s)
-     │  subscribed to that symbol+timeframe
+     │  sends candle/trade subscribe commands and restores them after reconnect
+     │  demuxes by type to chart(s) and recent-trade panel
      ▼
 Chart component(s) — up to 4, independently timeframe-switchable
 ```
 
 The frontend opens the socket only after login so the browser includes the
 httpOnly JWT cookie. During Vite development, same-origin proxy routes forward
-REST and `/ws` to the Go server. The four initial charts are aligned to
-BTCUSDT `5m`, `15m`, `1h`, and `4h`; unsupported pairs/timeframes are not shown.
+REST and `/ws` to the Go server. `GET /markets` supplies all selectors with the
+same eight-symbol/four-timeframe catalog; unsupported pairs/timeframes are
+rejected by the backend.
 
 The same WebSocket connection also carries `SEARCH_PROGRESS` and
 `LEADERBOARD_UPDATE` messages (see
 [06-search-backtest-flow.md](06-search-backtest-flow.md)) — one connection,
-tagged message types, not one socket per concern. The backend streams the four
-MVP timeframes (`5m`, `15m`, `1h`, `4h`) over that connection; each chart
-filters the timeframe it displays, so switching a chart does not reconnect.
+tagged message types, not one socket per concern. A browser sends
+`SUBSCRIBE_CANDLES` for each visible chart and `SUBSCRIBE_TRADES` for the chosen
+trade feed. Switching a selector updates the subscription without reconnecting.
+The backend still owns only two Binance sockets globally, regardless of the
+number of authenticated browser clients.
 
 ## Why the frontend never touches Binance directly
 
@@ -57,9 +62,14 @@ Data Provider mới ... có phải sửa frontend không?" — answer must be no
 
 ## Reliability
 
-If Binance's WebSocket disconnects, `internal/market` owns reconnect/retry —
+If either Binance WebSocket disconnects, `internal/market` owns reconnect/retry —
 this must not surface as a crash or a silent freeze on the frontend. This is
 one of the explicit "vấn đáp" scenarios the team must be able to answer
 (spec ch.32.4, ch.40 Q7, PLAN.md §5 checklist item 8). The chart should show
 a visible "reconnecting" state rather than silently showing stale data as
 live.
+
+Aggregate trades are substantially busier than candles, so each browser client
+has a dedicated bounded trade queue. Dropping an old trade tick for a slow client
+is acceptable; allowing that traffic to delay candle/search/leaderboard state is
+not. The frontend retains the newest 50 ticks for the selected symbol.

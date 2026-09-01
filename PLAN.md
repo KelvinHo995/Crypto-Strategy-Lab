@@ -10,15 +10,15 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 
 - ✅ Repo scaffold xong (backend/frontend/sentiment-service), README từng phần đã có
 - ✅ `Candle` struct chốt xong, có thêm field `IsClosed` (candle đang hình thành vs đã đóng)
-- ✅ `Binance.StreamLiveCandles` — WS thật, chạy được, đã test qua `/ws` endpoint (branch `feat/market-data-websocket`, đang chờ merge)
+- ✅ Binance live stream đã merge và mở hai combined WebSocket dùng chung: kline cho 8 coin × 4 timeframe và aggregate trades cho 8 coin. `/ws` lọc theo subscription của từng browser, có reconnect/backoff.
 - ✅ sentiment-service FastAPI chạy được; `/analyze` dùng model lexicon xác định `crypto-lexicon/v1`, validate input, trả score/model version/timestamp thật và có test. FinBERT vẫn là nâng cấp ngoài MVP.
 - ✅ `internal/experiment`: Backtester + Evaluator xong, có test; `go vet`/`go test` sạch — SL/TP, gap fill, fee, slippage, tránh lookahead bias và same-candle re-entry. Xem ADR-0003, ADR-0009.
 - ✅ `internal/httpx`: router 2-mux public/protected; `POST /search/start`, `GET /experiments`, `GET /experiments/{id}`, `GET /strategies`, `/health` chạy thật. Request search giới hạn 1 MiB, reject field lạ/trailing JSON và trả `202 STARTED`. Auth dùng JWT cookie thật; `/ws` là server-push channel có xác thực cho candle, tiến độ search và leaderboard.
 - ✅ `Binance.FetchHistoricalCandles` REST thật: pagination 1000 klines, normalize `Candle`, chỉ nhận candle đã đóng; live kline WebSocket có reconnect/backoff và phát `CANDLE_UPDATE`.
-- ✅ Postgres repositories cho experiments/users/candles/sentiment và `cmd/backfill` 2 năm đã hoàn thiện; candle upsert theo batch 500 và idempotent theo `(symbol,timeframe,open_time)`, search production đọc range từ DB. Migration `0003` chuẩn hóa experiment JSON legacy.
+- ✅ Postgres repositories cho experiments/users/candles/sentiment và `cmd/backfill` đã hoàn thiện; default 2 năm/BTC, hỗ trợ `BACKFILL_SYMBOLS` + `BACKFILL_DAYS`, pace Binance request, upsert batch 500 và idempotent theo `(symbol,timeframe,open_time)`. Search production đọc range từ DB. Migration `0003` chuẩn hóa experiment JSON legacy; `0004` thêm `updated_at` cho stale-job recovery.
 - ✅ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện; package strategy đạt 82.5% statement coverage trong lượt kiểm tra 2026-08-30.
 - ✅ Queue/Worker pool in-memory (3 workers), pipeline Candidate→Backtest→Evaluate→Rank, trạng thái `PENDING→RUNNING→COMPLETED/FAILED`, provenance snapshot và WebSocket `SEARCH_PROGRESS`/`LEADERBOARD_UPDATE` đã hoàn thiện cho một candidate/request. Strategy/observer panic được cô lập để không làm chết worker. Batch nhiều candidate/user-cancel vẫn là stretch theo ADR-0011.
-- ✅ Frontend UI responsive đã hoàn thiện theo design mẫu và được chuẩn hóa thành financial workstation sáng: sidebar cobalt, surface slate/white, xanh/đỏ chỉ biểu thị ngữ nghĩa thị trường, icon Lucide thay emoji, login/offline-demo rõ ràng. Auth, strategy list, historical candles, search/experiments, sentiment analyze và realtime candle/progress/leaderboard đã nối Go API/WebSocket; dữ liệu fallback có nhãn. News collector/24h aggregate và trade-detail table vẫn là demo vì MVP backend chưa có collector/trade-detail endpoint.
+- ✅ Frontend UI responsive đã hoàn thiện theo design mẫu và được chuẩn hóa thành financial workstation sáng: sidebar cobalt, surface slate/white, xanh/đỏ chỉ biểu thị ngữ nghĩa thị trường, icon Lucide thay emoji, login/offline-demo rõ ràng. Auth, market catalog 8 coin, historical candles, realtime candle/aggregate trades, strategy list/search, experiments, sentiment analyze và progress/leaderboard đã nối Go API/WebSocket. LIVE mode không tự thay dữ liệu thật bằng mock; mock chỉ còn trong DEMO rõ ràng. News collector/24h aggregate vẫn là demo vì MVP backend chưa có collector endpoint.
 - ✅ **Auth (users/session)** — bcrypt, Postgres user repository, JWT HS256 1h, httpOnly SameSite=Lax cookie, protected-route middleware và logout cookie clearing đã hoàn thiện; `JWT_SECRET` tối thiểu 16 ký tự là biến môi trường bắt buộc.
 
 ## 1. Phân công (đã điều chỉnh so với bản đầu)
@@ -148,6 +148,7 @@ Response: {
 
 ```json
 { "type": "CANDLE_UPDATE", "payload": { /* Candle, kể cả isClosed=false — tick đang chạy */ } }
+{ "type": "TRADE_TICK", "payload": { /* TradeTick từ Binance aggTrade */ } }
 { "type": "LEADERBOARD_UPDATE", "payload": { /* ExperimentResult[] */ } }
 { "type": "SEARCH_PROGRESS", "payload": { "tested": 125, "total": 500 } }
 ```
@@ -208,7 +209,9 @@ phụ thuộc `InMemoryQueue` — nhờ đó sau này có thể thay bằng
 | GET | `/experiments` | Leaderboard — đọc từ bảng `experiments`, sort theo return |
 | GET | `/experiments/{id}` | Chi tiết 1 kết quả (click Top #1), gồm provenance |
 | GET | `/strategies` | List strategy đã đăng ký, cho strategy picker UI |
-| GET | `/ws` | WebSocket — CANDLE_UPDATE, SEARCH_PROGRESS, LEADERBOARD_UPDATE |
+| GET | `/markets` | Catalog 8 coin và các timeframe được backend hỗ trợ |
+| GET | `/candles` | Nến lịch sử đã backfill từ Postgres |
+| GET | `/ws` | WebSocket — CANDLE_UPDATE, TRADE_TICK, SEARCH_PROGRESS, LEADERBOARD_UPDATE; client gửi lệnh subscribe/unsubscribe |
 | GET | `/health` | Sanity check, hữu ích cho docker-compose/demo |
 | POST | `/auth/register` | `{username, password}` → tạo user, hash password bằng bcrypt |
 | POST | `/auth/login` | `{username, password}` → set session cookie |

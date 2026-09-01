@@ -1,7 +1,7 @@
 # Backend implementation review
 
-Updated: 2026-08-30. Scope: backend, sentiment service and documentation only;
-no UI/UX source was changed in this review pass.
+Updated: 2026-09-01. Scope: fullstack runtime integration, market data,
+experiment execution and documentation.
 
 ## Implemented and corrected
 
@@ -17,9 +17,9 @@ no UI/UX source was changed in this review pass.
 - Authentication: Postgres users, bcrypt password hashes, signed HS256 JWT with
   one-hour expiry, httpOnly SameSite=Lax cookie, protected routes and logout.
   The cookie receives the Secure flag when the request runs over TLS.
-- Realtime: authenticated `/ws` emits `CANDLE_UPDATE`, `SEARCH_PROGRESS` and
-  `LEADERBOARD_UPDATE`. Slow clients may lose intermediate events rather than
-  block market ingestion; the next event carries current state.
+- Realtime: authenticated `/ws` emits subscribed `CANDLE_UPDATE`/`TRADE_TICK`
+  plus global `SEARCH_PROGRESS`/`LEADERBOARD_UPDATE`. Trade traffic has a
+  separate bounded queue so slow clients cannot crowd out higher-priority state.
 - Sentiment: deterministic `crypto-lexicon/v1` model with validated FastAPI
   contract plus a Go client that reports service-down/invalid-response errors.
 - Reliability: graceful HTTP shutdown, worker cancellation/wait, bounded request
@@ -36,8 +36,9 @@ no UI/UX source was changed in this review pass.
   agreed team value in `.env.example` is accepted.
 - Production search requires candles to be backfilled; fewer than 21 candles in
   the requested range returns HTTP 422 instead of silently using fabricated data.
-- Four BTCUSDT streams (`5m`, `15m`, `1h`, `4h`) start with the server and share
-  the authenticated WebSocket endpoint.
+- Two shared Binance combined sockets cover eight symbols, four candle
+  timeframes and aggregate trades. Browser clients subscribe over the one
+  authenticated application WebSocket.
 - Existing database tables are reused; candle writes remain idempotent under the
   existing `(symbol,timeframe,open_time)` key, so no migration was added.
 - Two direct dependencies were added: `golang.org/x/crypto` for bcrypt and
@@ -61,8 +62,9 @@ no UI/UX source was changed in this review pass.
   genetic search and user cancellation remain stretch goals in ADR-0011.
 - The sentiment service is lightweight and deterministic; FinBERT remains an
   explicitly documented later replacement behind the same contract.
-- Live server startup currently subscribes to BTCUSDT only. Multi-pair dynamic
-  subscriptions are outside the current runtime contract.
+- The catalog is intentionally fixed to eight liquid USDT pairs for this MVP;
+  adding runtime exchange discovery or arbitrary user-entered pairs remains out
+  of scope.
 - End-to-end startup still requires external PostgreSQL/Binance availability and
   valid environment configuration; automated tests isolate those dependencies.
 - The Go race detector was not available in the current Windows toolchain because
@@ -78,10 +80,12 @@ no UI/UX source was changed in this review pass.
 - Added frontend Auth Gate and same-origin Vite REST/WebSocket proxy.
 - Connected strategy registry, historical charts, search, experiment leaderboard,
   realtime candles and search/leaderboard events to the Go backend.
-- Aligned frontend runtime choices with backend BTCUSDT timeframes (`5m`, `15m`,
-  `1h`, `4h`) and normalized strategy name `SR`.
-- Retained explicit mock fallback for market outages and for News/trade-detail
-  screens whose source endpoints are outside MVP.
+- Aligned every frontend market selector with `GET /markets` and the backend
+  timeframes (`5m`, `15m`, `1h`, `4h`), including charts, aggregate trades,
+  strategy discovery and backtests.
+- Removed silent market-data fallback in authenticated mode. Generated candles
+  and trades now run only in explicit offline demo mode; the News collector and
+  aggregate remain clearly labelled demo data.
 - Updated the previously stale pnpm lockfile and removed frontend lint errors.
 
 ## 2026-09-01 teammate-integration follow-up
@@ -110,3 +114,31 @@ no UI/UX source was changed in this review pass.
 - Final regression: `go test -count=3 ./...`, `go vet ./...`, frontend lint/build,
   Python sentiment tests, and `git diff --check` passed. The Go race detector
   remains unavailable because the current Windows toolchain has CGO disabled.
+
+## 2026-09-01 multi-market runtime follow-up
+
+- Added the authenticated `GET /markets` catalog for BTC, ETH, BNB, SOL, XRP,
+  ADA, DOGE and AVAX against USDT. Unsupported candle and search symbols now
+  fail at the HTTP boundary.
+- Added multi-symbol backfill configuration, request pacing and strict invalid
+  symbol handling. All eight markets were backfilled for 180 days across all
+  four timeframes, then refreshed for the latest two days. The new ADA, DOGE and
+  AVAX runs each stored 51,839 `5m`, 17,279 `15m`, 4,319 `1h`, and 1,079 `4h`
+  candles before the latest refresh upsert.
+- Fixed Binance kline decoding for the simultaneous lowercase `l` (low price)
+  and uppercase `L` (last trade ID) fields. Without the explicit `L` field, Go's
+  case-insensitive JSON matching could reject real Binance candles even though
+  simplified fixtures passed.
+- Added shared combined kline/aggregate-trade streams, per-client subscriptions,
+  reconnect subscription restoration and a React Strict Mode cleanup fix for
+  lightweight-charts and WebSocket socket replacement.
+- Runtime evidence: authenticated candle queries returned 499 recent `1h`
+  candles for every catalog symbol; an ADAUSDT MA+RSI search returned HTTP 202
+  and reached `COMPLETED`; browser checks showed all eight choices in Strategy
+  and Backtest selectors, four `LIVE/API` charts and a continuously updating
+  real Binance trade feed.
+- Final verification after all fixes: full `go test -count=3 ./...` and
+  `go vet ./...` passed; frontend ESLint, TypeScript and Vite production build
+  passed; Python sentiment unittest passed; `git diff --check` reported no
+  whitespace errors. Browser verification also confirmed that the Backtest
+  default range tracks the latest 90 days instead of a stale hard-coded year.
