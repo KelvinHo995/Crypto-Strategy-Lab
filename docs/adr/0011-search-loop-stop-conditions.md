@@ -117,20 +117,15 @@ instead of a separate, divergent code path.
   job ID before becoming terminal too. Manual resubmission after that creates
   a new job ID, same as before — this supersedes the original "no automatic
   retry" rule, which held for the simpler `InMemoryQueue`-only MVP.
-- **Rule:** a `RUNNING` result whose worker or process crashed mid-job would
-  otherwise sit stuck forever with nothing to notice it. A periodic sweep
-  (`experiment.Sweeper`, on a 1-minute tick) fails any `RUNNING` result whose
-  `updated_at` hasn't moved in 15 minutes, via one atomic SQL statement
-  (`Repository.MarkStaleRunningFailed`). `PostgresQueue` workers heartbeat the
-  same `updated_at` while renewing their lease, so live work is not swept.
-  See ADR-0013.
-- **Rule:** `MarkStaleRunningFailed` is guarded by a Postgres advisory
-  transaction lock (`pg_try_advisory_xact_lock`), so multiple server
-  instances can call it concurrently without duplicating work or racing —
-  whichever instance gets the lock does the sweep, everyone else sees it's
-  held and skips that tick. Chosen over an in-memory per-process timer
-  because a purely in-process signal for "how long has this been running"
-  can't be compared across instances, and over moving the sweep out of the
-  app entirely (e.g. a Supabase Edge Function/`pg_cron` job) because that
-  would give Postgres responsibilities beyond the "just a host" role
-  ADR-0012 deliberately scoped it to, for no correctness benefit here.
+- **Removed (2026-09-02):** a `RUNNING` result whose worker or process
+  crashed mid-job used to be caught by a periodic sweep
+  (`experiment.Sweeper` + `Repository.MarkStaleRunningFailed`, advisory-lock
+  guarded so multiple instances wouldn't double-sweep). That's gone now —
+  `PostgresQueue`'s lease/heartbeat/reclaim mechanism (ADR-0013) does the
+  same job, faster (polls roughly every second vs. the sweep's one-minute
+  tick) and more completely (reclaims and retries the job, not just marks
+  it failed). Keeping both was redundant: the sweep's own SQL was still
+  correct to run, but in practice it never won the race against the faster
+  mechanism, so it was dead weight rather than genuine defense in depth.
+  It only ever mattered as the *sole* safety net for `InMemoryQueue`, which
+  isn't what's actually deployed.

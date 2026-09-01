@@ -57,7 +57,6 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	hub := NewHub(repo)
 	pool.SetObserver(hub.JobUpdated)
 	pool.Start(ctx)
-	go experiment.NewSweeper().Run(ctx, repo, experiment.DefaultStaleThreshold, experiment.DefaultSweepInterval, hub.JobUpdated)
 	if deps.Live != nil {
 		if combined, ok := deps.Live.(market.CombinedLiveProvider); ok {
 			catalog := market.DefaultCatalog()
