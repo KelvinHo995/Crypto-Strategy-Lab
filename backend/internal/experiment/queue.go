@@ -12,6 +12,8 @@ var ErrQueueClosed = errors.New("experiment queue closed")
 
 type BacktestJob struct {
 	ID               string
+	SearchID         string
+	SearchTotal      int
 	Candidate        strategy.CandidateStrategy
 	Candles          []market.Candle
 	Config           Config

@@ -48,6 +48,7 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	ctx, cancel := context.WithCancel(parent)
 	queue := experiment.NewInMemoryQueue(128)
 	pool := experiment.NewWorkerPool(queue, registry, repo, 3)
+	generator := strategy.NewRandomGenerator(registry)
 	hub := NewHub(repo)
 	pool.SetObserver(hub.JobUpdated)
 	pool.Start(ctx)
@@ -93,6 +94,7 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	strategyHandler := strategy.NewHandler(registry)
 
 	protected.HandleFunc("POST /search/start", startSearch(registry, repo, queue, deps.Candles))
+	protected.HandleFunc("POST /search/loop", startLoop(generator, pool, repo, queue, deps.Candles))
 	protected.HandleFunc("GET /experiments", listExperiments(repo))
 	protected.HandleFunc("GET /experiments/{id}", getExperiment(repo))
 	protected.HandleFunc("GET /strategies", strategyHandler.ListStrategies)

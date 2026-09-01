@@ -127,17 +127,24 @@ func (c *hubClient) accepts(event Event) bool {
 	}
 }
 func (h *Hub) JobUpdated(result experiment.Result) {
-	if result.Status == "RUNNING" {
-		h.Broadcast(Event{Type: "SEARCH_PROGRESS", Payload: map[string]int{"tested": 0, "total": 1}})
-		return
-	}
 	if result.Status != "COMPLETED" && result.Status != "FAILED" {
+		return // no partial-progress broadcast on RUNNING — tested/total only means something once a candidate finishes
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	bySearch, err := h.repo.ListBySearch(ctx, result.SearchID)
+	if err != nil {
 		return
 	}
-	h.Broadcast(Event{Type: "SEARCH_PROGRESS", Payload: map[string]int{"tested": 1, "total": 1}})
+	tested := 0
+	for _, r := range bySearch {
+		if r.Status == "COMPLETED" || r.Status == "FAILED" {
+			tested++
+		}
+	}
+	h.Broadcast(Event{Type: "SEARCH_PROGRESS", Payload: map[string]int{"tested": tested, "total": result.SearchTotal}})
+
 	if result.Status == "COMPLETED" {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
 		results, err := h.repo.List(ctx)
 		if err == nil {
 			ranked := experiment.Rank(results)

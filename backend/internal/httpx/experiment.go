@@ -108,7 +108,7 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 			}
 		}
 		job := experiment.BacktestJob{
-			ID: id, Candidate: candidate,
+			ID: id, SearchID: id, SearchTotal: 1, Candidate: candidate,
 			Candles: candles,
 			Config: experiment.Config{Pair: req.Pair, StartingCapital: req.Capital,
 				PositionSizePct: 1, StopLossPct: 0.02, TakeProfitPct: 0.04,
@@ -116,7 +116,7 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 			DatasetPeriod:    fmt.Sprintf("%d-%d", req.From, req.To),
 			StrategyVersions: versions, EnqueuedAt: now.UnixMilli(),
 		}
-		pending := experiment.Result{ID: id, CandidateID: candidate.ID,
+		pending := experiment.Result{ID: id, SearchID: id, SearchTotal: 1, CandidateID: candidate.ID,
 			Strategies: candidate.Strategies, Params: candidate.Params, Policy: candidate.Policy,
 			StrategyVersions: versions, DatasetPeriod: job.DatasetPeriod,
 			Status: "PENDING", CreatedAt: now.UnixMilli()}

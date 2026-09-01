@@ -31,6 +31,9 @@ func (r *recordingRepo) Get(context.Context, string) (experiment.Result, error) 
 	return experiment.Result{}, experiment.ErrNotFound
 }
 func (r *recordingRepo) List(context.Context) ([]experiment.Result, error) { return nil, nil }
+func (r *recordingRepo) ListBySearch(context.Context, string) ([]experiment.Result, error) {
+	return nil, nil
+}
 func (r *recordingRepo) MarkStaleRunningFailed(context.Context, time.Duration) ([]experiment.Result, error) {
 	return nil, nil
 }
@@ -125,6 +128,76 @@ func TestWorkerPoolRun_ObserverPanicDoesNotStopWorker(t *testing.T) {
 			}
 		case <-deadline:
 			t.Fatalf("worker stopped after observer panic; completed jobs: %v", completed)
+		}
+	}
+}
+
+func TestWorkerPoolAddObserver_CoexistsAndUnsubscribes(t *testing.T) {
+	registry := strategy.NewRegistry()
+	registry.RegisterFactory("Hold", func(map[string]any) strategy.Strategy { return holdStrategy{} })
+	repo := newRecordingRepo()
+	queue := experiment.NewInMemoryQueue(2)
+	pool := experiment.NewWorkerPool(queue, registry, repo, 1)
+
+	setCalls := make(chan string, 10)
+	pool.SetObserver(func(r experiment.Result) { setCalls <- r.ID })
+
+	addCalls := make(chan string, 10)
+	unsubscribe := pool.AddObserver(func(r experiment.Result) { addCalls <- r.ID })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool.Start(ctx)
+
+	enqueue := func(id string) {
+		job := experiment.BacktestJob{
+			ID: id,
+			Candidate: strategy.CandidateStrategy{
+				ID: "candidate-" + id, Strategies: []string{"Hold"}, Policy: "majority",
+			},
+			Candles: []market.Candle{{Symbol: "BTCUSDT", OpenTime: 1, Open: 100, High: 101, Low: 99, Close: 100}},
+			Config: experiment.Config{
+				Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
+				StopLossPct: 0.02, TakeProfitPct: 0.04, FeePct: 0.001, SlippageBps: 5, Window: 1,
+			},
+			EnqueuedAt: time.Now().UnixMilli(),
+		}
+		if err := queue.Enqueue(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	enqueue("job-both-1")
+	// notify() fires once for RUNNING and once for COMPLETED — drain both
+	// from each observer before unsubscribing, or a buffered COMPLETED
+	// message left over from before unsubscribe() would look like a leak.
+	waitForID(t, setCalls, "job-both-1")
+	waitForID(t, setCalls, "job-both-1")
+	waitForID(t, addCalls, "job-both-1")
+	waitForID(t, addCalls, "job-both-1")
+
+	unsubscribe()
+	enqueue("job-set-only")
+	waitForID(t, setCalls, "job-set-only")
+
+	select {
+	case id := <-addCalls:
+		t.Fatalf("unsubscribed observer still received %q", id)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func waitForID(t *testing.T, ch chan string, want string) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case id := <-ch:
+			if id == want {
+				return
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for %q", want)
 		}
 	}
 }

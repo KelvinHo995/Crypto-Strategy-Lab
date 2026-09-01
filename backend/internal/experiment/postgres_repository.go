@@ -35,11 +35,13 @@ func (p *PostgresRepository) Save(ctx context.Context, r Result) error {
 
 	_, err = p.db.ExecContext(ctx, `
 		INSERT INTO experiments (
-			id, candidate_id, strategies, params, policy, strategy_versions,
+			id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		ON CONFLICT (id) DO UPDATE SET
+			search_id = EXCLUDED.search_id,
+			search_total = EXCLUDED.search_total,
 			candidate_id = EXCLUDED.candidate_id,
 			strategies = EXCLUDED.strategies,
 			params = EXCLUDED.params,
@@ -56,7 +58,7 @@ func (p *PostgresRepository) Save(ctx context.Context, r Result) error {
 			status = EXCLUDED.status,
 			created_at = EXCLUDED.created_at,
 			updated_at = EXCLUDED.updated_at
-	`, r.ID, r.CandidateID, string(strategies), string(params), r.Policy, string(versions),
+	`, r.ID, r.SearchID, r.SearchTotal, r.CandidateID, string(strategies), string(params), r.Policy, string(versions),
 		r.DatasetPeriod, r.Return, r.MDD, r.TradeCount, r.WinRate, r.Wins, r.Losses,
 		r.TotalProfit, r.Status, r.CreatedAt, time.Now().UnixMilli())
 	if err != nil {
@@ -67,7 +69,7 @@ func (p *PostgresRepository) Save(ctx context.Context, r Result) error {
 
 func (p *PostgresRepository) Get(ctx context.Context, id string) (Result, error) {
 	row := p.db.QueryRowContext(ctx, `
-		SELECT id, candidate_id, strategies, params, policy, strategy_versions,
+		SELECT id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
 		FROM experiments WHERE id = $1
@@ -85,13 +87,36 @@ func (p *PostgresRepository) Get(ctx context.Context, id string) (Result, error)
 
 func (p *PostgresRepository) List(ctx context.Context) ([]Result, error) {
 	rows, err := p.db.QueryContext(ctx, `
-		SELECT id, candidate_id, strategies, params, policy, strategy_versions,
+		SELECT id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
 		FROM experiments ORDER BY return_pct DESC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("list experiments: %w", err)
+	}
+	defer rows.Close()
+
+	var results []Result
+	for rows.Next() {
+		r, err := scanResult(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan experiment: %w", err)
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
+func (p *PostgresRepository) ListBySearch(ctx context.Context, searchID string) ([]Result, error) {
+	rows, err := p.db.QueryContext(ctx, `
+		SELECT id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
+			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
+			total_profit, status, created_at, updated_at
+		FROM experiments WHERE search_id = $1
+	`, searchID)
+	if err != nil {
+		return nil, fmt.Errorf("list experiments by search: %w", err)
 	}
 	defer rows.Close()
 
@@ -115,7 +140,7 @@ func scanResult(s scanner) (Result, error) {
 	var strategies, params, versions []byte
 
 	err := s.Scan(
-		&r.ID, &r.CandidateID, &strategies, &params, &r.Policy, &versions,
+		&r.ID, &r.SearchID, &r.SearchTotal, &r.CandidateID, &strategies, &params, &r.Policy, &versions,
 		&r.DatasetPeriod, &r.Return, &r.MDD, &r.TradeCount, &r.WinRate, &r.Wins, &r.Losses,
 		&r.TotalProfit, &r.Status, &r.CreatedAt, &r.UpdatedAt,
 	)
@@ -175,7 +200,7 @@ func (p *PostgresRepository) MarkStaleRunningFailed(ctx context.Context, olderTh
 	rows, err := tx.QueryContext(ctx, `
 		UPDATE experiments SET status = 'FAILED', updated_at = $1
 		WHERE status = 'RUNNING' AND updated_at < $2
-		RETURNING id, candidate_id, strategies, params, policy, strategy_versions,
+		RETURNING id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
 	`, now.UnixMilli(), now.Add(-olderThan).UnixMilli())
