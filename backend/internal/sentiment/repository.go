@@ -19,5 +19,9 @@ type Observation struct {
 
 type Repository interface {
 	Save(ctx context.Context, observation Observation) error
-	LatestAtOrBefore(ctx context.Context, timestamp, earliestTimestamp int64) (Observation, error)
+	// ListSince returns every observation with PublishedAt >= earliestPublishedAt,
+	// ordered ascending by PublishedAt, with no upper bound — callers needing a
+	// point-in-time lookup (see TimeLookup) filter the result themselves, which
+	// lets them cache it across many lookups instead of querying per call.
+	ListSince(ctx context.Context, earliestPublishedAt int64) ([]Observation, error)
 }

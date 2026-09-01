@@ -18,11 +18,10 @@ func (f *fakeAnalyzer) Analyze(context.Context, string, string) (sentiment.Resul
 }
 
 type fakeRepository struct {
-	saved       sentiment.Observation
-	observation sentiment.Observation
-	err         error
-	latest      int64
-	earliest    int64
+	saved         sentiment.Observation
+	observation   sentiment.Observation
+	err           error
+	earliestSince int64
 }
 
 func (f *fakeRepository) Save(_ context.Context, observation sentiment.Observation) error {
@@ -30,10 +29,22 @@ func (f *fakeRepository) Save(_ context.Context, observation sentiment.Observati
 	return f.err
 }
 
-func (f *fakeRepository) LatestAtOrBefore(_ context.Context, timestamp, earliestTimestamp int64) (sentiment.Observation, error) {
-	f.latest = timestamp
-	f.earliest = earliestTimestamp
-	return f.observation, f.err
+// ListSince has no upper bound to filter on. If the test didn't set an
+// explicit PublishedAt, it's stamped to earliestPublishedAt itself — always
+// within bounds for whatever timestamp the test's caller used to derive it.
+func (f *fakeRepository) ListSince(_ context.Context, earliestPublishedAt int64) ([]sentiment.Observation, error) {
+	f.earliestSince = earliestPublishedAt
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.observation == (sentiment.Observation{}) {
+		return nil, nil
+	}
+	obs := f.observation
+	if obs.PublishedAt == 0 {
+		obs.PublishedAt = earliestPublishedAt
+	}
+	return []sentiment.Observation{obs}, nil
 }
 
 func TestServiceAnalyzeAndStore(t *testing.T) {

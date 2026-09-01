@@ -55,7 +55,7 @@ func main() {
 	}
 	sentimentClient := sentiment.NewClient(sentimentURL, &http.Client{Timeout: 3 * time.Second})
 	sentimentService := sentiment.NewService(sentimentClient, sentimentRepo)
-	sentimentLookup := sentiment.NewMemoizedLookup(sentiment.NewTimeLookup(sentimentRepo, sentiment.DefaultMaxAge), 4096, 5*time.Minute)
+	sentimentLookup := sentiment.NewTimeLookup(sentimentRepo, sentiment.DefaultMaxAge)
 	registry.Register(strategy.NewSentimentStrategy(nil, sentimentLookup, 0.7))
 	registry.RegisterFactory("Sentiment", strategy.NewSentimentFactory(nil, sentimentLookup, 0.7))
 

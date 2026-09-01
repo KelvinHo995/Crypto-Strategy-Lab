@@ -80,6 +80,10 @@ func TestPostgresSentimentRuntimePath(t *testing.T) {
 			t.Fatalf("seed %s observation: %v", name, err)
 		}
 		insertedIDs = append(insertedIDs, id)
+		// lookup caches ListSince results; without invalidating, a seed here
+		// wouldn't be visible to the very next assertScore/strategy check
+		// until the 1-minute TTL happened to expire.
+		lookup.Invalidate()
 	}
 
 	assertScore := func(name string, candleTime int64, want float64) {
