@@ -9,11 +9,12 @@ ch.47): "Generate → Execute → Measure → Rank → Improve → Generate...".
 StrategyGenerator.Generate()
      │  produces a CandidateStrategy (see 05-strategy-flow.md)
      ▼
-Queue.Enqueue(BacktestJob)          ← Queue interface; InMemoryQueue today,
-     │                                 not Kafka (ADR-0004)
+PostgresQueue.EnqueuePending(job, result)
+     │  one transaction: PENDING provenance + compact durable job
      ▼
-Worker pool (N workers, each calls Queue.Dequeue)
-     │  each worker: resolve strategies via Registry → run Backtester
+Worker pool (3 workers, SKIP LOCKED claim + lease heartbeat)
+     │  load referenced candle range through bounded cache
+     │  resolve strategies via Registry → run Backtester → Ack/Nack
      ▼
 Backtester
      │  simulates trades over a fixed historical candle range, given
@@ -54,17 +55,17 @@ are stored — see [ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md).
 Scale math the team already worked out (PLAN.md, spec ch.43): at ~2s per
 candidate on one worker, 10,000 candidates takes ~20,000s (>5.5h) serially;
 the fix is more workers pulling from the same queue, not a faster single
-worker.
+worker. The original in-process decision is recorded in ADR-0004; the current
+durability driver and implementation are recorded in
+[ADR-0013](../adr/0013-postgres-durable-queue-and-local-caches.md).
 
 ## Why the queue is behind an interface
 
-`Queue` (`Enqueue`/`Dequeue` over `BacktestJob`) is an interface;
-`InMemoryQueue` is today's only implementation. Nothing else — the worker
-pool, `StrategyGenerator`, `Backtester` — depends on `InMemoryQueue`
-directly. This is the same Replaceability shape as the `StrategyGenerator`
-swap below: a future `RedisQueue` or `KafkaQueue` (if distributed workers
-ever become a real requirement) only has to satisfy the interface — see
-[ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md) and
+`Queue` (`Enqueue`/`Dequeue`/`Ack`/`Nack`) remains an interface.
+`PostgresQueue` is production and `InMemoryQueue` remains a test implementation;
+the worker pool and Backtester depend on neither concrete type. A future Redis
+Streams implementation can replace the transport without changing evaluation
+logic — see ADR-0013 and
 [07-quality-attributes.md](07-quality-attributes.md)'s Replaceability
 section.
 
@@ -96,11 +97,17 @@ limits remain extension points rather than partially implemented behaviour.
 
 `POST /search/start` validates the named strategies, snapshots candidate and
 version provenance, saves `PENDING`, enqueues the job, and returns HTTP 202
-with `{searchId, status:"STARTED"}`. A worker changes the same result to
+with `{searchId, status:"STARTED"}`. The initial row and queue message commit
+atomically, so a crash cannot leave an unqueued PENDING result. A worker changes the same result to
 `RUNNING`, executes Backtester and Evaluator, then persists `COMPLETED`; a
-candidate-resolution failure becomes `FAILED`. The in-memory queue capacity
-is 128 and the server starts three workers. Repository reads are ranked by the
-formula above; incomplete jobs remain visible but below completed results.
+candidate-resolution failure becomes `FAILED`. Infrastructure writes retry up
+to three claims with bounded backoff; stale leases are reclaimable. Exhausting
+the third claim atomically marks both the job and experiment `FAILED`. Workers
+heartbeat both the job lease and experiment `updated_at`. Each result stores
+`searchId`/`searchTotal` (`id`/`1` for today's single-candidate request) so a
+future bounded batch can group candidates without another contract change. Repository reads use
+an indexed, cached Top-100 snapshot; incomplete jobs remain visible below
+completed results.
 
 ## Trade simulation realism
 

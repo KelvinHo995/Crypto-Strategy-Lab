@@ -19,12 +19,10 @@ Should be 1 (new strategy file) + 1 registration call.
 (spec ch.32.2, ch.43).
 **Decision:** Job Queue + Worker pool, worker count is the scaling knob, not
 a rewrite ([06-search-backtest-flow.md](06-search-backtest-flow.md),
-[ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md)).
-**Deferred, not solved:** true multi-process/multi-machine worker scaling
-(would need a real broker, not in-process channels) — the team's position
-is "no driver forces this at current scope" (PLAN.md §6), and the queue
-abstraction is what makes that swap possible later without touching the
-Backtester or Evaluator.
+[ADR-0013](../adr/0013-postgres-durable-queue-and-local-caches.md)).
+**Implemented:** PostgreSQL workers claim safely across backend instances with
+`SKIP LOCKED`; durable leases survive process restarts. A dedicated broker is
+still unnecessary at current throughput.
 
 ## Realtime
 
@@ -57,14 +55,14 @@ workers (spec ch.32.5).
 changing? Two concrete instances:
 1. Swap `Random Search` for `Genetic Search` without the Backtester
    changing (spec ch.32.6, spec ch.42's scenario).
-2. Swap the in-memory job queue for `RedisQueue`/`KafkaQueue` without the
+2. Swap `PostgresQueue` for Redis Streams without the
    worker pool, `StrategyGenerator`, or `Backtester` changing, if
    distributed workers ever become a real requirement.
 **Decision:** both are interfaces consumers depend on, never the concrete
 implementation — `StrategyGenerator` (`generate() -> CandidateStrategy`) and
-`Queue` (`Enqueue`/`Dequeue` over `BacktestJob`) —
+`Queue` (`Enqueue`/`Dequeue`/`Ack`/`Nack` over `BacktestJob`) —
 [06-search-backtest-flow.md](06-search-backtest-flow.md),
-[ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md).
+[ADR-0013](../adr/0013-postgres-durable-queue-and-local-caches.md).
 **Test:** for either swap, count how many files outside the
 implementation itself need to change. Should be zero.
 

@@ -18,8 +18,16 @@ SENTIMENT_SERVICE_URL=http://127.0.0.1:8000
 ```
 
 Apply every SQL file in `backend/migrations/` in numeric order (`0001` through
-`0004`). On Supabase, paste and run each file in the SQL editor. Re-running the
-migrations is safe because the migration statements are idempotent.
+`0007`) with:
+
+```powershell
+cd backend
+go run ./cmd/migrate
+```
+
+The runner uses `DATABASE_URL`; re-running is safe because migrations are
+idempotent. `0005` adds the leaderboard index, `0006` creates the durable
+experiment job queue, and `0007` normalizes search metadata.
 
 ## 2. Run automated regression
 
@@ -29,6 +37,15 @@ From three terminals:
 cd backend
 go test -count=3 ./...
 go vet ./...
+```
+
+The durable-queue runtime test is deliberately opt-in because a running backend
+would compete for its real Supabase jobs. Stop the backend, then run:
+
+```powershell
+$env:RUN_POSTGRES_QUEUE_INTEGRATION='1'
+go test -count=3 ./internal/experiment -run TestPostgresQueue
+Remove-Item Env:RUN_POSTGRES_QUEUE_INTEGRATION
 ```
 
 ```powershell

@@ -28,7 +28,7 @@ standard Go Postgres driver, through the same `Repository` interface
 already used to keep persistence swappable (PLAN.md §6: "DI qua interface —
 Có dùng"). This is a drop-in implementation swap behind an existing seam,
 the same shape as the `Queue` interface in
-[ADR-0004](0004-inprocess-job-queue-not-kafka.md) — no handler, strategy, or
+[ADR-0013](0013-postgres-durable-queue-and-local-caches.md) — no handler, strategy, or
 experiment code changes because of this.
 
 **Scope of what "using Supabase" means here, explicitly:**

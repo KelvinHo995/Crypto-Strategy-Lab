@@ -14,7 +14,16 @@ backfill persists only closed candles. Live updates may carry
 `POST /search/start` accepts `{pair,timeframe,from,to,capital,strategies}` and
 returns HTTP 202 `{searchId,status:"STARTED"}`. The result transitions through
 `PENDING|RUNNING|COMPLETED|FAILED`. `GET /experiments` returns ranked results;
-`GET /experiments/{id}` returns one provenance snapshot.
+`GET /experiments/{id}` returns one provenance snapshot. Every persisted result
+also carries `searchId` and `searchTotal`; the current one-candidate flow uses
+the result ID and `1`, leaving an explicit compatible contract for future batch
+discovery.
+
+Production commits the initial `PENDING` row and compact `experiment_jobs`
+message atomically. A job contains dataset coordinates rather than candle rows;
+workers claim with a renewable lease, load candles from the repository, and
+Ack/Nack after persistence. `GET /experiments` returns at most the indexed,
+score-ranked Top 100; WebSocket leaderboard updates publish Top 10.
 
 ## Historical market data
 
