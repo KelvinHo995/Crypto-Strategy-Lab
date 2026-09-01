@@ -51,6 +51,7 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	hub := NewHub(repo)
 	pool.SetObserver(hub.JobUpdated)
 	pool.Start(ctx)
+	go experiment.NewSweeper().Run(ctx, repo, experiment.DefaultStaleThreshold, experiment.DefaultSweepInterval, hub.JobUpdated)
 	if deps.Live != nil {
 		for _, frame := range []string{"5m", "15m", "1h", "4h"} {
 			candles := deps.Live.StreamLiveCandles(ctx, "BTCUSDT", frame)

@@ -68,3 +68,20 @@ condition and wins when any additional optional limit is reached first.
 - **Rule:** MVP workers do not retry failed jobs. A deterministic bad
   candidate would fail identically, while automatic retry could duplicate
   compute invisibly. Manual resubmission creates a new traceable job ID.
+- **Rule:** a `RUNNING` result whose worker or process crashed mid-job would
+  otherwise sit stuck forever with nothing to notice it. A periodic sweep
+  (`experiment.Sweeper`, on a 1-minute tick) fails any `RUNNING` result whose
+  `updated_at` hasn't moved in 15 minutes, via one atomic SQL statement
+  (`Repository.MarkStaleRunningFailed`) — it never touches `Queue`, so
+  swapping `InMemoryQueue` for `RedisQueue`/`KafkaQueue` later needs no
+  change here. Same manual-resubmission path as any other failure.
+- **Rule:** `MarkStaleRunningFailed` is guarded by a Postgres advisory
+  transaction lock (`pg_try_advisory_xact_lock`), so multiple server
+  instances can call it concurrently without duplicating work or racing —
+  whichever instance gets the lock does the sweep, everyone else sees it's
+  held and skips that tick. Chosen over an in-memory per-process timer
+  because a purely in-process signal for "how long has this been running"
+  can't be compared across instances, and over moving the sweep out of the
+  app entirely (e.g. a Supabase Edge Function/`pg_cron` job) because that
+  would give Postgres responsibilities beyond the "just a host" role
+  ADR-0012 deliberately scoped it to, for no correctness benefit here.

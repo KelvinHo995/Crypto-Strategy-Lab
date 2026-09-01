@@ -26,4 +26,5 @@ type Result struct {
 	TotalProfit      float64           `json:"totalProfit"`
 	Status           string            `json:"status"`
 	CreatedAt        int64             `json:"createdAt"`
+	UpdatedAt        int64             `json:"updatedAt"`
 }
