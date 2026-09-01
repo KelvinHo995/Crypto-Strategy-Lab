@@ -45,8 +45,8 @@ func (r *recordingRepository) Save(_ context.Context, observation sentiment.Obse
 	return nil
 }
 
-func (r *recordingRepository) LatestAtOrBefore(context.Context, int64, int64) (sentiment.Observation, error) {
-	return sentiment.Observation{}, sentiment.ErrNotFound
+func (r *recordingRepository) ListSince(context.Context, int64) ([]sentiment.Observation, error) {
+	return nil, nil
 }
 
 type fakeNewsProvider struct {

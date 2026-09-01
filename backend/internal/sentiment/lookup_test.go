@@ -46,12 +46,47 @@ func TestTimeLookupBoundsRepositoryQuery(t *testing.T) {
 	if _, err := lookup.FetchSentiment(context.Background(), timestamp); err != nil {
 		t.Fatal(err)
 	}
-	if repo.latest != timestamp {
-		t.Fatalf("latest timestamp = %d, want %d", repo.latest, timestamp)
-	}
 	wantEarliest := timestamp - (2 * time.Hour).Milliseconds()
-	if repo.earliest != wantEarliest {
-		t.Fatalf("earliest timestamp = %d, want %d", repo.earliest, wantEarliest)
+	if repo.earliestSince != wantEarliest {
+		t.Fatalf("earliestSince = %d, want %d", repo.earliestSince, wantEarliest)
+	}
+}
+
+// Within one backtest, candle timestamps are asked about in ascending order
+// — the whole point of the range-based cache is that the second and later
+// lookups reuse the first fetch instead of re-querying per candle.
+func TestTimeLookupCachesAcrossAscendingLookups(t *testing.T) {
+	repo := &fakeRepository{observation: sentiment.Observation{Sentiment: "NEUTRAL", Score: 0.5, PublishedAt: 9_999_999}}
+	lookup := sentiment.NewTimeLookup(repo, 24*time.Hour)
+
+	if _, err := lookup.FetchSentiment(context.Background(), 10_000_000); err != nil {
+		t.Fatal(err)
+	}
+	repo.earliestSince = -1 // sentinel: a real ListSince call would overwrite this
+	if _, err := lookup.FetchSentiment(context.Background(), 10_000_001); err != nil {
+		t.Fatal(err)
+	}
+	if repo.earliestSince != -1 {
+		t.Fatal("ListSince called again for a timestamp within the cached range — cache was not reused")
+	}
+}
+
+// Invalidate is how a writer tells the cache "don't trust what you have" —
+// without it, new observations wouldn't be visible until the TTL expires.
+func TestTimeLookupInvalidateForcesRefetch(t *testing.T) {
+	repo := &fakeRepository{observation: sentiment.Observation{Sentiment: "NEUTRAL", Score: 0.5}}
+	lookup := sentiment.NewTimeLookup(repo, 24*time.Hour)
+
+	if _, err := lookup.FetchSentiment(context.Background(), 10_000_000); err != nil {
+		t.Fatal(err)
+	}
+	repo.earliestSince = -1
+	lookup.Invalidate()
+	if _, err := lookup.FetchSentiment(context.Background(), 10_000_001); err != nil {
+		t.Fatal(err)
+	}
+	if repo.earliestSince == -1 {
+		t.Fatal("ListSince was not called again after Invalidate")
 	}
 }
 
@@ -70,7 +105,7 @@ func TestTimeLookupCapsMaximumAge(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantEarliest := timestamp - sentiment.DefaultMaxAge.Milliseconds()
-	if repo.earliest != wantEarliest {
-		t.Fatalf("earliest timestamp = %d, want capped value %d", repo.earliest, wantEarliest)
+	if repo.earliestSince != wantEarliest {
+		t.Fatalf("earliestSince = %d, want capped value %d", repo.earliestSince, wantEarliest)
 	}
 }
