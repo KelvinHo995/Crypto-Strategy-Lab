@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/strategy"
 )
 
@@ -14,6 +15,7 @@ type WorkerPool struct {
 	queue     Queue
 	registry  *strategy.Registry
 	repo      Repository
+	candles   market.CandleRepository
 	workers   int
 	wg        sync.WaitGroup
 	obsMu     sync.Mutex
@@ -80,6 +82,10 @@ func NewWorkerPool(queue Queue, registry *strategy.Registry, repo Repository, wo
 	return &WorkerPool{queue: queue, registry: registry, repo: repo, workers: workers}
 }
 
+func (p *WorkerPool) SetCandleRepository(repository market.CandleRepository) {
+	p.candles = repository
+}
+
 func (p *WorkerPool) Start(ctx context.Context) {
 	for i := 0; i < p.workers; i++ {
 		p.wg.Add(1)
@@ -108,27 +114,56 @@ func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
 			result := resultFromJob(job, "FAILED")
 			if err := p.repo.Save(ctx, result); err != nil {
 				log.Printf("experiment worker: save FAILED after panic for %s: %v", job.ID, err)
+				p.retry(ctx, job.ID, err)
+				return
 			}
 			p.notify(result)
+			p.ack(ctx, job.ID)
 		}
 	}()
+
+	candles := job.Candles
+	if len(candles) == 0 && p.candles != nil {
+		var err error
+		candles, err = p.candles.Range(ctx, job.Pair, job.Timeframe, job.From, job.To)
+		if err != nil {
+			p.retry(ctx, job.ID, fmt.Errorf("load historical candles: %w", err))
+			return
+		}
+		if len(candles) < 21 {
+			result := resultFromJob(job, "FAILED")
+			if err := p.repo.Save(ctx, result); err != nil {
+				p.retry(ctx, job.ID, err)
+				return
+			}
+			p.notify(result)
+			p.ack(ctx, job.ID)
+			return
+		}
+	}
 
 	result := resultFromJob(job, "RUNNING")
 	if err := p.repo.Save(ctx, result); err != nil {
 		log.Printf("experiment worker: save RUNNING for %s: %v", job.ID, err)
+		p.retry(ctx, job.ID, err)
 		return
 	}
+	stopHeartbeat := p.startHeartbeat(ctx, job.ID)
+	defer stopHeartbeat()
 	p.notify(result)
 	combined, err := strategy.BuildFromCandidate(p.registry, job.Candidate)
 	if err != nil {
 		result.Status = "FAILED"
 		if saveErr := p.repo.Save(ctx, result); saveErr != nil {
 			log.Printf("experiment worker: save FAILED for %s: %v", job.ID, saveErr)
+			p.retry(ctx, job.ID, saveErr)
+			return
 		}
 		p.notify(result)
+		p.ack(ctx, job.ID)
 		return
 	}
-	trades := NewBacktester(job.Config).Run(combined, job.Candles)
+	trades := NewBacktester(job.Config).Run(combined, candles)
 	metrics := (Evaluator{StartingCapital: job.Config.StartingCapital}).Evaluate(trades)
 	result.Return, result.MDD = metrics.Return, metrics.MDD
 	result.TradeCount, result.WinRate = metrics.TradeCount, metrics.WinRate
@@ -136,12 +171,58 @@ func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
 	result.TotalProfit, result.Status = metrics.TotalProfit, "COMPLETED"
 	if err := p.repo.Save(ctx, result); err != nil {
 		log.Printf("experiment worker: save COMPLETED for %s: %v", job.ID, err)
+		p.retry(ctx, job.ID, err)
+		return
 	}
 	p.notify(result)
+	p.ack(ctx, job.ID)
+}
+
+func (p *WorkerPool) ack(ctx context.Context, id string) {
+	if err := p.queue.Ack(ctx, id); err != nil {
+		log.Printf("experiment worker: ack %s: %v", id, err)
+	}
+}
+
+func (p *WorkerPool) retry(ctx context.Context, id string, cause error) {
+	if err := p.queue.Nack(ctx, id, cause); err != nil {
+		log.Printf("experiment worker: nack %s: %v", id, err)
+	}
+}
+
+func (p *WorkerPool) startHeartbeat(ctx context.Context, id string) func() {
+	queue, ok := p.queue.(LeaseQueue)
+	if !ok {
+		return func() {}
+	}
+	heartbeatCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				return
+			case <-ticker.C:
+				if err := queue.Heartbeat(heartbeatCtx, id); err != nil {
+					log.Printf("experiment worker: heartbeat %s: %v", id, err)
+				}
+			}
+		}
+	}()
+	return cancel
 }
 
 func resultFromJob(job BacktestJob, status string) Result {
-	return Result{ID: job.ID, SearchID: job.SearchID, SearchTotal: job.SearchTotal, CandidateID: job.Candidate.ID,
+	searchID := job.SearchID
+	if searchID == "" {
+		searchID = job.ID
+	}
+	searchTotal := job.SearchTotal
+	if searchTotal < 1 {
+		searchTotal = 1
+	}
+	return Result{ID: job.ID, SearchID: searchID, SearchTotal: searchTotal, CandidateID: job.Candidate.ID,
 		Strategies: append([]string(nil), job.Candidate.Strategies...),
 		Params:     cloneMap(job.Candidate.Params), Policy: job.Candidate.Policy,
 		StrategyVersions: cloneStringMap(job.StrategyVersions), DatasetPeriod: job.DatasetPeriod,

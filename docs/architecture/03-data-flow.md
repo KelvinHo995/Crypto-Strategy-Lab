@@ -59,6 +59,13 @@ whether that slice came from the historical table (backtest) or the live
 WebSocket buffer (realtime chart) — the strategy code itself doesn't know or
 care which.
 
+The server decorates Postgres with a 128-entry, 60-second process-local LRU.
+Exact concurrent range requests share one database load. Returned slices are
+cloned, writes advance an invalidation generation, and an older in-flight read
+cannot reinsert stale data. The HTTP response retains a private 30-second browser
+cache. Redis is unnecessary while there is one backend instance; Postgres
+remains authoritative.
+
 ## Boundary enforced
 
 Nothing outside `internal/market` constructs a Binance API request. Every

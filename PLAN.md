@@ -15,10 +15,10 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ `internal/experiment`: Backtester + Evaluator xong, có test; `go vet`/`go test` sạch — SL/TP, gap fill, fee, slippage, tránh lookahead bias và same-candle re-entry. Xem ADR-0003, ADR-0009.
 - ✅ `internal/httpx`: router 2-mux public/protected; `POST /search/start`, `GET /experiments`, `GET /experiments/{id}`, `GET /strategies`, `/health` chạy thật. Request search giới hạn 1 MiB, reject field lạ/trailing JSON và trả `202 STARTED`. Auth dùng JWT cookie thật; `/ws` là server-push channel có xác thực cho candle, tiến độ search và leaderboard.
 - ✅ `Binance.FetchHistoricalCandles` REST thật: pagination 1000 klines, normalize `Candle`, chỉ nhận candle đã đóng; live kline WebSocket có reconnect/backoff và phát `CANDLE_UPDATE`.
-- ✅ Postgres repositories cho experiments/users/candles/sentiment và `cmd/backfill` đã hoàn thiện; default 2 năm/BTC, hỗ trợ `BACKFILL_SYMBOLS` + `BACKFILL_DAYS`, pace Binance request, upsert batch 500 và idempotent theo `(symbol,timeframe,open_time)`. Search production đọc range từ DB. Migration `0003` chuẩn hóa experiment JSON legacy; `0004` thêm `updated_at` cho stale-job recovery.
+- ✅ Postgres repositories cho experiments/users/candles/sentiment và `cmd/backfill` đã hoàn thiện; default 2 năm/BTC, hỗ trợ `BACKFILL_SYMBOLS` + `BACKFILL_DAYS`, pace Binance request, upsert batch 500 và idempotent theo `(symbol,timeframe,open_time)`. Search production đọc range qua bounded cache. Migration `0003` chuẩn hóa JSON legacy, `0004` thêm `updated_at`, `0005` index leaderboard, `0006` tạo durable job queue và `0007` chuẩn hóa metadata của search.
 - ✅ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện; package strategy đạt 82.5% statement coverage trong lượt kiểm tra 2026-08-30.
-- ✅ Queue/Worker pool in-memory (3 workers), pipeline Candidate→Backtest→Evaluate→Rank, trạng thái `PENDING→RUNNING→COMPLETED/FAILED`, provenance snapshot và WebSocket `SEARCH_PROGRESS`/`LEADERBOARD_UPDATE` đã hoàn thiện cho một candidate/request. Strategy/observer panic được cô lập để không làm chết worker.
-- ✅ `POST /search/loop` (Continuous Strategy Loop, ADR-0011): sinh nhiều candidate qua `RandomGenerator`, dừng theo max-candidates (bắt buộc) / max-duration / no-improvement (cả hai optional, OR semantics), dedup trong một lần chạy, `SEARCH_PROGRESS` là số thật (không còn placeholder) qua `SearchID`/`SearchTotal`. User-cancel vẫn là stretch — chưa có endpoint, chưa cần vì 3 điều kiện còn lại đã đảm bảo dừng.
+- ✅ Queue/Worker pool dùng durable PostgreSQL queue (3 workers): transaction ghi đồng thời `PENDING + job`, claim bằng `SKIP LOCKED`, retry/backoff, lease heartbeat và reclaim sau crash. Job chỉ lưu dataset reference/config, worker đọc candle qua bounded cache. Pipeline Candidate→Backtest→Evaluate→Rank, provenance và WebSocket progress/leaderboard đã hoàn thiện cho một candidate/request. Strategy/observer panic được cô lập để không làm chết worker.
+- ✅ `POST /search/loop` (Continuous Strategy Loop, ADR-0011): sinh nhiều candidate qua `RandomGenerator`, dừng theo max-candidates (bắt buộc) / max-duration / no-improvement (cả hai optional, OR semantics), dedup trong một lần chạy, `SEARCH_PROGRESS` là số thật (không còn placeholder) qua `SearchID`/`SearchTotal`. Batch nhiều candidate không còn là stretch. User-cancel vẫn là stretch — chưa có endpoint, chưa cần vì 3 điều kiện còn lại đã đảm bảo dừng.
 - ✅ Frontend UI responsive đã hoàn thiện theo design mẫu và được chuẩn hóa thành financial workstation sáng: sidebar cobalt, surface slate/white, xanh/đỏ chỉ biểu thị ngữ nghĩa thị trường, icon Lucide thay emoji, login/offline-demo rõ ràng. Auth, market catalog 8 coin, historical candles, realtime candle/aggregate trades, strategy list/search, experiments, sentiment analyze và progress/leaderboard đã nối Go API/WebSocket. LIVE mode không tự thay dữ liệu thật bằng mock; mock chỉ còn trong DEMO rõ ràng. News collector/24h aggregate vẫn là demo vì MVP backend chưa có collector endpoint.
 - ✅ **Auth (users/session)** — bcrypt, Postgres user repository, JWT HS256 1h, httpOnly SameSite=Lax cookie, protected-route middleware và logout cookie clearing đã hoàn thiện; `JWT_SECRET` tối thiểu 16 ký tự là biến môi trường bắt buộc.
 
@@ -191,12 +191,10 @@ type Queue interface {
 }
 ```
 
-`InMemoryQueue` (channel-backed) là implementation duy nhất cho MVP — xem
-[ADR-0004](adr/0004-inprocess-job-queue-not-kafka.md). Worker pool,
-`StrategyGenerator`, `Backtester` chỉ phụ thuộc vào interface `Queue`, không
-phụ thuộc `InMemoryQueue` — nhờ đó sau này có thể thay bằng
-`RedisQueue`/`KafkaQueue` mà không đổi code 3 chỗ đó (Replaceability — xem
-`docs/architecture/07-quality-attributes.md`).
+`PostgresQueue` là implementation production; `InMemoryQueue` chỉ còn dùng cho
+unit test/fallback composition. Worker pool và Backtester vẫn phụ thuộc interface
+`Queue`, không phụ thuộc transport. Xem
+[ADR-0013](docs/adr/0013-postgres-durable-queue-and-local-caches.md).
 
 ---
 
@@ -268,6 +266,19 @@ CREATE TABLE candles (
     PRIMARY KEY (symbol, timeframe, open_time)
 );
 
+-- Durable backtest work queue; payload chỉ chứa dataset reference/config,
+-- không chứa mảng candle lớn.
+CREATE TABLE experiment_jobs (
+    id           TEXT PRIMARY KEY,
+    payload      JSONB NOT NULL,
+    status       TEXT NOT NULL,
+    attempts     INTEGER NOT NULL DEFAULT 0,
+    available_at BIGINT NOT NULL,
+    locked_at    BIGINT,
+    last_error   TEXT,
+    created_at   BIGINT NOT NULL
+);
+
 -- Projection do Go backend sở hữu để lookup sentiment theo thời gian candle.
 -- Đây không phải cache/model state của sentiment-service.
 CREATE TABLE sentiment_results (
@@ -281,7 +292,9 @@ CREATE TABLE sentiment_results (
 );
 ```
 
-**Backfill dataset: cố định 2 năm, không cho user chọn range tùy ý** — chạy `cmd/backfill` một lần thủ công (không phải mỗi lần server restart), upsert theo primary key nên chạy lại an toàn. Quyết định này được ghi lại như một ADR — bỏ gap-check/dynamic-range logic vì không có driver nào bắt buộc cho scope 2 tuần này.
+**Backfill dataset:** mặc định BTC/2 năm; operator có thể giới hạn coin và số
+ngày bằng `BACKFILL_SYMBOLS`/`BACKFILL_DAYS`. Chạy thủ công hoặc định kỳ, không
+chạy trong server startup; upsert theo primary key nên chạy lại an toàn.
 
 **Không cần bảng riêng cho strategies** vì strategy là code trong
 `StrategyRegistry`. `sentiment-service` sở hữu model inference và mọi
