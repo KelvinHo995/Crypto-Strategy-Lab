@@ -2,6 +2,7 @@ package market
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,48 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 )
+
+func TestCombinedEventParsesKlineAndTrade(t *testing.T) {
+	var kline binanceKlineEvent
+	kline.K.Symbol = "ETHUSDT"
+	kline.K.Interval = "1h"
+	kline.K.Start = 1_000
+	kline.K.Open, kline.K.High, kline.K.Low, kline.K.Close, kline.K.Volume = "100", "110", "90", "105", "12.5"
+	klineJSON, _ := json.Marshal(kline)
+	event, err := (binanceCombinedEvent{Stream: "ethusdt@kline_1h", Data: klineJSON}).liveEvent()
+	if err != nil || event.Type != "CANDLE_UPDATE" || event.Candle.Symbol != "ETHUSDT" {
+		t.Fatalf("kline event=%+v err=%v", event, err)
+	}
+
+	tradeJSON, _ := json.Marshal(binanceAggTradeEvent{Symbol: "SOLUSDT", TradeID: 42, Price: "155.25", Quantity: "2.5", TradeTime: 2_000, BuyerMade: true})
+	event, err = (binanceCombinedEvent{Stream: "solusdt@aggTrade", Data: tradeJSON}).liveEvent()
+	if err != nil || event.Type != "TRADE_TICK" || event.Trade.Side != "SELL" || event.Trade.Price != 155.25 {
+		t.Fatalf("trade event=%+v err=%v", event, err)
+	}
+}
+
+func TestCombinedKlineDistinguishesLowPriceFromLastTradeID(t *testing.T) {
+	payload := json.RawMessage(`{"stream":"btcusdt@kline_5m","data":{"s":"BTCUSDT","k":{"t":1788246600000,"L":6642835204,"s":"BTCUSDT","i":"5m","o":"78775.25","c":"78726.51","h":"78775.26","l":"78718.60","v":"14.41","x":false}}}`)
+	var wrapped binanceCombinedEvent
+	if err := json.Unmarshal(payload, &wrapped); err != nil {
+		t.Fatal(err)
+	}
+	event, err := wrapped.liveEvent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Candle.Low != 78718.60 || event.Candle.Close != 78726.51 {
+		t.Fatalf("candle=%+v", event.Candle)
+	}
+}
+
+func TestCombinedEndpointUsesSingleStreamConnection(t *testing.T) {
+	got := combinedStreamEndpoint("wss://stream.binance.com:9443/ws", []string{"btcusdt@kline_5m", "ethusdt@aggTrade"})
+	want := "wss://stream.binance.com:9443/stream?streams=btcusdt@kline_5m/ethusdt@aggTrade"
+	if got != want {
+		t.Fatalf("endpoint=%q want=%q", got, want)
+	}
+}
 
 func TestLiveKlineRejectsInvalidNumbers(t *testing.T) {
 	var event binanceKlineEvent

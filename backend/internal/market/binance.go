@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -175,6 +176,121 @@ func (b *Binance) StreamLiveCandles(ctx context.Context, symbol, timeframe strin
 	return out
 }
 
+func (b *Binance) StreamMarketEvents(ctx context.Context, symbols, timeframes []string) <-chan LiveEvent {
+	out := make(chan LiveEvent)
+	go func() {
+		defer close(out)
+		candleStreams := make([]string, 0, len(symbols)*len(timeframes))
+		tradeStreams := make([]string, 0, len(symbols))
+		seen := make(map[string]struct{})
+		for _, rawSymbol := range symbols {
+			symbol := strings.ToUpper(strings.TrimSpace(rawSymbol))
+			if !IsSupportedSymbol(symbol) {
+				continue
+			}
+			for _, rawFrame := range timeframes {
+				frame := strings.TrimSpace(rawFrame)
+				if !validTimeframe(frame) {
+					continue
+				}
+				stream := strings.ToLower(symbol) + "@kline_" + frame
+				if _, ok := seen[stream]; !ok {
+					seen[stream] = struct{}{}
+					candleStreams = append(candleStreams, stream)
+				}
+			}
+			tradeStream := strings.ToLower(symbol) + "@aggTrade"
+			if _, ok := seen[tradeStream]; !ok {
+				seen[tradeStream] = struct{}{}
+				tradeStreams = append(tradeStreams, tradeStream)
+			}
+		}
+		if len(candleStreams) == 0 && len(tradeStreams) == 0 {
+			return
+		}
+		candles := b.streamCombined(ctx, candleStreams)
+		trades := b.streamCombined(ctx, tradeStreams)
+		for candles != nil || trades != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case event, ok := <-candles:
+				if !ok {
+					candles = nil
+					continue
+				}
+				select {
+				case out <- event:
+				case <-ctx.Done():
+					return
+				}
+			case event, ok := <-trades:
+				if !ok {
+					trades = nil
+					continue
+				}
+				select {
+				case out <- event:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+	return out
+}
+
+func (b *Binance) streamCombined(ctx context.Context, streams []string) <-chan LiveEvent {
+	out := make(chan LiveEvent, 256)
+	go func() {
+		defer close(out)
+		if len(streams) == 0 {
+			return
+		}
+		backoff := liveReconnectInitialBackoff
+		for ctx.Err() == nil {
+			endpoint := combinedStreamEndpoint(b.WSBaseURL, streams)
+			conn, _, err := websocket.Dial(ctx, endpoint, nil)
+			if err == nil {
+				backoff = liveReconnectInitialBackoff
+				for {
+					var wrapped binanceCombinedEvent
+					if err = wsjson.Read(ctx, conn, &wrapped); err != nil {
+						break
+					}
+					event, parseErr := wrapped.liveEvent()
+					if parseErr != nil {
+						log.Printf("skip Binance stream event %q: %v", wrapped.Stream, parseErr)
+						continue
+					}
+					select {
+					case out <- event:
+					case <-ctx.Done():
+						conn.CloseNow()
+						return
+					}
+				}
+				conn.CloseNow()
+			}
+			timer := time.NewTimer(backoff)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+			backoff = nextLiveReconnectBackoff(backoff)
+		}
+	}()
+	return out
+}
+
+func combinedStreamEndpoint(base string, streams []string) string {
+	base = strings.TrimRight(base, "/")
+	base = strings.TrimSuffix(base, "/ws")
+	return base + "/stream?streams=" + strings.Join(streams, "/")
+}
+
 func nextLiveReconnectBackoff(current time.Duration) time.Duration {
 	if current <= 0 {
 		return liveReconnectInitialBackoff
@@ -192,6 +308,7 @@ func nextLiveReconnectBackoff(current time.Duration) time.Duration {
 type binanceKlineEvent struct {
 	K struct {
 		Start    int64  `json:"t"`
+		LastID   int64  `json:"L"`
 		Symbol   string `json:"s"`
 		Interval string `json:"i"`
 		Open     string `json:"o"`
@@ -201,6 +318,66 @@ type binanceKlineEvent struct {
 		Volume   string `json:"v"`
 		Closed   bool   `json:"x"`
 	} `json:"k"`
+}
+
+type binanceCombinedEvent struct {
+	Stream string          `json:"stream"`
+	Data   json.RawMessage `json:"data"`
+}
+
+type binanceAggTradeEvent struct {
+	Symbol    string `json:"s"`
+	TradeID   int64  `json:"a"`
+	Price     string `json:"p"`
+	Quantity  string `json:"q"`
+	TradeTime int64  `json:"T"`
+	BuyerMade bool   `json:"m"`
+}
+
+func (e binanceCombinedEvent) liveEvent() (LiveEvent, error) {
+	switch {
+	case strings.Contains(e.Stream, "@kline_"):
+		var payload binanceKlineEvent
+		if err := json.Unmarshal(e.Data, &payload); err != nil {
+			return LiveEvent{}, fmt.Errorf("decode combined kline: %w", err)
+		}
+		candle, err := payload.candle()
+		if err != nil {
+			return LiveEvent{}, err
+		}
+		return LiveEvent{Type: "CANDLE_UPDATE", Candle: candle}, nil
+	case strings.HasSuffix(strings.ToLower(e.Stream), "@aggtrade"):
+		var payload binanceAggTradeEvent
+		if err := json.Unmarshal(e.Data, &payload); err != nil {
+			return LiveEvent{}, fmt.Errorf("decode aggregate trade: %w", err)
+		}
+		trade, err := payload.trade()
+		if err != nil {
+			return LiveEvent{}, err
+		}
+		return LiveEvent{Type: "TRADE_TICK", Trade: trade}, nil
+	default:
+		return LiveEvent{}, errors.New("unsupported combined stream event")
+	}
+}
+
+func (e binanceAggTradeEvent) trade() (TradeTick, error) {
+	price, err := strconv.ParseFloat(e.Price, 64)
+	if err != nil {
+		return TradeTick{}, fmt.Errorf("invalid aggregate trade price: %w", err)
+	}
+	quantity, err := strconv.ParseFloat(e.Quantity, 64)
+	if err != nil {
+		return TradeTick{}, fmt.Errorf("invalid aggregate trade quantity: %w", err)
+	}
+	if e.Symbol == "" || e.TradeID <= 0 || e.TradeTime <= 0 || price <= 0 || quantity <= 0 {
+		return TradeTick{}, errors.New("invalid aggregate trade identity")
+	}
+	side := "BUY"
+	if e.BuyerMade {
+		side = "SELL"
+	}
+	return TradeTick{Symbol: e.Symbol, TradeID: e.TradeID, TradeTime: e.TradeTime, Price: price, Quantity: quantity, Side: side}, nil
 }
 
 func (e binanceKlineEvent) candle() (Candle, error) {

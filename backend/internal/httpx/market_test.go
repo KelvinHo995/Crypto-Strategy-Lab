@@ -44,3 +44,32 @@ func TestListCandlesRejectsUnsupportedTimeframe(t *testing.T) {
 		t.Fatalf("status=%d", w.Code)
 	}
 }
+
+func TestListMarketsReturnsSupportedCatalog(t *testing.T) {
+	router := httpx.NewRouter(newTestRegistry(), newFakeRepo())
+	defer router.Close()
+	request := httptest.NewRequest(http.MethodGet, "/markets", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d", response.Code)
+	}
+	var markets []market.Info
+	if err := json.NewDecoder(response.Body).Decode(&markets); err != nil {
+		t.Fatal(err)
+	}
+	if len(markets) != 8 || markets[0].Symbol != "BTCUSDT" || len(markets[0].Timeframes) != 4 {
+		t.Fatalf("markets=%+v", markets)
+	}
+}
+
+func TestListCandlesRejectsUnsupportedSymbol(t *testing.T) {
+	router := httpx.NewRouterWithContext(context.Background(), newTestRegistry(), newFakeRepo(), httpx.Dependencies{Candles: &fakeCandleRepo{}})
+	defer router.Close()
+	request := httptest.NewRequest(http.MethodGet, "/candles?symbol=FAKEUSDT&timeframe=5m&from=1&to=2", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d", response.Code)
+	}
+}

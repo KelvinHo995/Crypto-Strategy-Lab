@@ -18,9 +18,15 @@ returns HTTP 202 `{searchId,status:"STARTED"}`. The result transitions through
 
 ## Historical market data
 
+`GET /markets` returns the supported catalog. The current symbols are
+`BTCUSDT`, `ETHUSDT`, `BNBUSDT`, `SOLUSDT`, `XRPUSDT`, `ADAUSDT`, `DOGEUSDT`,
+and `AVAXUSDT`, each with `5m`, `15m`, `1h`, and `4h` timeframes.
+
 `GET /candles?symbol=BTCUSDT&timeframe=5m&from=<unix-ms>&to=<unix-ms>&limit=500`
 returns closed candles from Postgres. Supported MVP timeframes are `5m`, `15m`,
-`1h`, and `4h`; `limit` is bounded to 1-5000.
+`1h`, and `4h`; `limit` is bounded to 1-5000. Unsupported symbols/timeframes
+are rejected. Production search also rejects pairs outside this catalog and
+returns HTTP 422 when the requested range contains fewer than 21 candles.
 
 ## Authentication
 
@@ -35,12 +41,24 @@ except health/register/login require that cookie. Logout clears it.
 
 ```json
 {"type":"CANDLE_UPDATE","payload":{}}
+{"type":"TRADE_TICK","payload":{"symbol":"BTCUSDT","tradeId":1,"tradeTime":0,"price":0,"quantity":0,"side":"BUY"}}
 {"type":"SEARCH_PROGRESS","payload":{"tested":1,"total":1}}
 {"type":"LEADERBOARD_UPDATE","payload":[]}
 ```
 
 Search is started through the REST endpoint in the current MVP; the WebSocket
-is the server-push channel.
+is the server-push channel. A client selects only the market events it needs:
+
+```json
+{"type":"SUBSCRIBE_CANDLES","payload":{"symbol":"ETHUSDT","timeframe":"1h"}}
+{"type":"UNSUBSCRIBE_CANDLES","payload":{"symbol":"ETHUSDT","timeframe":"1h"}}
+{"type":"SUBSCRIBE_TRADES","payload":{"symbol":"SOLUSDT"}}
+{"type":"UNSUBSCRIBE_TRADES","payload":{"symbol":"SOLUSDT"}}
+```
+
+Search and leaderboard events remain global to the authenticated connection.
+Trade ticks use a separate bounded client queue so a busy aggregate-trade feed
+cannot crowd out candles or experiment state updates.
 
 The browser authenticates first, then opens `/ws` with its httpOnly session
 cookie. Vite proxies REST and WebSocket paths to port 8080 in development.

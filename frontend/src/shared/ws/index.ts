@@ -15,6 +15,8 @@ class WebSocketManager {
   private baseReconnectDelay = 1000; // Start with 1 second delay
   private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private intentionallyClosed = false;
+  private candleSubscriptions = new Map<string, number>();
+  private tradeSubscriptions = new Map<string, number>();
 
   constructor() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -36,9 +38,14 @@ class WebSocketManager {
     console.log(`Connecting to WebSocket at ${this.url}...`);
 
     try {
-      this.ws = new WebSocket(this.url);
+      const socket = new WebSocket(this.url);
+      this.ws = socket;
 
-      this.ws.onopen = () => {
+      socket.onopen = () => {
+        if (this.ws !== socket) {
+          socket.close();
+          return;
+        }
         console.log('WebSocket connection established successfully.');
         this.updateState('CONNECTED');
         this.reconnectAttempts = 0;
@@ -46,10 +53,17 @@ class WebSocketManager {
           clearTimeout(this.reconnectTimeoutId);
           this.reconnectTimeoutId = null;
         }
-        // Resend active subscriptions or initialization state if needed
+        this.candleSubscriptions.forEach((_count, key) => {
+          const [symbol, timeframe] = key.split(':');
+          this.send('SUBSCRIBE_CANDLES', { symbol, timeframe });
+        });
+        this.tradeSubscriptions.forEach((_count, symbol) => {
+          this.send('SUBSCRIBE_TRADES', { symbol });
+        });
       };
 
-      this.ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
+        if (this.ws !== socket) return;
         try {
           const message: WSMessage = JSON.parse(event.data);
           this.triggerListeners(message.type, message.payload);
@@ -58,7 +72,8 @@ class WebSocketManager {
         }
       };
 
-      this.ws.onclose = (event) => {
+      socket.onclose = (event) => {
+        if (this.ws !== socket) return;
         this.updateState('DISCONNECTED');
         this.ws = null;
         if (!this.intentionallyClosed) {
@@ -67,7 +82,8 @@ class WebSocketManager {
         }
       };
 
-      this.ws.onerror = (error) => {
+      socket.onerror = (error) => {
+        if (this.ws !== socket) return;
         console.error('WebSocket encountered an error:', error);
         // connection close will trigger reconnect
       };
@@ -88,8 +104,9 @@ class WebSocketManager {
       this.reconnectTimeoutId = null;
     }
     if (this.ws) {
-      this.ws.close();
+      const socket = this.ws;
       this.ws = null;
+      socket.close();
     }
     this.updateState('DISCONNECTED');
   }
@@ -115,14 +132,42 @@ class WebSocketManager {
    * Subscribes to a symbol and timeframe candle updates.
    */
   public subscribeCandles(symbol: string, timeframe: string): void {
-    this.send('SUBSCRIBE_CANDLES', { symbol, timeframe });
+    const key = `${symbol.toUpperCase()}:${timeframe}`;
+    const count = this.candleSubscriptions.get(key) ?? 0;
+    this.candleSubscriptions.set(key, count + 1);
+    if (count === 0) this.send('SUBSCRIBE_CANDLES', { symbol, timeframe });
   }
 
   /**
    * Unsubscribes from a symbol and timeframe candle updates.
    */
   public unsubscribeCandles(symbol: string, timeframe: string): void {
-    this.send('UNSUBSCRIBE_CANDLES', { symbol, timeframe });
+    const key = `${symbol.toUpperCase()}:${timeframe}`;
+    const count = this.candleSubscriptions.get(key) ?? 0;
+    if (count <= 1) {
+      this.candleSubscriptions.delete(key);
+      if (count === 1) this.send('UNSUBSCRIBE_CANDLES', { symbol, timeframe });
+      return;
+    }
+    this.candleSubscriptions.set(key, count - 1);
+  }
+
+  public subscribeTrades(symbol: string): void {
+    const key = symbol.toUpperCase();
+    const count = this.tradeSubscriptions.get(key) ?? 0;
+    this.tradeSubscriptions.set(key, count + 1);
+    if (count === 0) this.send('SUBSCRIBE_TRADES', { symbol });
+  }
+
+  public unsubscribeTrades(symbol: string): void {
+    const key = symbol.toUpperCase();
+    const count = this.tradeSubscriptions.get(key) ?? 0;
+    if (count <= 1) {
+      this.tradeSubscriptions.delete(key);
+      if (count === 1) this.send('UNSUBSCRIBE_TRADES', { symbol });
+      return;
+    }
+    this.tradeSubscriptions.set(key, count - 1);
   }
 
   /**

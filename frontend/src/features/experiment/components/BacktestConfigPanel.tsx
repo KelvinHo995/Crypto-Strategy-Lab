@@ -1,4 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { fetchMarkets } from '../../../shared/api';
+import { useAppMode } from '../../../shared/auth';
+import { DEFAULT_MARKETS } from '../../market/services/marketCatalog';
+import type { MarketInfo } from '../../../types/candle';
 
 interface BacktestConfigPanelProps {
   onRunBacktest: (config: {
@@ -12,16 +16,28 @@ interface BacktestConfigPanelProps {
   isLoading: boolean;
 }
 
+function dateInputValue(offsetDays = 0): string {
+  const date = new Date(Date.now() + offsetDays * 86400000);
+  return date.toISOString().slice(0, 10);
+}
+
 export function BacktestConfigPanel({
   onRunBacktest,
   isLoading,
 }: BacktestConfigPanelProps) {
+  const mode = useAppMode();
+  const [markets, setMarkets] = useState<MarketInfo[]>(DEFAULT_MARKETS);
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [timeframe, setTimeframe] = useState('5m');
-  const [fromDate, setFromDate] = useState('2024-01-01');
-  const [toDate, setToDate] = useState('2024-12-31');
+  const [fromDate, setFromDate] = useState(() => dateInputValue(-90));
+  const [toDate, setToDate] = useState(() => dateInputValue());
   const [capital, setCapital] = useState(10000);
   const [fee, setFee] = useState(0.1); // 0.1% standard exchange fee
+
+  useEffect(() => {
+    if (mode !== 'LIVE') return;
+    fetchMarkets().then(setMarkets).catch(() => setMarkets(DEFAULT_MARKETS));
+  }, [mode]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +65,7 @@ export function BacktestConfigPanel({
               style={selectStyle}
               disabled={isLoading}
             >
-              <option value="BTCUSDT">BTC/USDT</option>
+              {markets.map(market => <option key={market.symbol} value={market.symbol}>{market.baseAsset}/{market.quoteAsset}</option>)}
             </select>
           </div>
 

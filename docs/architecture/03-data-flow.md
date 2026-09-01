@@ -15,7 +15,7 @@ Binance REST (klines)
 internal/market — Binance Adapter
      │  → []Candle (normalized, exchange-agnostic shape)
      ▼
-cmd/backfill (one-off CLI, run manually)
+cmd/backfill (one-off CLI, one or many catalog symbols, run manually)
      │  batch upsert (500 rows) by primary key
      ▼
 Supabase (Postgres) — candles table
@@ -36,7 +36,10 @@ support arbitrary user-chosen date ranges, gap-checking becomes a real
 requirement and this decision should be revisited via a new ADR — it is not
 a design gap today, it's a documented scope cut.
 
-The repository writes at most 500 candles per SQL statement. This keeps the
+`BACKFILL_SYMBOLS` selects a comma-separated subset of the catalog;
+`BACKFILL_DAYS` optionally narrows the default two-year range. The command paces
+Binance REST calls and rejects unsupported symbols before any writes. The
+repository writes at most 500 candles per SQL statement. This keeps the
 same transaction/idempotency semantics while avoiding hundreds of thousands
 of network round-trips through the Supabase transaction pooler.
 
@@ -45,9 +48,10 @@ of network round-trips through the Supabase transaction pooler.
 The search HTTP orchestrator reads the requested candle range through
 `market.CandleRepository` and passes the normalized slice into
 `internal/experiment`'s Backtester. The authenticated `GET /candles` endpoint
-also reads this repository to seed frontend charts; if the API is unavailable
-or the requested range was not backfilled, the UI explicitly labels and uses
-its demo fixture. Live chart updates do **not** go through this table — see
+also reads this repository to seed frontend charts. In authenticated `LIVE`
+mode, an unavailable API or missing range is a visible error; generated fixtures
+are used only after the user explicitly enters offline `DEMO` mode. Live chart
+updates do **not** go through this table — see
 [04-realtime-flow.md](04-realtime-flow.md) for the separate, unbuffered path
 live ticks take to the frontend. Indicator calculation (MA, RSI, Bollinger)
 happens in `internal/strategy` over whatever candle slice it's given,

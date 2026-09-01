@@ -27,6 +27,9 @@ func (r StartSearchRequest) Validate() error {
 	if strings.TrimSpace(r.Pair) == "" {
 		return errors.New("pair is required")
 	}
+	if !market.IsSupportedSymbol(r.Pair) {
+		return errors.New("pair is not in the supported market catalog")
+	}
 	validTimeframes := map[string]bool{"5m": true, "15m": true, "1h": true, "4h": true}
 	if !validTimeframes[r.TimeFrame] {
 		return errors.New("timeframe must be one of 5m, 15m, 1h, 4h")

@@ -1,37 +1,49 @@
 import { useState, useEffect } from 'react';
-
-interface TradeTick {
-  id: string;
-  time: string;
-  price: number;
-  size: number;
-  side: 'BUY' | 'SELL';
-}
+import type { MarketInfo, TradeTick } from '../../../types/candle';
+import { useWebSocketSubscription } from '../../../shared/hooks';
+import { wsManager } from '../../../shared/ws';
+import { useAppMode } from '../../../shared/auth';
 
 function getFormattedTime(date: Date): string {
   return date.toTimeString().split(' ')[0];
 }
 
-export function RecentTicksPanel() {
-  const [ticks, setTicks] = useState<TradeTick[]>(() => {
-    const initialTicks: TradeTick[] = [];
-    let price = 50250;
+function demoTicks(): TradeTick[] {
+  const initialTicks: TradeTick[] = [];
+  let price = 50250;
     
-    for (let i = 0; i < 10; i++) {
-      price += (Math.random() * 20 - 10);
-      initialTicks.unshift({
-        id: `t-${Date.now()}-${i}`,
-        time: getFormattedTime(new Date(Date.now() - i * 1500)),
-        price: Number(price.toFixed(2)),
-        size: Number((Math.random() * 2 + 0.01).toFixed(4)),
-        side: Math.random() > 0.5 ? 'BUY' : 'SELL',
-      });
-    }
-    return initialTicks;
+  for (let i = 0; i < 10; i++) {
+    price += (Math.random() * 20 - 10);
+    initialTicks.unshift({
+      symbol: 'BTCUSDT',
+      tradeId: Date.now() + i,
+      tradeTime: Date.now() - i * 1500,
+      price: Number(price.toFixed(2)),
+      quantity: Number((Math.random() * 2 + 0.01).toFixed(4)),
+      side: Math.random() > 0.5 ? 'BUY' : 'SELL',
+    });
+  }
+  return initialTicks;
+}
+
+export function RecentTicksPanel({ markets }: { markets: MarketInfo[] }) {
+  const mode = useAppMode();
+  const [symbol, setSymbol] = useState('BTCUSDT');
+  const [ticks, setTicks] = useState<TradeTick[]>(() => mode === 'DEMO' ? demoTicks() : []);
+
+  useWebSocketSubscription<TradeTick>('TRADE_TICK', tick => {
+    if (mode !== 'LIVE' || tick.symbol !== symbol) return;
+    setTicks(current => [tick, ...current].slice(0, 50));
   });
 
-  // Simulates a live stream of trades from Binance WS
   useEffect(() => {
+    if (mode !== 'LIVE') return;
+    wsManager.subscribeTrades(symbol);
+    return () => wsManager.unsubscribeTrades(symbol);
+  }, [mode, symbol]);
+
+  useEffect(() => {
+    if (mode !== 'DEMO') return;
     const interval = setInterval(() => {
       setTicks((prev) => {
         const lastTick = prev[0];
@@ -40,10 +52,11 @@ export function RecentTicksPanel() {
         const priceChange = (Math.random() * 12 - 6);
         const newPrice = Number((lastTick.price + priceChange).toFixed(2));
         const newTick: TradeTick = {
-          id: `t-${Date.now()}`,
-          time: getFormattedTime(new Date()),
+          symbol,
+          tradeId: Date.now(),
+          tradeTime: Date.now(),
           price: newPrice,
-          size: Number((Math.random() * 1.5 + 0.005).toFixed(4)),
+          quantity: Number((Math.random() * 1.5 + 0.005).toFixed(4)),
           side: Math.random() > 0.48 ? 'BUY' : 'SELL',
         };
 
@@ -53,11 +66,20 @@ export function RecentTicksPanel() {
     }, 1200);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [mode, symbol]);
 
   return (
     <div style={panelContainerStyle}>
-      <h3 style={sectionTitleStyle}>Live Feed Ticks</h3>
+      <div style={tickHeaderStyle}>
+        <h3 style={sectionTitleStyle}>{mode === 'LIVE' ? 'Binance Trades' : 'Demo Trades'}</h3>
+        <select value={symbol} onChange={event => {
+          const nextSymbol = event.target.value;
+          setSymbol(nextSymbol);
+          setTicks(mode === 'DEMO' ? demoTicks().map(tick => ({ ...tick, symbol: nextSymbol })) : []);
+        }} style={symbolSelectStyle}>
+          {markets.map(market => <option key={market.symbol} value={market.symbol}>{market.baseAsset}/{market.quoteAsset}</option>)}
+        </select>
+      </div>
       
       {/* Ticks Table */}
       <div style={tableWrapperStyle}>
@@ -71,15 +93,16 @@ export function RecentTicksPanel() {
           </thead>
           <tbody>
             {ticks.map((tick) => (
-              <tr key={tick.id} style={trStyle}>
-                <td style={tdLeftStyle}>{tick.time}</td>
+              <tr key={`${tick.symbol}-${tick.tradeId}`} style={trStyle}>
+                <td style={tdLeftStyle}>{getFormattedTime(new Date(tick.tradeTime))}</td>
                 <td style={tick.side === 'BUY' ? tdBuyStyle : tdSellStyle}>
                   {tick.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   {tick.side === 'BUY' ? ' ↗' : ' ↘'}
                 </td>
-                <td style={tdRightStyle}>{tick.size}</td>
+                <td style={tdRightStyle}>{tick.quantity}</td>
               </tr>
             ))}
+            {ticks.length === 0 && <tr><td colSpan={3} style={emptyStyle}>Waiting for {symbol} trades…</td></tr>}
           </tbody>
         </table>
       </div>
@@ -117,6 +140,10 @@ export function RecentTicksPanel() {
     </div>
   );
 }
+
+const tickHeaderStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' };
+const symbolSelectStyle: React.CSSProperties = { border: '1px solid #cbd5e1', borderRadius: '6px', background: '#fff', color: '#0f172a', padding: '0.25rem 0.35rem', fontSize: '0.72rem' };
+const emptyStyle: React.CSSProperties = { padding: '1rem 0', color: '#64748b', textAlign: 'center', fontSize: '0.75rem' };
 
 // ==========================================
 // STYLING PRESET

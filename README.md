@@ -12,7 +12,7 @@ Full-stack quantitative strategy lab for realtime Binance candles, composable tr
 ## Quick start
 
 1. Copy `backend/.env.example` to `backend/.env` and set `DATABASE_URL` plus a `JWT_SECRET` of at least 16 characters.
-2. Apply `backend/migrations/0001_init.sql` and `backend/migrations/0002_sentiment_results.sql` to PostgreSQL.
+2. Apply every SQL file in `backend/migrations/` in numeric order (`0001` through `0004`) to PostgreSQL.
 3. Start the three processes in separate terminals:
 
 ```bash
@@ -32,7 +32,16 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open `http://127.0.0.1:5173`. Run `go run ./cmd/backfill` from `backend/` before production searches so the selected range contains enough closed candles.
+Open `http://127.0.0.1:5173`. Before production searches, backfill the supported
+markets. The default remains BTCUSDT/two years; a multi-market run can be scoped:
+
+```bash
+BACKFILL_SYMBOLS=BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,ADAUSDT,DOGEUSDT,AVAXUSDT BACKFILL_DAYS=180 go run ./cmd/backfill
+```
+
+PowerShell users set those values through `$env:BACKFILL_SYMBOLS` and
+`$env:BACKFILL_DAYS` before invoking the command. Re-running is safe because
+candles are upserted by `(symbol,timeframe,open_time)`.
 
 ## Verification
 
@@ -42,7 +51,9 @@ cd frontend && pnpm run lint && pnpm run build
 cd sentiment-service && uv run python -m unittest discover -s tests -v
 ```
 
-Architecture decisions and runtime contracts live in `docs/`. See `PLAN.md` for scope and ownership.
+Architecture decisions and runtime contracts live in `docs/`. See `PLAN.md` for
+scope and ownership, and [`docs/e2e-testing.md`](docs/e2e-testing.md) for the
+complete Supabase/Binance/fullstack verification runbook.
 
 ## Team ownership
 

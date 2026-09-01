@@ -1,8 +1,9 @@
-import type { Candle } from './candle';
+import type { Candle, TradeTick } from './candle';
 import type { ExperimentResult } from './backtest';
 
 export type WSMessageType = 
   | 'CANDLE_UPDATE' 
+  | 'TRADE_TICK'
   | 'SEARCH_PROGRESS' 
   | 'LEADERBOARD_UPDATE' 
   | 'LEADERBOARD_UPDATED';
@@ -15,6 +16,10 @@ export interface WSMessage<T = unknown> {
 
 export interface WSCandleUpdateMessage extends WSMessage<Candle> {
   type: 'CANDLE_UPDATE';
+}
+
+export interface WSTradeTickMessage extends WSMessage<TradeTick> {
+  type: 'TRADE_TICK';
 }
 
 export interface WSSearchProgressPayload {

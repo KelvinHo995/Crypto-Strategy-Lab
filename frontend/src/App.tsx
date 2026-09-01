@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
 import { BarChart3, ChartCandlestick, FlaskConical, Newspaper, Radio, Trophy } from 'lucide-react';
 import { ErrorBoundary, WebSocketStateBanner } from './shared/components/index';
 import { AuthGate } from './shared/components/AuthGate';
+import { useAppMode } from './shared/auth';
 import { wsManager } from './shared/ws';
 
 const MarketDashboard = lazy(() => import('./features/market/index').then((module) => ({ default: module.MarketDashboard })));
@@ -18,9 +19,14 @@ const navigation: Array<{ id: Tab; label: string; caption: string; icon: Compone
 ];
 
 function AuthenticatedApp() {
+  const mode = useAppMode();
   const [activeTab, setActiveTab] = useState<Tab>('charts');
   const activeItem = navigation.find((item) => item.id === activeTab) ?? navigation[0];
-  useEffect(() => { wsManager.connect(); return () => wsManager.disconnect(); }, []);
+  useEffect(() => {
+    if (mode !== 'LIVE') return;
+    wsManager.connect();
+    return () => wsManager.disconnect();
+  }, [mode]);
 
   return (
     <ErrorBoundary>
@@ -46,7 +52,7 @@ function AuthenticatedApp() {
         <section className="app-workspace">
           <header className="workspace-header">
             <div><span className="page-kicker">Trading workspace</span><h1>{activeItem.label}</h1></div>
-            <div className="live-pill"><Radio size={15} /> Live infrastructure</div>
+            <div className="live-pill"><Radio size={15} /> {mode === 'LIVE' ? 'Live infrastructure' : 'Offline demo'}</div>
           </header>
           <WebSocketStateBanner />
           <main className="app-main">

@@ -32,7 +32,7 @@ Binance
 
 | Package | Owner (domain) | Responsibility | Must NOT contain |
 |---|---|---|---|
-| `internal/market` | Market Data | `Candle` type, Binance adapter (REST historical + WS live), reconnect logic | Strategy logic, DB writes for anything but candles, chart-rendering concerns |
+| `internal/market` | Market Data | Market catalog, `Candle`/`TradeTick` contracts, Binance adapter (REST historical + shared combined WS streams), reconnect logic | Strategy logic, DB writes for anything but candles, chart-rendering concerns |
 | `internal/strategy` | Strategy + Search | `Strategy` interface, `Signal` type, `Registry`, individual strategies (MA/RSI/BB/SR...), `StrategyGenerator` (Random/Domain-guided), `CandidateStrategy` composition | Binance calls, DB access, HTTP handlers — a strategy only sees candles in, signal out |
 | `internal/experiment` | Experiment | Backtester (simulate trades), Evaluator (Return/WinRate/MDD/TradeCount), Ranking, `Queue` interface + `InMemoryQueue` + panic-isolated Worker pool ([ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md)), `Result` provenance ([ADR-0009](../adr/0009-experiment-provenance-storage.md)) | Strategy logic itself, market data fetching |
 | `internal/sentiment` | Market Data / Sentiment | Go client for FastAPI, observation persistence and bounded time lookup used by `SentimentStrategy` | Python model implementation, frontend presentation, raw article storage |
@@ -52,11 +52,12 @@ boundary.
 ## Frontend feature packages
 
 The React dashboard is split into `features/{market,strategy,experiment,news}`
-with REST/WebSocket clients in `shared/`. Authentication, historical candles,
-strategy registry, search/experiments, sentiment analysis, and realtime events
-use backend contracts. Offline market fallback, the news collector/extraction
-visuals, 24-hour sentiment aggregate, and trade-detail rows remain explicitly
-labelled `MOCK`/`DEMO`; they are not presented as production data.
+with REST/WebSocket clients in `shared/`. Authentication, market catalog,
+historical candles, aggregate trades, strategy registry, search/experiments,
+sentiment analysis, and realtime events use backend contracts. Generated market
+data is confined to explicit offline `DEMO` mode. The news collector/extraction
+visuals and 24-hour sentiment aggregate remain labelled `DEMO`; they are not
+presented as production data.
 
 ## Why this shape
 

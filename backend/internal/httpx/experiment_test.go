@@ -136,6 +136,21 @@ func TestSearchStart_UnknownStrategy(t *testing.T) {
 	}
 }
 
+func TestSearchStart_UnsupportedMarket(t *testing.T) {
+	srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), newFakeRepo()))
+	defer srv.Close()
+
+	body := `{"pair":"NOTREAL","timeframe":"5m","from":1,"to":10000000,"capital":1000,"strategies":["MA"]}`
+	resp, err := http.Post(srv.URL+"/search/start", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for unsupported market", resp.StatusCode)
+	}
+}
+
 func TestSearchStart_NormalizesMarketLookup(t *testing.T) {
 	candles := &fakeCandleRepo{}
 	router := httpx.NewRouterWithContext(context.Background(), newTestRegistry(), newFakeRepo(), httpx.Dependencies{Candles: candles})

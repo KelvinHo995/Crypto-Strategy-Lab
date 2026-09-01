@@ -10,20 +10,28 @@ import {
   type SingleStrategyInstance,
   type DiscoveryStats,
 } from './services/mockStrategyData';
-import { fetchStrategies, startSearch } from '../../shared/api';
+import { fetchMarkets, fetchStrategies, startSearch } from '../../shared/api';
 import { useWebSocketSubscription } from '../../shared/hooks';
 import type { WSSearchProgressPayload } from '../../types/websocket';
+import type { MarketInfo } from '../../types/candle';
+import { DEFAULT_MARKETS } from '../market/services/marketCatalog';
+import { useAppMode } from '../../shared/auth';
 
 export function StrategyDiscoveryPage() {
+  const mode = useAppMode();
+  const [markets, setMarkets] = useState<MarketInfo[]>(DEFAULT_MARKETS);
+  const [symbol, setSymbol] = useState('BTCUSDT');
   const [instances, setInstances] = useState<SingleStrategyInstance[]>(DEFAULT_SINGLE_STRATEGIES);
   const [stats, setStats] = useState<DiscoveryStats>(DEFAULT_DISCOVERY_STATS);
   const [miniLeaderboard] = useState(MINI_LEADERBOARD_DATA);
 
   useEffect(() => {
+    if (mode !== 'LIVE') return;
     fetchStrategies().then(names => {
       setInstances(current => current.filter(instance => names.includes(instance.type)));
     }).catch(() => undefined);
-  }, []);
+    fetchMarkets().then(setMarkets).catch(() => setMarkets(DEFAULT_MARKETS));
+  }, [mode]);
 
   useWebSocketSubscription<WSSearchProgressPayload>('SEARCH_PROGRESS', progress => {
     setStats(current => ({
@@ -68,7 +76,7 @@ export function StrategyDiscoveryPage() {
     if (strategyNames.length === 0) return;
     setStats(current => ({ ...current, iteration: 0, totalIterations: 1, testedCandidates: 0, status: 'RUNNING' }));
     try {
-      await startSearch({ pair: 'BTCUSDT', timeframe: '1h', from: Date.now() - 180 * 86400000, to: Date.now(), capital: 10000, strategies: strategyNames });
+      await startSearch({ pair: symbol, timeframe: '1h', from: Date.now() - 180 * 86400000, to: Date.now(), capital: 10000, strategies: strategyNames });
       alert(`Đã gửi backtest thật: ${activeNames}. Theo dõi tiến độ qua WebSocket.`);
     } catch (error) {
       setStats(current => ({ ...current, status: 'IDLE' }));
@@ -78,6 +86,12 @@ export function StrategyDiscoveryPage() {
 
   return (
     <div style={pageContainerStyle}>
+      <div style={marketToolbarStyle}>
+        <span>Discovery market</span>
+        <select value={symbol} onChange={event => setSymbol(event.target.value)} style={marketSelectStyle}>
+          {markets.map(market => <option key={market.symbol} value={market.symbol}>{market.baseAsset}/{market.quoteAsset}</option>)}
+        </select>
+      </div>
       {/* Cột 1: Danh sách Strategy đơn */}
       <div style={col1Style}>
         <SingleStrategyList
@@ -117,6 +131,9 @@ const pageContainerStyle: React.CSSProperties = {
   alignItems: 'stretch',
   flexWrap: 'wrap', // Wrap column on smaller screens
 };
+
+const marketToolbarStyle: React.CSSProperties = { width: '100%', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.6rem', color: '#475569', fontSize: '0.78rem' };
+const marketSelectStyle: React.CSSProperties = { border: '1px solid #cbd5e1', borderRadius: '6px', background: '#fff', color: '#0f172a', padding: '0.35rem 0.5rem' };
 
 const col1Style: React.CSSProperties = {
   width: '280px',
