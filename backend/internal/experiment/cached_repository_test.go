@@ -28,6 +28,9 @@ func (r *countingExperimentRepository) List(context.Context) ([]experiment.Resul
 func (r *countingExperimentRepository) MarkStaleRunningFailed(context.Context, time.Duration) ([]experiment.Result, error) {
 	return nil, nil
 }
+func (r *countingExperimentRepository) ListBySearch(context.Context, string) ([]experiment.Result, error) {
+	return nil, nil
+}
 
 func TestCachedExperimentRepositoryCoalescesAndInvalidates(t *testing.T) {
 	next := &countingExperimentRepository{}

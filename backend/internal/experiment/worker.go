@@ -12,21 +12,61 @@ import (
 )
 
 type WorkerPool struct {
-	queue    Queue
-	registry *strategy.Registry
-	repo     Repository
-	candles  market.CandleRepository
-	workers  int
-	wg       sync.WaitGroup
-	observer func(Result)
+	queue     Queue
+	registry  *strategy.Registry
+	repo      Repository
+	candles   market.CandleRepository
+	workers   int
+	wg        sync.WaitGroup
+	obsMu     sync.Mutex
+	observers map[int]func(Result)
+	nextObsID int
 }
 
-func (p *WorkerPool) SetObserver(observer func(Result)) { p.observer = observer }
-func (p *WorkerPool) notify(r Result) {
-	observer := p.observer
-	if observer == nil {
-		return
+// SetObserver replaces every existing observer with just this one — kept
+// for the router's single always-on WebSocket-hub wiring. Use AddObserver
+// for anything that needs to coexist with it (e.g. a search loop tracking
+// its own candidates' completions).
+func (p *WorkerPool) SetObserver(observer func(Result)) {
+	p.obsMu.Lock()
+	defer p.obsMu.Unlock()
+	p.observers = map[int]func(Result){0: observer}
+	p.nextObsID = 1
+}
+
+// AddObserver registers an additional observer without disturbing any
+// already registered. The returned func removes it; callers that only run
+// for a while (like a search loop) must call it when done, or the closure
+// leaks for the life of the process.
+func (p *WorkerPool) AddObserver(observer func(Result)) (unsubscribe func()) {
+	p.obsMu.Lock()
+	defer p.obsMu.Unlock()
+	if p.observers == nil {
+		p.observers = map[int]func(Result){}
 	}
+	id := p.nextObsID
+	p.nextObsID++
+	p.observers[id] = observer
+	return func() {
+		p.obsMu.Lock()
+		defer p.obsMu.Unlock()
+		delete(p.observers, id)
+	}
+}
+
+func (p *WorkerPool) notify(r Result) {
+	p.obsMu.Lock()
+	observers := make([]func(Result), 0, len(p.observers))
+	for _, o := range p.observers {
+		observers = append(observers, o)
+	}
+	p.obsMu.Unlock()
+	for _, observer := range observers {
+		p.notifyOne(observer, r)
+	}
+}
+
+func (p *WorkerPool) notifyOne(observer func(Result), r Result) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			log.Printf("experiment worker: observer panic for %s: %v", r.ID, recovered)

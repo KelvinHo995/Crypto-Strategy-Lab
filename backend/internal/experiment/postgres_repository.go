@@ -131,6 +131,29 @@ func (p *PostgresRepository) List(ctx context.Context) ([]Result, error) {
 	return results, rows.Err()
 }
 
+func (p *PostgresRepository) ListBySearch(ctx context.Context, searchID string) ([]Result, error) {
+	rows, err := p.db.QueryContext(ctx, `
+		SELECT id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
+			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
+			total_profit, status, created_at, updated_at
+		FROM experiments WHERE search_id = $1
+	`, searchID)
+	if err != nil {
+		return nil, fmt.Errorf("list experiments by search: %w", err)
+	}
+	defer rows.Close()
+
+	var results []Result
+	for rows.Next() {
+		r, err := scanResult(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan experiment: %w", err)
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
 type scanner interface {
 	Scan(dest ...any) error
 }

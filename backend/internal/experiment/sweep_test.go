@@ -46,6 +46,17 @@ func (r *memRepo) List(context.Context) ([]experiment.Result, error) {
 	}
 	return out, nil
 }
+func (r *memRepo) ListBySearch(_ context.Context, searchID string) ([]experiment.Result, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []experiment.Result
+	for _, res := range r.results {
+		if res.SearchID == searchID {
+			out = append(out, res)
+		}
+	}
+	return out, nil
+}
 func (r *memRepo) MarkStaleRunningFailed(_ context.Context, olderThan time.Duration) ([]experiment.Result, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -110,6 +110,7 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 		job := experiment.BacktestJob{
 			ID: id, SearchID: id, SearchTotal: 1, Candidate: candidate,
 			Pair: req.Pair, Timeframe: req.TimeFrame, From: req.From, To: req.To,
+			Candles: candles,
 			Config: experiment.Config{Pair: req.Pair, StartingCapital: req.Capital,
 				PositionSizePct: 1, StopLossPct: 0.02, TakeProfitPct: 0.04,
 				FeePct: 0.001, SlippageBps: 5, Window: 20},

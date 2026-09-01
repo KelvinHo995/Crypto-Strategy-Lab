@@ -45,6 +45,12 @@ func (r *CachedRepository) Get(ctx context.Context, id string) (Result, error) {
 	return r.next.Get(ctx, id)
 }
 
+// ListBySearch isn't cached — it's a per-search progress/no-improvement
+// lookup, not the hot bounded-leaderboard read List() exists to protect.
+func (r *CachedRepository) ListBySearch(ctx context.Context, searchID string) ([]Result, error) {
+	return r.next.ListBySearch(ctx, searchID)
+}
+
 func (r *CachedRepository) List(ctx context.Context) ([]Result, error) {
 	r.mu.Lock()
 	generation := r.generation

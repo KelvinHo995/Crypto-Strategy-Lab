@@ -32,13 +32,50 @@ subsystem:
   and let queue latency (time between enqueue and dequeue) be measured
   directly, without a separate metrics store.
 
-**MVP implementation status (2026-08-27):** one accepted HTTP request creates
-one bounded job, so the running backend cannot enter an uncontrolled loop.
-The queue and three-worker pool implement the per-job states above. Batched
-candidate generation, user cancellation, and `SEARCH_PROGRESS` WebSocket
-broadcasting remain integration work; they are not claimed as implemented.
-For the first batched version, max candidate count is the required stop
-condition and wins when any additional optional limit is reached first.
+**Implementation status (2026-09-01):** `POST /search/loop` generates
+candidates via `strategy.RandomGenerator` and enqueues them one at a time
+(`experiment.RunSearchLoop`) until the first stop condition trips — OR
+semantics, exactly as decided above:
+- **max candidate count** — required (`MaxCandidates`, validated 2–200),
+  always the backstop even if nothing else is set.
+- **max wall-clock time** — optional (`MaxDurationSeconds`, validated
+  60–3600 if set).
+- **no-improvement-in-N** — optional (`NoImprovementLimit`). Tracked
+  event-driven via a new `WorkerPool.AddObserver` (multiple observers, not
+  just the one `SetObserver` hook the WebSocket hub already used) rather
+  than polling the database before every candidate — the loop's observer
+  gets pushed a notification the instant one of its own candidates
+  completes, updates an in-memory best-score/steps-since-improvement pair,
+  and the generator checks that before producing the next candidate. Two
+  honest imprecisions, both accepted:
+  - it counts *generation attempts*, not *completions in generation
+    order* — 3 workers finish out of order, so "N iterations" means "N
+    times the generator checked and found no new best," not "N
+    consecutive backtests."
+  - because the queue lets the generator race ahead of what's actually
+    finished (up to the queue's buffer size), the stop can overshoot
+    `NoImprovementLimit` by a few candidates before it lands. Tightening
+    this would mean waiting for each candidate to finish before generating
+    the next, serializing generation to completion pace and starving the
+    3-worker pool's parallelism — not worth it for a bound that's already
+    naturally capped by queue depth.
+- **user-cancel** — still deferred. Nothing on the frontend calls a cancel
+  endpoint today, and the other three conditions already guarantee
+  termination (no `while(true)` risk) without it.
+
+Within one loop run, generated candidates are deduplicated locally (a
+`seen` set keyed by sorted strategies + params + policy, in-memory, scoped
+to that single run) — cheap and simple, even though the actual param space
+(see `strategy.RandomGenerator`) is large enough that accidental collisions
+are already very unlikely at the validated candidate-count range.
+
+`SEARCH_PROGRESS` (`{tested, total}`) is now real, not a placeholder:
+`Result`/`BacktestJob` carry `SearchID`+`SearchTotal`, `Repository.List`
+gained `ListBySearch`, and `Hub.JobUpdated` computes `tested` by counting
+actual `COMPLETED`/`FAILED` rows for that search rather than hardcoding
+`{0,1}`/`{1,1}`. This also unified the single-candidate `/search/start`
+path onto the same mechanism (`SearchID = its own ID`, `SearchTotal = 1`)
+instead of a separate, divergent code path.
 
 ## Alternatives considered
 
@@ -65,9 +102,21 @@ condition and wins when any additional optional limit is reached first.
   Observability rubric question.
 - **Rule:** combined stop conditions use OR semantics: the first limit reached
   stops further generation. Already-enqueued jobs finish normally.
-- **Rule:** deterministic candidate/build failures are terminal. Infrastructure
+- **Positive — Extensibility:** `WorkerPool.AddObserver` turned a single
+  hardcoded callback into a small pub-sub registry — any new consumer
+  (a failure counter for the deck's "how many job lỗi?" observability
+  question, a per-search best-result cache, a future notification hook)
+  is just another `AddObserver` call, with zero changes to `WorkerPool` or
+  any existing observer. Same category of evidence as the `Queue`
+  interface's Replaceability argument in ADR-0004, this time for
+  Extensibility.
+- **Rule (updated 2026-09-01):** deterministic candidate/build failures are
+  terminal — retrying a bad candidate would just fail identically. Infrastructure
   failures while loading or persisting are Nack'ed and may be claimed up to
-  three times with bounded backoff under the same traceable job ID.
+  three times with bounded backoff (`PostgresQueue`) under the same traceable
+  job ID before becoming terminal too. Manual resubmission after that creates
+  a new job ID, same as before — this supersedes the original "no automatic
+  retry" rule, which held for the simpler `InMemoryQueue`-only MVP.
 - **Rule:** a `RUNNING` result whose worker or process crashed mid-job would
   otherwise sit stuck forever with nothing to notice it. A periodic sweep
   (`experiment.Sweeper`, on a 1-minute tick) fails any `RUNNING` result whose

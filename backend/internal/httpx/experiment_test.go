@@ -67,6 +67,18 @@ func (f *fakeRepo) List(_ context.Context) ([]experiment.Result, error) {
 	return out, nil
 }
 
+func (f *fakeRepo) ListBySearch(_ context.Context, searchID string) ([]experiment.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []experiment.Result
+	for _, r := range f.results {
+		if r.SearchID == searchID {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeRepo) MarkStaleRunningFailed(context.Context, time.Duration) ([]experiment.Result, error) {
 	return nil, nil
 }
