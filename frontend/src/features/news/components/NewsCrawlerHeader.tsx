@@ -89,10 +89,10 @@ export function NewsCrawlerHeader({
         >
           {isCrawling ? (
             <span style={crawlingFlexStyle}>
-              <span style={spinnerStyle} /> Crawling Live Feeds...
+              <span style={spinnerStyle} /> Analyzing through live services...
             </span>
           ) : (
-            'Bắt đầu crawl'
+            'Analyze sample article'
           )}
         </button>
       </div>
@@ -174,7 +174,7 @@ const labelStyle: React.CSSProperties = {
 
 const selectStyle: React.CSSProperties = {
   backgroundColor: '#ffffff',
-  color: '#ffffff',
+  color: '#0f172a',
   border: '1px solid #cbd5e1',
   borderRadius: '4px',
   padding: '0.35rem 0.5rem',

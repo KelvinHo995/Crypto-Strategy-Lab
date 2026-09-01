@@ -83,3 +83,30 @@ no UI/UX source was changed in this review pass.
 - Retained explicit mock fallback for market outages and for News/trade-detail
   screens whose source endpoints are outside MVP.
 - Updated the previously stale pnpm lockfile and removed frontend lint errors.
+
+## 2026-09-01 teammate-integration follow-up
+
+- Removed a committed `cookies.txt` session artifact and ignored future cookie
+  exports; restored one canonical root `README.md` to avoid Windows casing
+  collisions.
+- Added observer-level panic isolation so a faulty WebSocket/observer callback
+  cannot terminate a worker, including a regression test proving the worker
+  completes the next queued job.
+- Added compatibility decoding plus migration `0003` for two legacy experiment
+  rows stored as pgx bytea-style hex text in Supabase. `GET /experiments` now
+  decodes every existing row.
+- Changed candle persistence from one SQL round-trip per row to idempotent
+  500-row batches and made `cmd/backfill` load the documented local `.env`.
+  A real Binance/Supabase run stored 210,239 `5m`, 70,079 `15m`, 17,519 `1h`,
+  and 4,379 `4h` closed candles.
+- Connected the News screen's sample-analysis action to the authenticated Go
+  sentiment endpoint. Live observations are labelled `LIVE`; fixture feed and
+  aggregate panels remain labelled `DEMO` because a production collector is
+  outside MVP.
+- Runtime smoke evidence: auth succeeded, six strategies listed, 167 recent
+  1h candles loaded, search returned HTTP 202 then `COMPLETED`, experiments
+  returned HTTP 200, WebSocket delivered `SEARCH_PROGRESS`, live sentiment
+  returned HTTP 201 through the Vite proxy, and service-down returned HTTP 502.
+- Final regression: `go test -count=3 ./...`, `go vet ./...`, frontend lint/build,
+  Python sentiment tests, and `git diff --check` passed. The Go race detector
+  remains unavailable because the current Windows toolchain has CGO disabled.

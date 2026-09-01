@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type { Candle } from '../../types/candle';
 import type { ExperimentResult, StartSearchRequest, StartSearchResponse } from '../../types/backtest';
+import type { SentimentObservation } from '../../types/news';
 
 // Get the base API URL from environment variables, fallback to localhost:8080 during development
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -53,4 +54,8 @@ export async function fetchExperiments(): Promise<ExperimentResult[]> {
 
 export async function startSearch(request: StartSearchRequest): Promise<StartSearchResponse> {
   return (await apiClient.post<StartSearchResponse>('/search/start', request)).data;
+}
+
+export async function analyzeSentiment(newsId: string, text: string, publishedAt: number): Promise<SentimentObservation> {
+  return (await apiClient.post<SentimentObservation>('/sentiment/analyze', { newsId, text, publishedAt })).data;
 }

@@ -21,9 +21,16 @@ type WorkerPool struct {
 
 func (p *WorkerPool) SetObserver(observer func(Result)) { p.observer = observer }
 func (p *WorkerPool) notify(r Result) {
-	if p.observer != nil {
-		p.observer(r)
+	observer := p.observer
+	if observer == nil {
+		return
 	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Printf("experiment worker: observer panic for %s: %v", r.ID, recovered)
+		}
+	}()
+	observer(r)
 }
 
 func NewWorkerPool(queue Queue, registry *strategy.Registry, repo Repository, workers int) *WorkerPool {

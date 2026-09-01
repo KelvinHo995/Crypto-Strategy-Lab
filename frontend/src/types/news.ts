@@ -11,6 +11,16 @@ export interface SentimentAnalysis {
   createdAt: number;
 }
 
+export interface SentimentObservation {
+  newsId: string;
+  publishedAt: number;
+  sentiment: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
+  score: number;
+  modelName: string;
+  modelVersion: string;
+  analyzedAt: number;
+}
+
 export interface NewsItem {
   id: string;
   title: string;
@@ -19,4 +29,5 @@ export interface NewsItem {
   url?: string;
   publishedAt: number; // Unix timestamp in milliseconds
   sentiment?: SentimentAnalysis;
+  analysisSource?: 'LIVE' | 'DEMO';
 }
