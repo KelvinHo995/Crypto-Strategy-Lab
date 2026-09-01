@@ -10,6 +10,11 @@ import (
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
 )
 
+func listMarkets(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(market.DefaultCatalog())
+}
+
 func listCandles(repo market.CandleRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if repo == nil {
@@ -24,7 +29,11 @@ func listCandles(repo market.CandleRepository) http.HandlerFunc {
 			http.Error(w, "symbol and valid from/to are required", http.StatusBadRequest)
 			return
 		}
-		if timeframe != "5m" && timeframe != "15m" && timeframe != "1h" && timeframe != "4h" {
+		if !market.IsSupportedSymbol(symbol) {
+			http.Error(w, "unsupported symbol", http.StatusBadRequest)
+			return
+		}
+		if !market.IsSupportedTimeframe(timeframe) {
 			http.Error(w, "unsupported timeframe", http.StatusBadRequest)
 			return
 		}

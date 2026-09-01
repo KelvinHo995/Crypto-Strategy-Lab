@@ -53,13 +53,32 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	pool.Start(ctx)
 	go experiment.NewSweeper().Run(ctx, repo, experiment.DefaultStaleThreshold, experiment.DefaultSweepInterval, hub.JobUpdated)
 	if deps.Live != nil {
-		for _, frame := range []string{"5m", "15m", "1h", "4h"} {
-			candles := deps.Live.StreamLiveCandles(ctx, "BTCUSDT", frame)
+		if combined, ok := deps.Live.(market.CombinedLiveProvider); ok {
+			catalog := market.DefaultCatalog()
+			symbols := make([]string, 0, len(catalog))
+			for _, item := range catalog {
+				symbols = append(symbols, item.Symbol)
+			}
+			events := combined.StreamMarketEvents(ctx, symbols, market.SupportedTimeframes())
 			go func() {
-				for c := range candles {
-					hub.Broadcast(Event{Type: "CANDLE_UPDATE", Payload: c})
+				for event := range events {
+					switch event.Type {
+					case "CANDLE_UPDATE":
+						hub.Broadcast(Event{Type: event.Type, Payload: event.Candle})
+					case "TRADE_TICK":
+						hub.Broadcast(Event{Type: event.Type, Payload: event.Trade})
+					}
 				}
 			}()
+		} else {
+			for _, frame := range market.SupportedTimeframes() {
+				candles := deps.Live.StreamLiveCandles(ctx, "BTCUSDT", frame)
+				go func() {
+					for c := range candles {
+						hub.Broadcast(Event{Type: "CANDLE_UPDATE", Payload: c})
+					}
+				}()
+			}
 		}
 	}
 	public := http.NewServeMux()
@@ -77,6 +96,7 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	protected.HandleFunc("GET /experiments", listExperiments(repo))
 	protected.HandleFunc("GET /experiments/{id}", getExperiment(repo))
 	protected.HandleFunc("GET /strategies", strategyHandler.ListStrategies)
+	protected.HandleFunc("GET /markets", listMarkets)
 	protected.HandleFunc("GET /candles", listCandles(deps.Candles))
 	protected.HandleFunc("POST /sentiment/analyze", analyzeSentiment(deps.Sentiment))
 	protected.HandleFunc("GET /ws", serveWebSocket(hub))
