@@ -77,10 +77,13 @@ func startLoop(gen strategy.StrategyGenerator, pool *experiment.WorkerPool, repo
 			return
 		}
 
-		candles := fixtureCandles(req.Pair, req.From, req.To)
+		// Fetched only to validate there's enough backfilled data to bother
+		// starting a loop over — the result itself isn't threaded through to
+		// the generated jobs. Workers fetch their own candles on demand
+		// (see BacktestJob.Candles' json:"-" tag), backed by the candle
+		// cache, so embedding this fetch's result would just be discarded.
 		if candleRepo != nil {
-			var err error
-			candles, err = candleRepo.Range(r.Context(), req.Pair, req.TimeFrame, req.From, req.To)
+			candles, err := candleRepo.Range(r.Context(), req.Pair, req.TimeFrame, req.From, req.To)
 			if err != nil {
 				http.Error(w, "load historical candles", http.StatusInternalServerError)
 				return
@@ -94,8 +97,8 @@ func startLoop(gen strategy.StrategyGenerator, pool *experiment.WorkerPool, repo
 		now := time.Now()
 		searchID := experiment.NewJobID(now)
 		params := experiment.LoopParams{
-			SearchID: searchID, Pair: req.Pair, StartingCapital: req.Capital,
-			Candles: candles, DatasetPeriod: fmt.Sprintf("%d-%d", req.From, req.To),
+			SearchID: searchID, Pair: req.Pair, TimeFrame: req.TimeFrame, From: req.From, To: req.To,
+			StartingCapital: req.Capital, DatasetPeriod: fmt.Sprintf("%d-%d", req.From, req.To),
 			MaxCandidates:      req.MaxCandidates,
 			MaxDuration:        time.Duration(req.MaxDurationSeconds) * time.Second,
 			NoImprovementLimit: req.NoImprovementLimit,

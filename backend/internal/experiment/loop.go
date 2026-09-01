@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/strategy"
 )
 
@@ -24,8 +23,9 @@ type observerRegistry interface {
 type LoopParams struct {
 	SearchID           string
 	Pair               string
+	TimeFrame          string
+	From, To           int64
 	StartingCapital    float64
-	Candles            []market.Candle
 	DatasetPeriod      string
 	MaxCandidates      int
 	MaxDuration        time.Duration
@@ -103,7 +103,8 @@ func RunSearchLoop(ctx context.Context, params LoopParams, gen strategy.Strategy
 		now := time.Now()
 		job := BacktestJob{
 			ID: id, SearchID: params.SearchID, SearchTotal: params.MaxCandidates,
-			Candidate: candidate, Candles: params.Candles,
+			Candidate: candidate,
+			Pair:      params.Pair, Timeframe: params.TimeFrame, From: params.From, To: params.To,
 			Config: Config{
 				Pair: params.Pair, StartingCapital: params.StartingCapital,
 				PositionSizePct: 1, StopLossPct: 0.02, TakeProfitPct: 0.04,
