@@ -9,8 +9,9 @@ ch.47): "Generate → Execute → Measure → Rank → Improve → Generate...".
 StrategyGenerator.Generate()
      │  produces a CandidateStrategy (see 05-strategy-flow.md)
      ▼
-PostgresQueue.EnqueuePending(job, result)
-     │  one transaction: PENDING provenance + compact durable job
+Queue submission
+     │  /search/start → PostgresQueue.EnqueuePending(job, result), one transaction
+     │  /search/loop  → Repository.Save then Queue.Enqueue (open atomicity gap)
      ▼
 Worker pool (3 workers, SKIP LOCKED claim + lease heartbeat)
      │  load referenced candle range through bounded cache
@@ -30,7 +31,8 @@ Evaluator
      │    "did the strategy trade correctly" vs "was the outcome good" are
      │    different questions with different failure modes
      ▼
-experiment.Result  { CandidateID, StrategyVersions (provenance), Return,
+experiment.Result  { SearchID, SearchTotal, CandidateID,
+                      StrategyVersions (provenance), Return,
                       MDD, TradeCount, Status, CreatedAt }
      ▼
 Ranking (Score = 0.50×Return + 0.30×WinRate − 0.20×MDD)
@@ -43,7 +45,7 @@ Leaderboard (Top-K, K=10 by default)
 WebSocket → { "type": "LEADERBOARD_UPDATE", payload: Result[] }
      │        { "type": "SEARCH_PROGRESS", payload: {tested, total} }
      ▼
-Frontend — leaderboard re-renders without a page reload (spec ch.33 step 9)
+Frontend — Discovery progress and leaderboard re-render only from server events
 ```
 
 ## Why a queue + worker pool, not a sequential loop
@@ -87,11 +89,28 @@ Strategy/Registry boundary in
 
 ## Stop condition
 
-The current HTTP slice accepts one candidate per request and therefore has an
-implicit candidate-count cap of one; it never uses `while(true)`. The next
-Search integration will batch generated candidates and use the configured
-candidate-count cap as the MVP stop condition. Wall-clock and no-improvement
-limits remain extension points rather than partially implemented behaviour.
+`POST /search/start` remains the explicit one-candidate path. The Discovery UI
+uses `POST /search/loop`, which validates `maxCandidates` (2–200), optional
+`maxDurationSeconds` (`0` or 60–3600), and optional non-negative
+`noImprovementLimit`. Enabled conditions have OR semantics: reaching any one
+stops further generation; queued work continues.
+
+That describes the intended policy, but there are implementation caveats that
+must remain visible until the backend work is complete:
+
+- wall-clock time currently measures the generator goroutine, not the complete
+  search run;
+- the production PostgreSQL queue is durable but effectively unbounded, so the
+  generator can enqueue the requested maximum before completion-driven
+  no-improvement state changes;
+- the observer is removed when generation returns, while queued jobs can still
+  be running;
+- there is no persisted search-run status/reason, so an early stop does not emit
+  a terminal `STOPPED` event and progress can remain below the requested total;
+- candidate dedup retries ten times, then may still enqueue a duplicate.
+
+Consequently max-candidates is the only currently deterministic external bound.
+The other controls are accepted inputs but are not release-complete semantics.
 
 ## Implemented runtime states
 
@@ -104,10 +123,24 @@ candidate-resolution failure becomes `FAILED`. Infrastructure writes retry up
 to three claims with bounded backoff; stale leases are reclaimable. Exhausting
 the third claim atomically marks both the job and experiment `FAILED`. Workers
 heartbeat both the job lease and experiment `updated_at`. Each result stores
-`searchId`/`searchTotal` (`id`/`1` for today's single-candidate request) so a
-future bounded batch can group candidates without another contract change. Repository reads use
+`searchId`/`searchTotal` (`id`/`1` for the single-candidate request). Loop jobs
+use one shared `searchId` and the requested maximum as `searchTotal`. Repository reads use
 an indexed, cached Top-100 snapshot; incomplete jobs remain visible below
 completed results.
+
+`POST /search/loop` returns HTTP 202 with
+`{searchId,status:"STARTED",maxCandidates}` after validating that at least 21
+candles exist. It does not wait for generated jobs. Today there is no standalone
+search-run resource: `STARTED` is an acknowledgement, not a queryable lifecycle
+record. Per-candidate states remain `PENDING|RUNNING|COMPLETED|FAILED`.
+
+`SEARCH_PROGRESS` currently contains only `{tested,total}` and is global to an
+authenticated WebSocket connection. `tested` counts terminal candidate rows;
+`total` is the requested maximum. The frontend never advances this value
+locally. It treats `tested == total` as `COMPLETED`, reports REST failures as
+`FAILED`, and supports additive future `{searchId,status,reason}` fields for
+explicit `STOPPED|FAILED` search-run events. Until those fields exist, an early
+stop cannot be represented accurately in the UI.
 
 ## Trade simulation realism
 

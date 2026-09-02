@@ -37,6 +37,7 @@ From three terminals:
 cd backend
 go test -count=3 ./...
 go vet ./...
+go test -count=3 ./internal/httpx -run TestSearchLoop_RealProgressOverWebSocket
 ```
 
 The durable-queue runtime test is deliberately opt-in because a running backend
@@ -51,6 +52,7 @@ Remove-Item Env:RUN_POSTGRES_QUEUE_INTEGRATION
 ```powershell
 cd frontend
 pnpm install --frozen-lockfile
+pnpm test
 pnpm run lint
 pnpm run build
 ```
@@ -112,9 +114,13 @@ Expected health checks:
 3. Open every chart selector and confirm BTC, ETH, BNB, SOL, XRP, ADA, DOGE and
    AVAX are present. Switch at least one chart and the trade feed to another
    symbol; their data must change without a page reload.
-4. On **Strategies**, choose a non-BTC market, enable MA + RSI and start the
-   search. The request should start immediately and eventually update the
-   leaderboard.
+4. On **Strategies**, choose a market with a completed 180-day `1h` backfill.
+   In **Loop Discovery**, set timeframe `1h`, candidates `5`, max duration
+   `300`, no-improvement `0`, then start. Network must show one HTTP 202 from
+   `POST /search/loop`; the UI must not advance before a `SEARCH_PROGRESS`
+   WebSocket frame arrives. Observe real progress through `1/5` … `5/5`, a
+   `COMPLETED` badge, and at least one non-empty `LEADERBOARD_UPDATE`. The
+   mini-leaderboard must match the WebSocket payload instead of fixture rows.
 5. On **Backtests**, confirm the default date range is the latest 90 days, run
    a simulation and wait for `COMPLETED`. Open its result/provenance details.
 6. On **Market news**, run the sample sentiment action. It must be labelled
@@ -125,6 +131,13 @@ Expected health checks:
 Any `MOCK` market candle/trade label while signed into `Live infrastructure` is
 a failure. An explicit API error is expected when a requested range was not
 backfilled; the client must not disguise it with generated data.
+
+The current release gate additionally requires the Search Loop scenario above
+to finish. A permanent value below `5/5`, a WebSocket timeout, repeated result
+IDs, or a loop that stays `RUNNING` after an early stop is a backend failure;
+do not compensate with a frontend timer. `STOPPED` and search-level `FAILED`
+can only be accepted once the backend publishes additive
+`{searchId,status,reason}` progress fields.
 
 ## 6. Authenticated API smoke test
 
@@ -164,6 +177,31 @@ for ($attempt = 0; $attempt -lt 40; $attempt++) {
 }
 if ($result.status -ne 'COMPLETED') { throw "Search ended as $($result.status)" }
 $result | Select-Object id,status,return,winRate,tradeCount,totalProfit
+
+# Continuous Search Loop acceptance: 5 candidates and terminal rows.
+$loopRequest = @{
+  pair='ADAUSDT'
+  timeframe='1h'
+  from=$from
+  to=$to
+  capital=10000
+  maxCandidates=5
+  maxDurationSeconds=300
+  noImprovementLimit=0
+} | ConvertTo-Json
+$loop = Invoke-RestMethod -Uri "$base/search/loop" -Method Post -ContentType 'application/json' -Body $loopRequest -WebSession $session
+if ($loop.status -ne 'STARTED' -or $loop.maxCandidates -ne 5) { throw "Unexpected loop response" }
+for ($attempt = 0; $attempt -lt 120; $attempt++) {
+  $allResults = Invoke-RestMethod -Uri "$base/experiments" -WebSession $session
+  $loopResults = @($allResults | Where-Object { $_.searchId -eq $loop.searchId })
+  $terminal = @($loopResults | Where-Object { $_.status -in @('COMPLETED','FAILED') })
+  if ($loopResults.Count -eq 5 -and $terminal.Count -eq 5) { break }
+  Start-Sleep -Milliseconds 250
+}
+if ($loopResults.Count -ne 5 -or $terminal.Count -ne 5) {
+  throw "Loop did not reach 5 terminal candidates: rows=$($loopResults.Count), terminal=$($terminal.Count)"
+}
+$loopResults | Select-Object id,searchId,searchTotal,status,return,winRate,mdd
 ```
 
 Expected negative checks:

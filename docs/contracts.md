@@ -15,12 +15,41 @@ backfill persists only closed candles. Live updates may carry
 returns HTTP 202 `{searchId,status:"STARTED"}`. The result transitions through
 `PENDING|RUNNING|COMPLETED|FAILED`. `GET /experiments` returns ranked results;
 `GET /experiments/{id}` returns one provenance snapshot. Every persisted result
-also carries `searchId` and `searchTotal`; the current one-candidate flow uses
-the result ID and `1`, leaving an explicit compatible contract for future batch
-discovery.
+also carries `searchId` and `searchTotal`; the one-candidate flow uses the
+result ID and `1`.
+
+`POST /search/loop` accepts:
+
+```json
+{
+  "pair": "BTCUSDT",
+  "timeframe": "1h",
+  "from": 1780000000000,
+  "to": 1790000000000,
+  "capital": 10000,
+  "maxCandidates": 5,
+  "maxDurationSeconds": 300,
+  "noImprovementLimit": 3
+}
+```
+
+`maxCandidates` is required and bounded to 2–200. `maxDurationSeconds` is `0`
+or 60–3600; `noImprovementLimit` is non-negative. HTTP 202 returns
+`{searchId,status:"STARTED",maxCandidates}`. HTTP 422 means the requested
+pair/timeframe/range has fewer than 21 persisted candles and must be backfilled;
+the server never substitutes generated candles.
+
+The intended stop rule is OR semantics: stop generating when the first enabled
+limit is reached, while already-enqueued jobs finish. Current implementation
+does not yet persist a search-run row or terminal reason. Therefore an early
+duration/no-improvement stop cannot currently be distinguished from a running
+search through REST or WebSocket, and `{tested,total}` can remain below the
+requested maximum. This is an open backend contract gap, not a frontend state
+to simulate.
 
 Production commits the initial `PENDING` row and compact `experiment_jobs`
-message atomically. A job contains dataset coordinates rather than candle rows;
+message atomically for `/search/start`. `/search/loop` still performs these as
+separate writes and must be migrated to the same `EnqueuePending` path. A job contains dataset coordinates rather than candle rows;
 workers claim with a renewable lease, load candles from the repository, and
 Ack/Nack after persistence. `GET /experiments` returns at most the indexed,
 score-ranked Top 100; WebSocket leaderboard updates publish Top 10.
@@ -51,12 +80,16 @@ except health/register/login require that cookie. Logout clears it.
 ```json
 {"type":"CANDLE_UPDATE","payload":{}}
 {"type":"TRADE_TICK","payload":{"symbol":"BTCUSDT","tradeId":1,"tradeTime":0,"price":0,"quantity":0,"side":"BUY"}}
-{"type":"SEARCH_PROGRESS","payload":{"tested":1,"total":1}}
+{"type":"SEARCH_PROGRESS","payload":{"tested":1,"total":5}}
 {"type":"LEADERBOARD_UPDATE","payload":[]}
 ```
 
-Search is started through the REST endpoint in the current MVP; the WebSocket
-is the server-push channel. A client selects only the market events it needs:
+Search is started through REST; WebSocket is the server-push channel. The
+current backend payload is exactly `{tested,total}`. The frontend also accepts
+the planned additive fields `{searchId,status,reason}` so it can render
+`COMPLETED|STOPPED|FAILED` when the backend exposes a terminal search-run event;
+clients must not invent those fields or advance progress with timers. A client
+selects only the market events it needs:
 
 ```json
 {"type":"SUBSCRIBE_CANDLES","payload":{"symbol":"ETHUSDT","timeframe":"1h"}}

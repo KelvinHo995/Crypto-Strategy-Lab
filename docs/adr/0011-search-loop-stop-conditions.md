@@ -3,6 +3,11 @@
 **Status:** Accepted
 **Owner:** Experiment (Person 3), Strategy + Search (Person 2)
 
+> **Implementation review (2026-09-02): Partial.** The endpoint and frontend
+> integration exist, but terminal search-run state, atomic loop enqueue and
+> reliable duration/no-improvement semantics are still open. This ADR records
+> the intended decision and explicitly separates it from shipped behavior.
+
 ## Context
 
 Spec ch.23 explicitly warns against `while(true)` as the continuous strategy
@@ -24,50 +29,43 @@ and can be combined:
 
 **Observability** is carried by two existing mechanisms rather than a new
 subsystem:
-- `SEARCH_PROGRESS` WebSocket messages (`{tested, total}`, PLAN.md §3.5),
-  extended to also carry current best score and failure count.
+- `SEARCH_PROGRESS` WebSocket messages (`{tested, total}`, PLAN.md §3.5).
+  `searchId`, terminal `status`, `reason`, best score and failure count are
+  additive target fields; the current backend does not publish them yet.
 - `BacktestJob.Status` (`PENDING|RUNNING|COMPLETED|FAILED`, per the
   `Result` schema) and `BacktestJob.EnqueuedAt`
   ([ADR-0004](0004-inprocess-job-queue-not-kafka.md)) give per-job status
   and let queue latency (time between enqueue and dequeue) be measured
   directly, without a separate metrics store.
 
-**Implementation status (2026-09-01):** `POST /search/loop` generates
+**Implemented input contract (2026-09-01):** `POST /search/loop` generates
 candidates via `strategy.RandomGenerator` and enqueues them one at a time
-(`experiment.RunSearchLoop`) until the first stop condition trips — OR
-semantics, exactly as decided above:
+(`experiment.RunSearchLoop`). It accepts the intended OR-semantics controls:
 - **max candidate count** — required (`MaxCandidates`, validated 2–200),
   always the backstop even if nothing else is set.
 - **max wall-clock time** — optional (`MaxDurationSeconds`, validated
   60–3600 if set).
-- **no-improvement-in-N** — optional (`NoImprovementLimit`). Tracked
+- **no-improvement-in-N** — optional (`NoImprovementLimit`). Currently tracked
   event-driven via a new `WorkerPool.AddObserver` (multiple observers, not
   just the one `SetObserver` hook the WebSocket hub already used) rather
   than polling the database before every candidate — the loop's observer
   gets pushed a notification the instant one of its own candidates
   completes, updates an in-memory best-score/steps-since-improvement pair,
-  and the generator checks that before producing the next candidate. Two
-  honest imprecisions, both accepted:
-  - it counts *generation attempts*, not *completions in generation
-    order* — 3 workers finish out of order, so "N iterations" means "N
-    times the generator checked and found no new best," not "N
-    consecutive backtests."
-  - because the queue lets the generator race ahead of what's actually
-    finished (up to the queue's buffer size), the stop can overshoot
-    `NoImprovementLimit` by a few candidates before it lands. Tightening
-    this would mean waiting for each candidate to finish before generating
-    the next, serializing generation to completion pace and starving the
-    3-worker pool's parallelism — not worth it for a bound that's already
-    naturally capped by queue depth.
+  and the generator checks that before producing the next candidate. Because
+  the production PostgreSQL queue has no bounded in-process buffer, generation
+  can enqueue every requested candidate before a completion arrives. The
+  observer is also removed as soon as generation ends. Therefore this input is
+  not yet a reliable production stop condition; a bounded in-flight window or
+  persisted search coordinator is required.
 - **user-cancel** — still deferred. Nothing on the frontend calls a cancel
-  endpoint today, and the other three conditions already guarantee
-  termination (no `while(true)` risk) without it.
+  endpoint today. Max-candidates still guarantees finite generation; the other
+  two inputs must not be described as completed until their runtime semantics
+  are corrected.
 
-Within one loop run, generated candidates are deduplicated locally (a
+Within one loop run, generated candidates use a local dedup attempt (a
 `seen` set keyed by sorted strategies + params + policy, in-memory, scoped
-to that single run) — cheap and simple, even though the actual param space
-(see `strategy.RandomGenerator`) is large enough that accidental collisions
-are already very unlikely at the validated candidate-count range.
+to that single run). After ten unsuccessful retries the current code accepts
+the duplicate, so strict deduplication remains open.
 
 `SEARCH_PROGRESS` (`{tested, total}`) is now real, not a placeholder:
 `Result`/`BacktestJob` carry `SearchID`+`SearchTotal`, `Repository.List`
@@ -76,6 +74,18 @@ actual `COMPLETED`/`FAILED` rows for that search rather than hardcoding
 `{0,1}`/`{1,1}`. This also unified the single-candidate `/search/start`
 path onto the same mechanism (`SearchID = its own ID`, `SearchTotal = 1`)
 instead of a separate, divergent code path.
+
+This progress contract is complete only when the loop creates exactly
+`SearchTotal` terminal rows. Early stop or enqueue failure can create fewer
+rows while every row still advertises the requested maximum. There is currently
+no search-run row or terminal event that revises the total or publishes
+`STOPPED`; consumers can otherwise wait forever below 100%.
+
+The frontend now calls `/search/loop`, sends all three controls and removes its
+former timer-generated progress. It renders only WebSocket counts, treats HTTP
+errors (including insufficient-candle 422) as `FAILED`, infers `COMPLETED` only
+at `tested == total`, and is prepared for future additive
+`{searchId,status,reason}` terminal fields.
 
 ## Alternatives considered
 
@@ -97,9 +107,9 @@ instead of a separate, divergent code path.
 
 - **Positive:** stop conditions are configuration, not code — changing
   search run limits doesn't need a rebuild.
-- **Positive:** `SEARCH_PROGRESS` gives the frontend (and the graded demo)
-  a live, honest signal of loop health, directly answering the deck's
-  Observability rubric question.
+- **Partial:** `SEARCH_PROGRESS` gives the frontend real terminal-candidate
+  counts when every requested candidate is created. It does not yet fully
+  answer loop health for early stops or distinguish concurrent searches.
 - **Rule:** combined stop conditions use OR semantics: the first limit reached
   stops further generation. Already-enqueued jobs finish normally.
 - **Positive — Extensibility:** `WorkerPool.AddObserver` turned a single
