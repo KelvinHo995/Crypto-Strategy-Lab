@@ -30,6 +30,10 @@ func (s *BollingerStrategy) Name() string {
 	return "Bollinger"
 }
 
+func (s *BollingerStrategy) MinLookback() int {
+	return s.Period
+}
+
 func (s *BollingerStrategy) Analyze(candles []market.Candle) Signal {
 	if s.Period <= 0 || s.StdDevMultiplier <= 0 || len(candles) < s.Period {
 		return Hold

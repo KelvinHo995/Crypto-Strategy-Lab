@@ -26,6 +26,10 @@ func (s *MAStrategy) Name() string {
 	return "MA"
 }
 
+func (s *MAStrategy) MinLookback() int {
+	return s.LongWindow + 1
+}
+
 func (s *MAStrategy) Analyze(candles []market.Candle) Signal {
 	if s.ShortWindow <= 0 || s.LongWindow <= 0 || s.ShortWindow >= s.LongWindow || len(candles) < s.LongWindow+1 {
 		return Hold

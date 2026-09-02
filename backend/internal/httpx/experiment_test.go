@@ -29,7 +29,7 @@ type fakeCandleRepo struct {
 func (f *fakeCandleRepo) Upsert(context.Context, []market.Candle) error { return nil }
 func (f *fakeCandleRepo) Range(_ context.Context, symbol, timeframe string, from, _ int64) ([]market.Candle, error) {
 	f.symbol, f.timeframe = symbol, timeframe
-	candles := make([]market.Candle, 21)
+	candles := make([]market.Candle, experiment.MinCandlesForBacktest)
 	for i := range candles {
 		candles[i] = market.Candle{Symbol: symbol, Timeframe: timeframe, OpenTime: from + int64(i), Open: 100, High: 101, Low: 99, Close: 100, Volume: 1, IsClosed: true}
 	}

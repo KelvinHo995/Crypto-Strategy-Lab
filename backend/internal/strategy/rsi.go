@@ -29,6 +29,10 @@ func (s *RSIStrategy) Name() string {
 	return "RSI"
 }
 
+func (s *RSIStrategy) MinLookback() int {
+	return s.Period + 1
+}
+
 func (s *RSIStrategy) Analyze(candles []market.Candle) Signal {
 	if s.Period <= 0 || s.OversoldThreshold < 0 || s.OverboughtThreshold > 100 || s.OversoldThreshold >= s.OverboughtThreshold || len(candles) <= s.Period {
 		return Hold

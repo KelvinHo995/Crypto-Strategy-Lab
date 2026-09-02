@@ -30,6 +30,10 @@ func (s *SRStrategy) Name() string {
 	return "SR"
 }
 
+func (s *SRStrategy) MinLookback() int {
+	return s.Window + 1
+}
+
 func (s *SRStrategy) Analyze(candles []market.Candle) Signal {
 	if s.Window <= 0 || s.Tolerance < 0 || len(candles) <= s.Window {
 		return Hold

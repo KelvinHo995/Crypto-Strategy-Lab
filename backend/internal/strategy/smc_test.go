@@ -34,3 +34,10 @@ func TestSMCStrategy_Analyze(t *testing.T) {
 		t.Errorf("Expected Sell for Bearish BOS, got %v", sig)
 	}
 }
+
+func TestSMCStrategy_MinLookback(t *testing.T) {
+	strat := NewSMCStrategy(10)
+	if got := strat.MinLookback(); got != 12 {
+		t.Fatalf("MinLookback() = %d, want 12 (SwingLookback+2)", got)
+	}
+}

@@ -58,3 +58,10 @@ func TestMAStrategy_Analyze(t *testing.T) {
 		})
 	}
 }
+
+func TestMAStrategy_MinLookback(t *testing.T) {
+	s := strategy.NewMAStrategy(20, 50)
+	if got := s.MinLookback(); got != 51 {
+		t.Fatalf("MinLookback() = %d, want 51 (LongWindow+1)", got)
+	}
+}

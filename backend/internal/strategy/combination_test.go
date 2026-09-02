@@ -44,3 +44,13 @@ func TestWeightedPolicy_Combine(t *testing.T) {
 		}
 	}
 }
+
+func TestCombinedStrategy_MinLookback(t *testing.T) {
+	ma := NewMAStrategy(20, 50)       // MinLookback = 51
+	rsi := NewRSIStrategy(14, 70, 30) // MinLookback = 15
+	combined := NewCombinedStrategy([]Strategy{ma, rsi}, MajorityPolicy{}, "")
+
+	if got := combined.MinLookback(); got != 51 {
+		t.Fatalf("MinLookback() = %d, want 51 (max across wrapped strategies, not either one alone)", got)
+	}
+}

@@ -206,7 +206,7 @@ const labelStyle: React.CSSProperties = {
 
 const selectStyle: React.CSSProperties = {
   backgroundColor: '#e2e8f0',
-  color: '#ffffff',
+  color: '#0f172a',
   border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.5rem',
@@ -217,7 +217,7 @@ const selectStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   backgroundColor: '#e2e8f0',
-  color: '#ffffff',
+  color: '#0f172a',
   border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.45rem',

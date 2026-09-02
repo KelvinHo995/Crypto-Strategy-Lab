@@ -9,11 +9,13 @@ type Strategy interface {
 	Analyze(candles []market.Candle) strategy.Signal
 }
 
-// MinCandlesForBacktest is the fewest candles a backtest can run against —
-// derived from the longest lookback window among registered strategies
-// (MA/Bollinger/SR all use 20) plus one candle to actually produce a signal
-// on. Bump this if a strategy with a longer window is registered.
-const MinCandlesForBacktest = 21
+// MinCandlesForBacktest is the fewest raw candles a requested range must
+// have before a search is even attempted. It's tied to
+// strategy.MaxGeneratedLookback (not a separate guess) so the two can't
+// silently drift apart the way they did before — one extra candle beyond
+// the worst-case lookback, so there's always at least one index left to
+// actually evaluate once that window is satisfied.
+const MinCandlesForBacktest = strategy.MaxGeneratedLookback + 1
 
 type Result struct {
 	ID               string            `json:"id"`

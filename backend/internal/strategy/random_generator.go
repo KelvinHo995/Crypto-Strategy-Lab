@@ -8,6 +8,12 @@ import (
 
 var _ StrategyGenerator = (*RandomGenerator)(nil)
 
+// MaxGeneratedLookback is the largest MinLookback any candidate this
+// generator can produce will ever report — MA's maLongWindow tops out at
+// 200 below, so MinLookback (LongWindow+1) tops out at 201. Bump this if
+// the ranges in generateRandomParams change.
+const MaxGeneratedLookback = 201
+
 type RandomGenerator struct {
 	Registry *Registry
 }

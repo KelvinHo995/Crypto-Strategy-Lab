@@ -80,3 +80,10 @@ func TestRSIStrategy_Analyze(t *testing.T) {
 		})
 	}
 }
+
+func TestRSIStrategy_MinLookback(t *testing.T) {
+	s := strategy.NewRSIStrategy(14, 70.0, 30.0)
+	if got := s.MinLookback(); got != 15 {
+		t.Fatalf("MinLookback() = %d, want 15 (Period+1)", got)
+	}
+}

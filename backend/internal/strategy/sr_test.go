@@ -36,3 +36,10 @@ func TestSRStrategy_Analyze(t *testing.T) {
 		t.Errorf("Expected Sell near resistance, got %v", sig)
 	}
 }
+
+func TestSRStrategy_MinLookback(t *testing.T) {
+	strat := NewSRStrategy(20, 0.005)
+	if got := strat.MinLookback(); got != 21 {
+		t.Fatalf("MinLookback() = %d, want 21 (Window+1)", got)
+	}
+}

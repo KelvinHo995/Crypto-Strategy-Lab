@@ -153,6 +153,33 @@ early-stop broadcast additionally carries `{status,reason}` (`STOPPED` or
 renders `STOPPED`/`FAILED` directly from the additive fields the backend
 publishes.
 
+## Analysis window sizing (`LookbackAware`)
+
+`Backtester.Run` slices a trailing window of candles (`Config.Window`) and
+hands it to the resolved strategy on every step. That number used to be a
+single hardcoded constant shared by every job — wrong for `MA`, whose default
+long window (50) and `RandomGenerator`-produced range (`maLongWindow`,
+50–200) both exceed it, so `MAStrategy.Analyze` silently returned `Hold`
+forever regardless of real price action. `COMPLETED` results with zero
+trades looked like a legitimate (if unlucky) backtest, not a bug.
+
+Fix: each strategy implements `LookbackAware.MinLookback() int`, returning
+exactly the floor its own `Analyze` already checks against (e.g. MA:
+`LongWindow+1`, RSI: `Period+1`). `CombinedStrategy.MinLookback()` is the max
+across whatever strategies got combined — the whole combination shares one
+window, so it must clear the neediest member's floor. `worker.go` queries
+this on the real resolved strategy, per job, right before running the
+backtester — not a shared guess set at job-construction time. This also
+keeps `experiment.MinCandlesForBacktest` (the upfront candle-availability
+gate, before any specific candidate is known) tied to
+`strategy.MaxGeneratedLookback` by a real compile-time reference instead of
+an independent guess, so the two can't silently drift apart again.
+
+Live-verified: a `/search/loop` run generating candidates up to
+`maLongWindow: 192` all completed with real trade counts (195–3200), not the
+zero-trade `Hold`-forever result the same candidates produced before this
+fix.
+
 ## Trade simulation realism
 
 Each simulated trade accounts for stop-loss/take-profit exit levels,

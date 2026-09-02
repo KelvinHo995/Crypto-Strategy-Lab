@@ -36,7 +36,10 @@ result ID and `1`.
 `maxCandidates` is required and bounded to 2–200. `maxDurationSeconds` is `0`
 or 60–3600; `noImprovementLimit` is non-negative. HTTP 202 returns
 `{searchId,status:"STARTED",maxCandidates}`. HTTP 422 means the requested
-pair/timeframe/range has fewer than 21 persisted candles and must be backfilled;
+pair/timeframe/range has fewer than `experiment.MinCandlesForBacktest`
+(currently 202 — one more than the worst-case strategy lookback the
+`RandomGenerator` can produce, `strategy.MaxGeneratedLookback`, itself tied to
+`maLongWindow`'s 50–200 range) persisted candles, and must be backfilled;
 the server never substitutes generated candles.
 
 The stop rule is OR semantics: stop generating when the first enabled limit
@@ -69,7 +72,8 @@ and `AVAXUSDT`, each with `5m`, `15m`, `1h`, and `4h` timeframes.
 returns closed candles from Postgres. Supported MVP timeframes are `5m`, `15m`,
 `1h`, and `4h`; `limit` is bounded to 1-5000. Unsupported symbols/timeframes
 are rejected. Production search also rejects pairs outside this catalog and
-returns HTTP 422 when the requested range contains fewer than 21 candles.
+returns HTTP 422 when the requested range contains fewer than
+`experiment.MinCandlesForBacktest` candles (currently 202).
 
 ## Authentication
 
