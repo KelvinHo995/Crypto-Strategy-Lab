@@ -167,6 +167,7 @@ const panelContainerStyle: React.CSSProperties = {
   borderRadius: '8px',
   padding: '1.25rem',
   boxSizing: 'border-box',
+  height: '100%',
 };
 
 const titleStyle: React.CSSProperties = {
