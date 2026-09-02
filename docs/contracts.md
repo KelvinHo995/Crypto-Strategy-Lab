@@ -39,20 +39,25 @@ or 60–3600; `noImprovementLimit` is non-negative. HTTP 202 returns
 pair/timeframe/range has fewer than 21 persisted candles and must be backfilled;
 the server never substitutes generated candles.
 
-The intended stop rule is OR semantics: stop generating when the first enabled
-limit is reached, while already-enqueued jobs finish. Current implementation
-does not yet persist a search-run row or terminal reason. Therefore an early
-duration/no-improvement stop cannot currently be distinguished from a running
-search through REST or WebSocket, and `{tested,total}` can remain below the
-requested maximum. This is an open backend contract gap, not a frontend state
-to simulate.
+The stop rule is OR semantics: stop generating when the first enabled limit
+is reached, while already-enqueued jobs finish normally. An early stop
+(duration/no-improvement/cancellation/enqueue failure) is distinguishable
+from a running search through WebSocket: the backend broadcasts a terminal
+`SEARCH_PROGRESS{searchId,status:"STOPPED"|"FAILED",reason}` the instant
+generation stops, so `{tested,total}` no longer has to reach the requested
+maximum for a client to know the run is done generating. `status` is
+`"FAILED"` only if nothing was ever enqueued. Still open: the production
+queue has no backpressure, so a `noImprovementLimit` can overshoot by more
+than a couple of candidates before the stop lands, and candidate dedup gives
+up after 10 retries and may still enqueue a literal duplicate.
 
 Production commits the initial `PENDING` row and compact `experiment_jobs`
-message atomically for `/search/start`. `/search/loop` still performs these as
-separate writes and must be migrated to the same `EnqueuePending` path. A job contains dataset coordinates rather than candle rows;
-workers claim with a renewable lease, load candles from the repository, and
-Ack/Nack after persistence. `GET /experiments` returns at most the indexed,
-score-ranked Top 100; WebSocket leaderboard updates publish Top 10.
+message atomically for both `/search/start` and `/search/loop`, via
+`EnqueuePending` — no crash window between the two writes. A job contains
+dataset coordinates rather than candle rows; workers claim with a renewable
+lease, load candles from the repository, and Ack/Nack after persistence.
+`GET /experiments` returns at most the indexed, score-ranked Top 100;
+WebSocket leaderboard updates publish Top 10.
 
 ## Historical market data
 
@@ -84,11 +89,11 @@ except health/register/login require that cookie. Logout clears it.
 {"type":"LEADERBOARD_UPDATE","payload":[]}
 ```
 
-Search is started through REST; WebSocket is the server-push channel. The
-current backend payload is exactly `{tested,total}`. The frontend also accepts
-the planned additive fields `{searchId,status,reason}` so it can render
-`COMPLETED|STOPPED|FAILED` when the backend exposes a terminal search-run event;
-clients must not invent those fields or advance progress with timers. A client
+Search is started through REST; WebSocket is the server-push channel. Ordinary
+per-candidate progress payload is `{tested,total,searchId}`; the terminal
+early-stop broadcast additionally carries `{status,reason}` (`STOPPED` or
+`FAILED`). The frontend renders `COMPLETED|STOPPED|FAILED` from these fields;
+clients must not invent them or advance progress with timers. A client
 selects only the market events it needs:
 
 ```json

@@ -126,6 +126,20 @@ func (c *hubClient) accepts(event Event) bool {
 		return true
 	}
 }
+
+// SearchProgressPayload is the SEARCH_PROGRESS wire payload. SearchID/Status/
+// Reason are additive (omitted on ordinary per-candidate progress ticks) —
+// only SearchLoopStopped sets them, to signal a search-run ending early
+// (STOPPED/FAILED) instead of leaving the frontend waiting for tested==total
+// forever when fewer than the requested candidates were ever enqueued.
+type SearchProgressPayload struct {
+	Tested   int    `json:"tested"`
+	Total    int    `json:"total,omitempty"`
+	SearchID string `json:"searchId,omitempty"`
+	Status   string `json:"status,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+}
+
 func (h *Hub) JobUpdated(result experiment.Result) {
 	if result.Status != "COMPLETED" && result.Status != "FAILED" {
 		return // no partial-progress broadcast on RUNNING — tested/total only means something once a candidate finishes
@@ -142,7 +156,9 @@ func (h *Hub) JobUpdated(result experiment.Result) {
 			tested++
 		}
 	}
-	h.Broadcast(Event{Type: "SEARCH_PROGRESS", Payload: map[string]int{"tested": tested, "total": result.SearchTotal}})
+	h.Broadcast(Event{Type: "SEARCH_PROGRESS", Payload: SearchProgressPayload{
+		Tested: tested, Total: result.SearchTotal, SearchID: result.SearchID,
+	}})
 
 	if result.Status == "COMPLETED" {
 		results, err := h.repo.List(ctx)
@@ -155,6 +171,26 @@ func (h *Hub) JobUpdated(result experiment.Result) {
 		}
 	}
 }
+
+// SearchLoopStopped broadcasts the terminal search-run signal for a loop
+// that stopped before generating its full requested candidate count — see
+// experiment.RunSearchLoop's onStopped parameter.
+func (h *Hub) SearchLoopStopped(searchID, status, reason string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	tested := 0
+	if bySearch, err := h.repo.ListBySearch(ctx, searchID); err == nil {
+		for _, r := range bySearch {
+			if r.Status == "COMPLETED" || r.Status == "FAILED" {
+				tested++
+			}
+		}
+	}
+	h.Broadcast(Event{Type: "SEARCH_PROGRESS", Payload: SearchProgressPayload{
+		Tested: tested, SearchID: searchID, Status: status, Reason: reason,
+	}})
+}
+
 func serveWebSocket(hub *Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{

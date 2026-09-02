@@ -37,9 +37,18 @@ type LoopParams struct {
 // (whichever configured) trips first — OR semantics per ADR-0011. Already
 // enqueued jobs keep running on the worker pool untouched; stopping only
 // means no further candidates get generated.
-func RunSearchLoop(ctx context.Context, params LoopParams, gen strategy.StrategyGenerator, pool observerRegistry, repo Repository, queue Queue) {
+//
+// onStopped, if non-nil, fires exactly once when generation ends early
+// (MaxDuration/NoImprovementLimit/cancellation/enqueue failure) — not on the
+// normal case of generating all MaxCandidates, which the existing
+// tested==total progress mechanism already detects on its own once every
+// candidate finishes. status is "FAILED" if nothing was ever enqueued,
+// "STOPPED" if some candidates are still running.
+func RunSearchLoop(ctx context.Context, params LoopParams, gen strategy.StrategyGenerator, pool observerRegistry, repo Repository, queue Queue, onStopped func(status, reason string)) {
 	seen := map[string]bool{}
 	started := time.Now()
+	enqueued := 0
+	reason := "max-candidates"
 
 	var mu sync.Mutex
 	bestScore := math.Inf(-1)
@@ -70,21 +79,25 @@ func RunSearchLoop(ctx context.Context, params LoopParams, gen strategy.Strategy
 		defer unsubscribe()
 	}
 
+generate:
 	for i := 0; i < params.MaxCandidates; i++ {
 		select {
 		case <-ctx.Done():
-			return
+			reason = "cancelled"
+			break generate
 		default:
 		}
 		if params.MaxDuration > 0 && time.Since(started) >= params.MaxDuration {
-			return
+			reason = "max-duration"
+			break generate
 		}
 		if params.NoImprovementLimit > 0 {
 			mu.Lock()
 			stop := stepsSinceImprovement >= params.NoImprovementLimit
 			mu.Unlock()
 			if stop {
-				return
+				reason = "no-improvement"
+				break generate
 			}
 		}
 
@@ -120,14 +133,33 @@ func RunSearchLoop(ctx context.Context, params LoopParams, gen strategy.Strategy
 			StrategyVersions: versions, DatasetPeriod: params.DatasetPeriod,
 			Status: "PENDING", CreatedAt: now.UnixMilli(),
 		}
-		if err := repo.Save(ctx, pending); err != nil {
-			log.Printf("search loop %s: save pending: %v", params.SearchID, err)
-			continue
+
+		if durable, ok := queue.(PendingQueue); ok {
+			if err := durable.EnqueuePending(ctx, job, pending); err != nil {
+				log.Printf("search loop %s: enqueue pending: %v", params.SearchID, err)
+				reason = "enqueue-failed"
+				break generate
+			}
+		} else {
+			if err := repo.Save(ctx, pending); err != nil {
+				log.Printf("search loop %s: save pending: %v", params.SearchID, err)
+				continue
+			}
+			if err := queue.Enqueue(ctx, job); err != nil {
+				log.Printf("search loop %s: enqueue: %v", params.SearchID, err)
+				reason = "enqueue-failed"
+				break generate
+			}
 		}
-		if err := queue.Enqueue(ctx, job); err != nil {
-			log.Printf("search loop %s: enqueue: %v", params.SearchID, err)
-			return
+		enqueued++
+	}
+
+	if reason != "max-candidates" && onStopped != nil {
+		status := "STOPPED"
+		if enqueued == 0 {
+			status = "FAILED"
 		}
+		onStopped(status, reason)
 	}
 }
 

@@ -88,7 +88,7 @@ func TestRunSearchLoop_StopsAtMaxCandidates(t *testing.T) {
 	experiment.RunSearchLoop(context.Background(), experiment.LoopParams{
 		SearchID: "s1", Pair: "BTCUSDT", StartingCapital: 1000,
 		MaxCandidates: 5,
-	}, &sequentialGenerator{}, pool, repo, queue)
+	}, &sequentialGenerator{}, pool, repo, queue, nil)
 
 	jobs := drainAll(t, queue)
 	if len(jobs) != 5 {
@@ -110,7 +110,7 @@ func TestRunSearchLoop_DedupesWithinOneRun(t *testing.T) {
 	experiment.RunSearchLoop(context.Background(), experiment.LoopParams{
 		SearchID: "s1", Pair: "BTCUSDT", StartingCapital: 1000,
 		MaxCandidates: 3,
-	}, gen, pool, repo, queue)
+	}, gen, pool, repo, queue, nil)
 
 	// Every candidate is identical, so dedup retries up to 10 times each
 	// and then gives up and accepts the duplicate — still enqueues exactly
@@ -133,7 +133,7 @@ func TestRunSearchLoop_StopsAtMaxDuration(t *testing.T) {
 	experiment.RunSearchLoop(context.Background(), experiment.LoopParams{
 		SearchID: "s1", Pair: "BTCUSDT", StartingCapital: 1000,
 		MaxCandidates: 1_000_000, MaxDuration: 30 * time.Millisecond,
-	}, &sequentialGenerator{}, pool, repo, queue)
+	}, &sequentialGenerator{}, pool, repo, queue, nil)
 	elapsed := time.Since(start)
 
 	if elapsed > 2*time.Second {
@@ -156,7 +156,7 @@ func TestRunSearchLoop_StopsAtNoImprovementLimit(t *testing.T) {
 		experiment.RunSearchLoop(context.Background(), experiment.LoopParams{
 			SearchID: "s1", Pair: "BTCUSDT", StartingCapital: 1000,
 			MaxCandidates: 1000, NoImprovementLimit: 3,
-		}, &sequentialGenerator{}, pool, repo, queue)
+		}, &sequentialGenerator{}, pool, repo, queue, nil)
 		close(done)
 	}()
 
@@ -207,7 +207,7 @@ func TestRunSearchLoop_RespectsContextCancellation(t *testing.T) {
 		experiment.RunSearchLoop(ctx, experiment.LoopParams{
 			SearchID: "s1", Pair: "BTCUSDT", StartingCapital: 1000,
 			MaxCandidates: 1000,
-		}, &sequentialGenerator{}, pool, repo, queue)
+		}, &sequentialGenerator{}, pool, repo, queue, nil)
 		close(done)
 	}()
 
@@ -215,5 +215,97 @@ func TestRunSearchLoop_RespectsContextCancellation(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("RunSearchLoop did not return after context cancellation")
+	}
+}
+
+// onStopped exists so a caller (the HTTP layer) can tell a consumer the
+// search-run is done early — it must fire on every early-stop path and
+// never fire when the loop simply generates its full MaxCandidates, since
+// the existing tested==total mechanism already covers that case.
+func TestRunSearchLoop_CallsOnStoppedForEarlyStop(t *testing.T) {
+	repo := newMemRepo()
+	queue := experiment.NewInMemoryQueue(1_000_000)
+	pool := &fakePool{}
+
+	var status, reason string
+	onStopped := func(s, r string) { status, reason = s, r }
+
+	experiment.RunSearchLoop(context.Background(), experiment.LoopParams{
+		SearchID: "s1", Pair: "BTCUSDT", StartingCapital: 1000,
+		MaxCandidates: 1_000_000, MaxDuration: 30 * time.Millisecond,
+	}, &sequentialGenerator{}, pool, repo, queue, onStopped)
+
+	if status != "STOPPED" || reason != "max-duration" {
+		t.Fatalf("onStopped(status=%q, reason=%q), want STOPPED/max-duration", status, reason)
+	}
+}
+
+func TestRunSearchLoop_OnStoppedReportsFailedWhenNothingEnqueued(t *testing.T) {
+	repo := newMemRepo()
+	queue := experiment.NewInMemoryQueue(1)
+	pool := &fakePool{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled before a single candidate can be enqueued
+
+	var status, reason string
+	onStopped := func(s, r string) { status, reason = s, r }
+
+	experiment.RunSearchLoop(ctx, experiment.LoopParams{
+		SearchID: "s1", Pair: "BTCUSDT", StartingCapital: 1000,
+		MaxCandidates: 1000,
+	}, &sequentialGenerator{}, pool, repo, queue, onStopped)
+
+	if status != "FAILED" || reason != "cancelled" {
+		t.Fatalf("onStopped(status=%q, reason=%q), want FAILED/cancelled", status, reason)
+	}
+}
+
+func TestRunSearchLoop_DoesNotCallOnStoppedWhenCompletingNormally(t *testing.T) {
+	repo := newMemRepo()
+	queue := experiment.NewInMemoryQueue(100)
+	pool := &fakePool{}
+
+	called := false
+	onStopped := func(string, string) { called = true }
+
+	experiment.RunSearchLoop(context.Background(), experiment.LoopParams{
+		SearchID: "s1", Pair: "BTCUSDT", StartingCapital: 1000,
+		MaxCandidates: 5,
+	}, &sequentialGenerator{}, pool, repo, queue, onStopped)
+
+	if called {
+		t.Fatal("onStopped fired for a loop that generated its full MaxCandidates normally")
+	}
+}
+
+// pendingQueue implements experiment.PendingQueue on top of InMemoryQueue so
+// tests can prove RunSearchLoop prefers the atomic path when available,
+// instead of the crash-window-prone Save-then-Enqueue fallback.
+type pendingQueue struct {
+	*experiment.InMemoryQueue
+	pendingCalls int
+}
+
+func (q *pendingQueue) EnqueuePending(ctx context.Context, job experiment.BacktestJob, _ experiment.Result) error {
+	q.pendingCalls++
+	return q.InMemoryQueue.Enqueue(ctx, job)
+}
+
+func TestRunSearchLoop_UsesAtomicEnqueuePendingWhenAvailable(t *testing.T) {
+	repo := newMemRepo()
+	queue := &pendingQueue{InMemoryQueue: experiment.NewInMemoryQueue(100)}
+	pool := &fakePool{}
+
+	experiment.RunSearchLoop(context.Background(), experiment.LoopParams{
+		SearchID: "s1", Pair: "BTCUSDT", StartingCapital: 1000,
+		MaxCandidates: 3,
+	}, &sequentialGenerator{}, pool, repo, queue, nil)
+
+	if queue.pendingCalls != 3 {
+		t.Fatalf("EnqueuePending called %d times, want 3", queue.pendingCalls)
+	}
+	if len(repo.results) != 0 {
+		t.Fatalf("repo.Save called directly %d times, want 0 — EnqueuePending should own writing the pending row", len(repo.results))
 	}
 }

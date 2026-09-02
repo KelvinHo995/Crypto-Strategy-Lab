@@ -3,10 +3,14 @@
 **Status:** Accepted
 **Owner:** Experiment (Person 3), Strategy + Search (Person 2)
 
-> **Implementation review (2026-09-02): Partial.** The endpoint and frontend
-> integration exist, but terminal search-run state, atomic loop enqueue and
-> reliable duration/no-improvement semantics are still open. This ADR records
-> the intended decision and explicitly separates it from shipped behavior.
+> **Implementation review (2026-09-02, updated same day):** terminal
+> search-run state and atomic loop enqueue — both flagged open earlier
+> today — are now shipped and live-verified against Supabase (see below).
+> Job ID generation, also flagged, is fixed (UUID suffix, not just a
+> timestamp). Still genuinely open: the production `PostgreSQL` queue has
+> no backpressure, so no-improvement can overshoot by more than a few
+> candidates; candidate dedup gives up after 10 retries and may still
+> enqueue a duplicate. Both are documented below, not silently dropped.
 
 ## Context
 
@@ -75,17 +79,31 @@ actual `COMPLETED`/`FAILED` rows for that search rather than hardcoding
 path onto the same mechanism (`SearchID = its own ID`, `SearchTotal = 1`)
 instead of a separate, divergent code path.
 
-This progress contract is complete only when the loop creates exactly
-`SearchTotal` terminal rows. Early stop or enqueue failure can create fewer
-rows while every row still advertises the requested maximum. There is currently
-no search-run row or terminal event that revises the total or publishes
-`STOPPED`; consumers can otherwise wait forever below 100%.
+The `tested == total` inference only resolves the loop's normal-completion
+case (it generated its full `MaxCandidates`, so every eventual terminal row
+counts toward the same total the frontend was told upfront). Early stop
+(`MaxDuration`/`NoImprovementLimit`/cancellation/enqueue failure) enqueues
+fewer than `MaxCandidates` jobs while every one of those jobs still carries
+the original requested maximum as `SearchTotal` — `tested` would never reach
+`total` on its own. `RunSearchLoop` closes this with an `onStopped(status,
+reason string)` callback, fired exactly once, only on early stop (never on
+normal completion, which the existing mechanism already covers): `status` is
+`FAILED` if nothing was ever enqueued, `STOPPED` otherwise. The HTTP layer
+wires this to `Hub.SearchLoopStopped`, which broadcasts an additive
+`SEARCH_PROGRESS{searchId,status,reason}` the moment generation stops —
+independent of whether already-enqueued jobs are still running. Live-verified
+against Supabase: a `noImprovementLimit:1` run stopped generation at 3 of 10
+requested candidates, broadcast `{status:STOPPED,reason:"no-improvement"}`
+immediately, and `tested` kept climbing afterward (4/10) as the one
+already-enqueued straggler finished — confirming "stopped generating" and
+"finished running" are correctly signaled as separate things, per the OR-stop
+rule below.
 
-The frontend now calls `/search/loop`, sends all three controls and removes its
-former timer-generated progress. It renders only WebSocket counts, treats HTTP
-errors (including insufficient-candle 422) as `FAILED`, infers `COMPLETED` only
-at `tested == total`, and is prepared for future additive
-`{searchId,status,reason}` terminal fields.
+The frontend calls `/search/loop`, sends all three controls and has no
+timer-generated progress. It renders only WebSocket counts, treats HTTP
+errors (including insufficient-candle 422) as `FAILED`, infers `COMPLETED`
+from `tested == total`, and consumes the additive `{searchId,status,reason}`
+terminal fields the backend now publishes for `STOPPED`/`FAILED`.
 
 ## Alternatives considered
 
@@ -107,9 +125,14 @@ at `tested == total`, and is prepared for future additive
 
 - **Positive:** stop conditions are configuration, not code — changing
   search run limits doesn't need a rebuild.
-- **Partial:** `SEARCH_PROGRESS` gives the frontend real terminal-candidate
-  counts when every requested candidate is created. It does not yet fully
-  answer loop health for early stops or distinguish concurrent searches.
+- **Positive:** `SEARCH_PROGRESS` gives the frontend real terminal-candidate
+  counts on normal completion (`tested == total`) and an explicit
+  `{status,reason}` terminal signal on early stop — both paths now
+  distinguishable, live-verified against Supabase.
+- **Positive:** `/search/loop` now writes its `PENDING` row and job through
+  `PostgresQueue.EnqueuePending` in one transaction, same as `/search/start`
+  — closes the crash window that existed when it wrote the two as separate
+  calls.
 - **Rule:** combined stop conditions use OR semantics: the first limit reached
   stops further generation. Already-enqueued jobs finish normally.
 - **Positive — Extensibility:** `WorkerPool.AddObserver` turned a single
