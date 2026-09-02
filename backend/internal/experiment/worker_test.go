@@ -184,6 +184,75 @@ func TestWorkerPoolAddObserver_CoexistsAndUnsubscribes(t *testing.T) {
 	}
 }
 
+// nackTrackingQueue wraps InMemoryQueue to observe Nack calls — the plain
+// InMemoryQueue's Nack is a no-op, so it can't distinguish "retried" from
+// "silently dropped" the way PostgresQueue's real retry semantics would.
+type nackTrackingQueue struct {
+	*experiment.InMemoryQueue
+	nacked chan string
+}
+
+func (q *nackTrackingQueue) Nack(ctx context.Context, id string, cause error) error {
+	q.nacked <- id
+	return q.InMemoryQueue.Nack(ctx, id, cause)
+}
+
+type emptyCandleRepo struct{}
+
+func (emptyCandleRepo) Upsert(context.Context, []market.Candle) error { return nil }
+func (emptyCandleRepo) Range(context.Context, string, string, int64, int64) ([]market.Candle, error) {
+	return nil, nil
+}
+
+// A job with no embedded candles falls back to fetching them on demand. Too
+// few candles to backtest against should be retried, not failed outright —
+// the shortfall might just mean backfill for this range hasn't landed yet,
+// same reasoning as every other failure path in run().
+func TestWorkerPoolRun_RetriesInsufficientCandlesInsteadOfFailingOutright(t *testing.T) {
+	registry := strategy.NewRegistry()
+	registry.RegisterFactory("Hold", func(map[string]any) strategy.Strategy { return holdStrategy{} })
+	repo := newRecordingRepo()
+	queue := &nackTrackingQueue{InMemoryQueue: experiment.NewInMemoryQueue(1), nacked: make(chan string, 10)}
+	pool := experiment.NewWorkerPool(queue, registry, repo, 1)
+	pool.SetCandleRepository(emptyCandleRepo{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool.Start(ctx)
+
+	job := experiment.BacktestJob{
+		ID:        "job-thin-data",
+		Pair:      "BTCUSDT",
+		Timeframe: "1h",
+		From:      1,
+		To:        2,
+		Candidate: strategy.CandidateStrategy{ID: "candidate-thin", Strategies: []string{"Hold"}, Policy: "majority"},
+		Config: experiment.Config{
+			Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
+			StopLossPct: 0.02, TakeProfitPct: 0.04, FeePct: 0.001, SlippageBps: 5, Window: 1,
+		},
+		EnqueuedAt: time.Now().UnixMilli(),
+	}
+	if err := queue.Enqueue(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case id := <-queue.nacked:
+		if id != job.ID {
+			t.Fatalf("nacked job = %q, want %q", id, job.ID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for insufficient-candle job to be retried")
+	}
+
+	select {
+	case result := <-repo.saves:
+		t.Fatalf("insufficient-candle job should retry without saving a result first, got %+v", result)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
 func waitForID(t *testing.T, ch chan string, want string) {
 	t.Helper()
 	deadline := time.After(2 * time.Second)

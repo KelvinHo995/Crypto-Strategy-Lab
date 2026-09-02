@@ -102,7 +102,7 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 				http.Error(w, "load historical candles", http.StatusInternalServerError)
 				return
 			}
-			if len(candles) < 21 {
+			if len(candles) < experiment.MinCandlesForBacktest {
 				http.Error(w, "insufficient historical candles; run backfill first", http.StatusUnprocessableEntity)
 				return
 			}
@@ -130,7 +130,6 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 				invalidator.Invalidate()
 			}
 		} else {
-			job.Candles = candles
 			if err := repo.Save(r.Context(), pending); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

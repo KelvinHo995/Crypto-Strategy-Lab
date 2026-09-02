@@ -88,7 +88,7 @@ func startLoop(gen strategy.StrategyGenerator, pool *experiment.WorkerPool, repo
 				http.Error(w, "load historical candles", http.StatusInternalServerError)
 				return
 			}
-			if len(candles) < 21 {
+			if len(candles) < experiment.MinCandlesForBacktest {
 				http.Error(w, "insufficient historical candles; run backfill first", http.StatusUnprocessableEntity)
 				return
 			}
