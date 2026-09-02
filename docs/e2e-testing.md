@@ -166,7 +166,7 @@ $to = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $from = $to - (90L * 24 * 60 * 60 * 1000)
 foreach ($market in $markets) {
   $candles = Invoke-RestMethod -Uri "$base/candles?symbol=$($market.symbol)&timeframe=1h&from=$from&to=$to&limit=500" -WebSession $session
-  if (@($candles).Count -lt 21) { throw "Insufficient candles for $($market.symbol)" }
+  if (@($candles).Count -lt 202) { throw "Insufficient candles for $($market.symbol)" } # experiment.MinCandlesForBacktest
 }
 
 $request = @{pair='ADAUSDT';timeframe='1h';from=$from;to=$to;capital=10000;strategies=@('MA','RSI')} | ConvertTo-Json
@@ -209,8 +209,9 @@ Expected negative checks:
 
 - Calling `/markets` without the session cookie returns HTTP 401.
 - Starting a search with an unsupported pair returns HTTP 400.
-- Starting a search over a range with fewer than 21 persisted candles returns
-  HTTP 422 and never substitutes fixture candles.
+- Starting a search over a range with fewer than
+  `experiment.MinCandlesForBacktest` (currently 202) persisted candles
+  returns HTTP 422 and never substitutes fixture candles.
 
 ## 7. Evidence to record
 

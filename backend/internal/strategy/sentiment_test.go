@@ -80,3 +80,19 @@ func TestSentimentFactorySupportsStandaloneAndDecoratedStrategies(t *testing.T) 
 		t.Fatalf("decorated name = %q", decorated.Name())
 	}
 }
+
+func TestSentimentStrategy_MinLookback(t *testing.T) {
+	t.Run("no base strategy", func(t *testing.T) {
+		s := strategy.NewSentimentStrategy(nil, &mockSentimentClient{}, 0.7)
+		if got := s.MinLookback(); got != 1 {
+			t.Fatalf("MinLookback() = %d, want 1", got)
+		}
+	})
+	t.Run("defers to base strategy", func(t *testing.T) {
+		base := strategy.NewMAStrategy(20, 50)
+		s := strategy.NewSentimentStrategy(base, &mockSentimentClient{}, 0.7)
+		if got := s.MinLookback(); got != base.MinLookback() {
+			t.Fatalf("MinLookback() = %d, want %d (base strategy's own requirement)", got, base.MinLookback())
+		}
+	})
+}

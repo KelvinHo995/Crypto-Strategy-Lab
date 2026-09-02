@@ -113,7 +113,7 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 			Candles: candles,
 			Config: experiment.Config{Pair: req.Pair, StartingCapital: req.Capital,
 				PositionSizePct: 1, StopLossPct: 0.02, TakeProfitPct: 0.04,
-				FeePct: 0.001, SlippageBps: 5, Window: 20},
+				FeePct: 0.001, SlippageBps: 5}, // Window is sized per-candidate by the worker (see worker.go)
 			DatasetPeriod:    fmt.Sprintf("%d-%d", req.From, req.To),
 			StrategyVersions: versions, EnqueuedAt: now.UnixMilli(),
 		}

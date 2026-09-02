@@ -90,6 +90,21 @@ func (cs *CombinedStrategy) Analyze(candles []market.Candle) Signal {
 	return cs.Policy.Combine(signals)
 }
 
+// MinLookback is the max across every wrapped strategy — the whole
+// combination shares one sliding window (see Analyze), so it has to be
+// large enough for the neediest strategy in the mix.
+func (cs *CombinedStrategy) MinLookback() int {
+	max := 1
+	for _, s := range cs.Strategies {
+		if la, ok := s.(LookbackAware); ok {
+			if n := la.MinLookback(); n > max {
+				max = n
+			}
+		}
+	}
+	return max
+}
+
 func resolveCombinationPolicy(policyName string, count int) CombinationPolicy {
 	if policyName == "weighted" {
 		weights := make([]float64, count)

@@ -62,6 +62,16 @@ func (s *SentimentStrategy) Name() string {
 	return "Sentiment"
 }
 
+// MinLookback defers to BaseStrategy's own requirement, since Analyze falls
+// back to it on a neutral/failed sentiment lookup — the same candles slice
+// has to satisfy the base strategy too. Sentiment itself only needs 1.
+func (s *SentimentStrategy) MinLookback() int {
+	if la, ok := s.BaseStrategy.(LookbackAware); ok {
+		return la.MinLookback()
+	}
+	return 1
+}
+
 func (s *SentimentStrategy) Analyze(candles []market.Candle) Signal {
 	if len(candles) == 0 {
 		return Hold

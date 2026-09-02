@@ -79,3 +79,10 @@ func TestBollingerStrategy_Analyze(t *testing.T) {
 		})
 	}
 }
+
+func TestBollingerStrategy_MinLookback(t *testing.T) {
+	s := strategy.NewBollingerStrategy(20, 2.0)
+	if got := s.MinLookback(); got != 20 {
+		t.Fatalf("MinLookback() = %d, want 20 (Period)", got)
+	}
+}

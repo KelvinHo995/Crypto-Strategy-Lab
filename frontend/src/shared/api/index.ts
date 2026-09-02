@@ -91,6 +91,10 @@ export async function fetchExperiments(): Promise<ExperimentResult[]> {
   return (await apiClient.get<ExperimentResult[]>('/experiments')).data;
 }
 
+export async function fetchExperiment(id: string): Promise<ExperimentResult> {
+  return (await apiClient.get<ExperimentResult>(`/experiments/${id}`)).data;
+}
+
 export async function startSearch(request: StartSearchRequest): Promise<StartSearchResponse> {
   return (await apiClient.post<StartSearchResponse>('/search/start', request)).data;
 }

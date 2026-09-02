@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { BacktestConfigPanel } from './components/BacktestConfigPanel';
 import { ExperimentLeaderboard } from './components/ExperimentLeaderboard';
 import { ProvenanceModal } from './components/ProvenanceModal';
@@ -6,8 +6,14 @@ import { PerformanceSummaryCard } from './components/PerformanceSummaryCard';
 import { TradeHistoryTable } from './components/TradeHistoryTable';
 import { MOCK_EXPERIMENTS, generateMockTrades } from './services/mockExperimentData';
 import type { ExperimentResult, Trade } from '../../types/backtest';
-import { fetchExperiments, startSearch } from '../../shared/api';
+import { fetchExperiment, fetchExperiments, startSearch } from '../../shared/api';
 import { useWebSocketSubscription } from '../../shared/hooks';
+import type { WSSearchProgressPayload } from '../../types/websocket';
+
+// Matches the worker's own worst-case retry/backoff window (up to 3 attempts,
+// backoff climbing toward 30s each) — a shorter timeout would give up on a
+// backtest that's genuinely still retrying, not stuck.
+const RUN_TIMEOUT_MS = 90_000;
 
 export function ExperimentDashboard() {
   const [experiments, setExperiments] = useState<ExperimentResult[]>(MOCK_EXPERIMENTS);
@@ -18,6 +24,8 @@ export function ExperimentDashboard() {
   );
   
   const [isLoading, setIsLoading] = useState(false);
+  const activeSearchId = useRef<string | null>(null);
+  const runTimeout = useRef<number | null>(null);
 
   const applyExperiments = useCallback((items: ExperimentResult[]) => {
     if (items.length === 0) return;
@@ -29,6 +37,43 @@ export function ExperimentDashboard() {
     fetchExperiments().then(applyExperiments).catch(() => undefined);
   }, [applyExperiments]);
 
+  // Fires once the run this component started reaches a terminal status —
+  // driven by the real SEARCH_PROGRESS event, not a fixed-attempt REST poll,
+  // so a slow (retrying) backtest is still tracked instead of silently
+  // timing out after a few seconds.
+  const finishRun = useCallback(async (id: string, status: 'COMPLETED' | 'FAILED' | 'STOPPED') => {
+    if (runTimeout.current !== null) {
+      window.clearTimeout(runTimeout.current);
+      runTimeout.current = null;
+    }
+    activeSearchId.current = null;
+    setIsLoading(false);
+    if (status !== 'COMPLETED') {
+      alert(`Backtest kết thúc: ${status}.`);
+      return;
+    }
+    try {
+      const result = await fetchExperiment(id);
+      setActiveExp(result);
+      setActiveTrades(generateMockTrades(result.id, result.tradeCount));
+      setExperiments(current => current.some(item => item.id === result.id)
+        ? current.map(item => item.id === result.id ? result : item)
+        : [result, ...current]);
+    } catch {
+      alert('Backtest đã hoàn tất nhưng không tải được kết quả — kiểm tra leaderboard.');
+    }
+  }, []);
+
+  const handleProgress = useCallback((progress: WSSearchProgressPayload) => {
+    if (!activeSearchId.current || progress.searchId !== activeSearchId.current) return;
+    if (progress.status === 'FAILED' || progress.status === 'STOPPED') {
+      void finishRun(activeSearchId.current, progress.status);
+    } else if (progress.tested >= progress.total) {
+      void finishRun(activeSearchId.current, 'COMPLETED');
+    }
+  }, [finishRun]);
+
+  useWebSocketSubscription<WSSearchProgressPayload>('SEARCH_PROGRESS', handleProgress);
   useWebSocketSubscription<ExperimentResult[]>('LEADERBOARD_UPDATE', applyExperiments);
 
   const handleRunBacktest = async (config: {
@@ -49,23 +94,16 @@ export function ExperimentDashboard() {
         capital: config.capital,
         strategies: ['MA'],
       });
-      for (let attempt = 0; attempt < 15; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const items = await fetchExperiments();
-        applyExperiments(items);
-        const result = items.find(item => item.id === started.searchId);
-        if (result?.status === 'COMPLETED' || result?.status === 'FAILED') {
-          if (result.status === 'COMPLETED') {
-            setActiveExp(result);
-            setActiveTrades(generateMockTrades(result.id, result.tradeCount));
-          }
-          break;
-        }
-      }
+      activeSearchId.current = started.searchId;
+      runTimeout.current = window.setTimeout(() => {
+        if (activeSearchId.current !== started.searchId) return;
+        activeSearchId.current = null;
+        setIsLoading(false);
+        alert('Backtest đang chạy lâu hơn bình thường (>90s) — có thể vẫn hoàn tất, kiểm tra leaderboard sau ít phút.');
+      }, RUN_TIMEOUT_MS);
     } catch (error) {
-      alert(`Không thể chạy backtest thật: ${String(error)}. Hãy chạy migration/backfill trước.`);
-    } finally {
       setIsLoading(false);
+      alert(`Không thể chạy backtest thật: ${String(error)}. Hãy chạy migration/backfill trước.`);
     }
   };
 

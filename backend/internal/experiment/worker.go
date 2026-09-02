@@ -163,7 +163,13 @@ func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
 		p.ack(ctx, job.ID)
 		return
 	}
-	trades := NewBacktester(job.Config).Run(combined, candles)
+	config := job.Config
+	if la, ok := combined.(strategy.LookbackAware); ok {
+		config.Window = la.MinLookback()
+	} else if config.Window <= 0 {
+		config.Window = 1
+	}
+	trades := NewBacktester(config).Run(combined, candles)
 	metrics := (Evaluator{StartingCapital: job.Config.StartingCapital}).Evaluate(trades)
 	result.Return, result.MDD = metrics.Return, metrics.MDD
 	result.TradeCount, result.WinRate = metrics.TradeCount, metrics.WinRate

@@ -267,3 +267,66 @@ func waitForID(t *testing.T, ch chan string, want string) {
 		}
 	}
 }
+
+// The bug this reproduces: job.Config.Window was a fixed guess set at job
+// construction time, unrelated to what the actual resolved strategy needs.
+// MA with default factory params (20/50) needs 51 candles per call but was
+// only ever handed 20 (or, here, a deliberately worse 5) — so it silently
+// returned Hold forever and every backtest using default MA completed with
+// zero trades. The worker must now size the window from the real resolved
+// strategy's MinLookback(), ignoring whatever job.Config.Window says.
+func TestWorkerPoolRun_SizesWindowFromResolvedStrategyNotJobConfig(t *testing.T) {
+	registry := strategy.NewRegistry()
+	registry.RegisterFactory("MA", strategy.MAFactory) // default 20/50, no custom params supplied
+	repo := newRecordingRepo()
+	queue := experiment.NewInMemoryQueue(1)
+	pool := experiment.NewWorkerPool(queue, registry, repo, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool.Start(ctx)
+
+	// Flat, then a sharp jump — a straight ramp never actually "crosses"
+	// (short MA sits above long MA from the first computable point), so this
+	// mirrors the same flat-then-jump pattern TestMAStrategy_Analyze uses to
+	// force a real, discrete crossover event.
+	candles := make([]market.Candle, 80)
+	for i := range candles {
+		price := 100.0
+		if i >= 60 {
+			price = 100.0 + float64(i-59)*5
+		}
+		candles[i] = market.Candle{Symbol: "BTCUSDT", OpenTime: int64(i), Open: price, High: price + 1, Low: price - 1, Close: price, Volume: 1}
+	}
+
+	job := experiment.BacktestJob{
+		ID:        "job-window-sizing",
+		Candidate: strategy.CandidateStrategy{ID: "cand-ma-default", Strategies: []string{"MA"}, Policy: "majority"},
+		Candles:   candles,
+		Config: experiment.Config{
+			Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
+			StopLossPct: 0.02, TakeProfitPct: 0.04, FeePct: 0.001, SlippageBps: 5,
+			Window: 5, // deliberately far too small for MA's real 51-candle need
+		},
+		EnqueuedAt: time.Now().UnixMilli(),
+	}
+	if err := queue.Enqueue(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+
+	var last experiment.Result
+	for i := 0; i < 2; i++ {
+		select {
+		case last = <-repo.saves:
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for worker to save a result")
+		}
+	}
+
+	if last.Status != "COMPLETED" {
+		t.Fatalf("Status = %q, want COMPLETED", last.Status)
+	}
+	if last.TradeCount == 0 {
+		t.Fatal("MA produced zero trades — worker trusted job.Config.Window instead of sizing it from the resolved strategy's MinLookback()")
+	}
+}

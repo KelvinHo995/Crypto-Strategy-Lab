@@ -20,6 +20,13 @@ type Strategy interface {
 	Analyze(candles []market.Candle) Signal
 }
 
+// LookbackAware lets a strategy report the fewest trailing candles it needs
+// before it can produce anything but Hold — the backtester uses this to size
+// its sliding window per-candidate instead of guessing one shared constant.
+type LookbackAware interface {
+	MinLookback() int
+}
+
 type StrategyFactory func(params map[string]any) Strategy
 
 // Registry holds registered strategy implementations and factories.
