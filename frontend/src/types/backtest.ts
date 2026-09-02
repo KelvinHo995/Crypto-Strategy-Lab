@@ -15,6 +15,8 @@ export interface Trade {
 
 export interface ExperimentResult {
   id: string;
+  searchId?: string;
+  searchTotal?: number;
   candidateId: string;
   strategies: string[]; // constituents snapshot
   params: Record<string, unknown>; // parameters snapshot
@@ -44,4 +46,21 @@ export interface StartSearchRequest {
 export interface StartSearchResponse {
   searchId: string;
   status: string;
+}
+
+export interface StartSearchLoopRequest {
+  pair: string;
+  timeframe: '5m' | '15m' | '1h' | '4h';
+  from: number; // unix ms
+  to: number; // unix ms
+  capital: number;
+  maxCandidates: number;
+  maxDurationSeconds: number;
+  noImprovementLimit: number;
+}
+
+export interface StartSearchLoopResponse {
+  searchId: string;
+  status: 'STARTED';
+  maxCandidates: number;
 }

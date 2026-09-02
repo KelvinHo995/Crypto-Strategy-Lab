@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SingleStrategyList } from './components/SingleStrategyList';
 import { CompositeStrategyBuilder } from './components/CompositeStrategyBuilder';
-import { LoopDiscoveryPanel } from './components/LoopDiscoveryPanel';
+import { LoopDiscoveryPanel, type DiscoveryLoopConfig } from './components/LoopDiscoveryPanel';
 import { MiniLeaderboard } from './components/MiniLeaderboard';
 import {
   DEFAULT_SINGLE_STRATEGIES,
@@ -10,12 +10,14 @@ import {
   type SingleStrategyInstance,
   type DiscoveryStats,
 } from './services/mockStrategyData';
-import { fetchMarkets, fetchStrategies, startSearch } from '../../shared/api';
+import { ApiError, fetchMarkets, fetchStrategies, startSearch, startSearchLoop } from '../../shared/api';
 import { useWebSocketSubscription } from '../../shared/hooks';
 import type { WSSearchProgressPayload } from '../../types/websocket';
+import type { ExperimentResult } from '../../types/backtest';
 import type { MarketInfo } from '../../types/candle';
 import { DEFAULT_MARKETS } from '../market/services/marketCatalog';
 import { useAppMode } from '../../shared/auth';
+import { applyProgress } from './services/discoveryProgress';
 
 export function StrategyDiscoveryPage() {
   const mode = useAppMode();
@@ -23,7 +25,9 @@ export function StrategyDiscoveryPage() {
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [instances, setInstances] = useState<SingleStrategyInstance[]>(DEFAULT_SINGLE_STRATEGIES);
   const [stats, setStats] = useState<DiscoveryStats>(DEFAULT_DISCOVERY_STATS);
-  const [miniLeaderboard] = useState(MINI_LEADERBOARD_DATA);
+  const [liveLeaderboard, setLiveLeaderboard] = useState<typeof MINI_LEADERBOARD_DATA>([]);
+  const miniLeaderboard = mode === 'DEMO' ? MINI_LEADERBOARD_DATA : liveLeaderboard;
+  const activeSearchId = useRef<string | null>(null);
 
   useEffect(() => {
     if (mode !== 'LIVE') return;
@@ -33,33 +37,38 @@ export function StrategyDiscoveryPage() {
     fetchMarkets().then(setMarkets).catch(() => setMarkets(DEFAULT_MARKETS));
   }, [mode]);
 
-  useWebSocketSubscription<WSSearchProgressPayload>('SEARCH_PROGRESS', progress => {
-    setStats(current => ({
-      ...current,
-      iteration: progress.tested,
-      totalIterations: progress.total,
-      testedCandidates: progress.tested,
-      status: progress.tested >= progress.total ? 'COMPLETED' : 'RUNNING',
-    }));
-  });
+  const handleProgress = useCallback((progress: WSSearchProgressPayload) => {
+    setStats(current => applyProgress(current, progress, activeSearchId.current));
+  }, []);
+
+  const handleLeaderboard = useCallback((results: ExperimentResult[]) => {
+    if (mode !== 'LIVE' || !Array.isArray(results)) return;
+    const completed = results.filter(result => result.status === 'COMPLETED').slice(0, 5);
+    setLiveLeaderboard(completed.map((result, index) => ({
+      rank: index + 1,
+      name: result.strategies.join(' + ') || result.candidateId,
+      profit: result.totalProfit,
+      winrate: result.winRate,
+    })));
+    if (completed[0]) {
+      const best = completed[0];
+      setStats(current => ({
+        ...current,
+        bestStrategy: {
+          name: best.strategies.join(' + ') || best.candidateId,
+          profit: best.totalProfit,
+          winrate: best.winRate,
+          mdd: best.mdd,
+        },
+      }));
+    }
+  }, [mode]);
+
+  useWebSocketSubscription<WSSearchProgressPayload>('SEARCH_PROGRESS', handleProgress);
+  useWebSocketSubscription<ExperimentResult[]>('LEADERBOARD_UPDATE', handleLeaderboard);
 
   const handleCreateInstance = (newInstance: SingleStrategyInstance) => {
     setInstances((prev) => [...prev, newInstance]);
-  };
-
-  const handleStatusChange = (status: 'IDLE' | 'RUNNING' | 'PAUSED' | 'COMPLETED') => {
-    setStats((prev) => ({
-      ...prev,
-      status,
-    }));
-  };
-
-  const handleUpdateIteration = (iteration: number, testedCandidates: number) => {
-    setStats((prev) => ({
-      ...prev,
-      iteration,
-      testedCandidates,
-    }));
   };
 
   const handleStartBacktest = async (config: {
@@ -74,14 +83,72 @@ export function StrategyDiscoveryPage() {
 
     const strategyNames = [...new Set(config.strategies.map(id => instances.find(inst => inst.id === id)?.type).filter((name): name is string => Boolean(name)))];
     if (strategyNames.length === 0) return;
-    setStats(current => ({ ...current, iteration: 0, totalIterations: 1, testedCandidates: 0, status: 'RUNNING' }));
     try {
       await startSearch({ pair: symbol, timeframe: '1h', from: Date.now() - 180 * 86400000, to: Date.now(), capital: 10000, strategies: strategyNames });
       alert(`Đã gửi backtest thật: ${activeNames}. Theo dõi tiến độ qua WebSocket.`);
     } catch (error) {
-      setStats(current => ({ ...current, status: 'IDLE' }));
       alert(`Không thể gửi backtest: ${String(error)}. Cần migration và backfill trước.`);
     }
+  };
+
+  const handleStartLoop = async (config: DiscoveryLoopConfig) => {
+    if (mode !== 'LIVE') {
+      setStats({ ...DEFAULT_DISCOVERY_STATS, status: 'FAILED', statusMessage: 'Đăng nhập LIVE mode để chạy Search Loop thật.' });
+      return;
+    }
+    if (config.maxCandidates < 2 || config.maxCandidates > 200) {
+      setStats(current => ({ ...current, status: 'FAILED', statusMessage: 'Candidates phải nằm trong khoảng 2–200.' }));
+      return;
+    }
+    if (config.maxDurationSeconds < 60 || config.maxDurationSeconds > 3600) {
+      setStats(current => ({ ...current, status: 'FAILED', statusMessage: 'Max duration phải nằm trong khoảng 60–3600 giây.' }));
+      return;
+    }
+    if (config.noImprovementLimit < 0) {
+      setStats(current => ({ ...current, status: 'FAILED', statusMessage: 'No-improvement limit không được âm.' }));
+      return;
+    }
+
+    activeSearchId.current = null;
+    setStats({
+      ...DEFAULT_DISCOVERY_STATS,
+      totalIterations: config.maxCandidates,
+      status: 'RUNNING',
+      statusMessage: 'Đã gửi Search Loop, đang chờ kết quả worker qua WebSocket…',
+    });
+    const to = Date.now();
+    try {
+      const response = await startSearchLoop({
+        pair: symbol,
+        timeframe: config.timeframe,
+        from: to - 180 * 86400000,
+        to,
+        capital: 10000,
+        maxCandidates: config.maxCandidates,
+        maxDurationSeconds: config.maxDurationSeconds,
+        noImprovementLimit: config.noImprovementLimit,
+      });
+      activeSearchId.current = response.searchId;
+      setStats(current => ({
+        ...current,
+        searchId: response.searchId,
+        totalIterations: response.maxCandidates,
+        statusMessage: current.status === 'RUNNING'
+          ? 'Search Loop đang chạy; số liệu bên dưới đến trực tiếp từ backend.'
+          : current.statusMessage,
+      }));
+    } catch (error) {
+      activeSearchId.current = null;
+      const message = error instanceof ApiError && error.status === 422
+        ? 'Không đủ 21 candle trong khoảng đã chọn. Hãy chạy backfill cho market/timeframe này rồi thử lại.'
+        : `Không thể bắt đầu Search Loop: ${error instanceof Error ? error.message : String(error)}`;
+      setStats(current => ({ ...current, status: 'FAILED', statusMessage: message }));
+    }
+  };
+
+  const handleResetLoop = () => {
+    activeSearchId.current = null;
+    setStats(DEFAULT_DISCOVERY_STATS);
   };
 
   return (
@@ -112,8 +179,8 @@ export function StrategyDiscoveryPage() {
       <div style={col3Style}>
         <LoopDiscoveryPanel
           stats={stats}
-          onStatusChange={handleStatusChange}
-          onUpdateIteration={handleUpdateIteration}
+          onStart={handleStartLoop}
+          onReset={handleResetLoop}
         />
         <MiniLeaderboard items={miniLeaderboard} />
       </div>
