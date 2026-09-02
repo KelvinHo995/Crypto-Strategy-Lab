@@ -130,14 +130,13 @@ func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
 			p.retry(ctx, job.ID, fmt.Errorf("load historical candles: %w", err))
 			return
 		}
-		if len(candles) < 21 {
-			result := resultFromJob(job, "FAILED")
-			if err := p.repo.Save(ctx, result); err != nil {
-				p.retry(ctx, job.ID, err)
-				return
-			}
-			p.notify(result)
-			p.ack(ctx, job.ID)
+		if len(candles) < MinCandlesForBacktest {
+			// Retried like every other failure path here: a short count can
+			// mean the range genuinely has no data (permanent — exhausts
+			// retries and the queue marks it FAILED on its own) or that
+			// backfill for this range just hasn't landed yet (transient —
+			// a retry a few seconds later succeeds).
+			p.retry(ctx, job.ID, fmt.Errorf("only %d candles available, want at least %d", len(candles), MinCandlesForBacktest))
 			return
 		}
 	}
