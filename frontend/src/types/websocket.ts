@@ -25,7 +25,9 @@ export interface WSTradeTickMessage extends WSMessage<TradeTick> {
 export interface WSSearchProgressPayload {
   tested: number;
   total: number;
-  status?: string;
+  searchId?: string;
+  status?: 'RUNNING' | 'COMPLETED' | 'STOPPED' | 'FAILED';
+  reason?: string;
 }
 
 export interface WSSearchProgressMessage extends WSMessage<WSSearchProgressPayload> {

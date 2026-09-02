@@ -20,8 +20,10 @@ export interface DiscoveryStats {
   iteration: number;
   totalIterations: number;
   testedCandidates: number;
-  status: 'IDLE' | 'RUNNING' | 'PAUSED' | 'COMPLETED';
-  bestStrategy: {
+  status: 'IDLE' | 'RUNNING' | 'COMPLETED' | 'STOPPED' | 'FAILED';
+  searchId?: string;
+  statusMessage?: string;
+  bestStrategy?: {
     name: string;
     profit: number;
     winrate: number;
@@ -144,18 +146,12 @@ export const COMPOSITE_PRESETS: CompositePreset[] = [
   },
 ];
 
-// 4. Mock Discovery Loop status
+// 4. Discovery initial state; LIVE progress is populated only by backend events.
 export const DEFAULT_DISCOVERY_STATS: DiscoveryStats = {
-  iteration: 47,
-  totalIterations: 500,
-  testedCandidates: 2350,
-  status: 'RUNNING',
-  bestStrategy: {
-    name: 'MA(20) + RSI(14) + S/R (Weighted)',
-    profit: 2342.18,
-    winrate: 68.21,
-    mdd: 12.45,
-  },
+  iteration: 0,
+  totalIterations: 0,
+  testedCandidates: 0,
+  status: 'IDLE',
 };
 
 // 5. Mock Mini Leaderboard top-5

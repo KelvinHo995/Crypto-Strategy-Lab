@@ -1,6 +1,12 @@
 import axios from 'axios';
 import type { Candle } from '../../types/candle';
-import type { ExperimentResult, StartSearchRequest, StartSearchResponse } from '../../types/backtest';
+import type {
+  ExperimentResult,
+  StartSearchLoopRequest,
+  StartSearchLoopResponse,
+  StartSearchRequest,
+  StartSearchResponse,
+} from '../../types/backtest';
 import type { SentimentObservation } from '../../types/news';
 import type { MarketInfo } from '../../types/candle';
 
@@ -15,6 +21,28 @@ export const apiClient = axios.create({
   },
 });
 
+export class ApiError extends Error {
+  status?: number;
+  details?: unknown;
+
+  constructor(message: string, status?: number, details?: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.details = details;
+  }
+}
+
+function responseMessage(data: unknown, fallback: string): string {
+  if (typeof data === 'string' && data.trim()) return data.trim();
+  if (data && typeof data === 'object') {
+    const body = data as Record<string, unknown>;
+    if (typeof body.message === 'string' && body.message.trim()) return body.message.trim();
+    if (typeof body.error === 'string' && body.error.trim()) return body.error.trim();
+  }
+  return fallback;
+}
+
 // Response interceptor to handle common errors gracefully
 apiClient.interceptors.response.use(
   (response) => response,
@@ -27,9 +55,13 @@ apiClient.interceptors.response.use(
         console.warn('Session expired or unauthorized. Redirecting to login...');
         window.dispatchEvent(new Event('auth:unauthorized'));
       }
-      return Promise.reject(error.response.data || error.message);
+      return Promise.reject(new ApiError(
+        responseMessage(error.response.data, error.message || `HTTP ${status}`),
+        status,
+        error.response.data,
+      ));
     }
-    return Promise.reject(error.message || 'Network error');
+    return Promise.reject(new ApiError(error.message || 'Network error'));
   }
 );
 
@@ -61,6 +93,10 @@ export async function fetchExperiments(): Promise<ExperimentResult[]> {
 
 export async function startSearch(request: StartSearchRequest): Promise<StartSearchResponse> {
   return (await apiClient.post<StartSearchResponse>('/search/start', request)).data;
+}
+
+export async function startSearchLoop(request: StartSearchLoopRequest): Promise<StartSearchLoopResponse> {
+  return (await apiClient.post<StartSearchLoopResponse>('/search/loop', request)).data;
 }
 
 export async function analyzeSentiment(newsId: string, text: string, publishedAt: number): Promise<SentimentObservation> {

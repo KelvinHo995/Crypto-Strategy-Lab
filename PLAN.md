@@ -12,14 +12,14 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ `Candle` struct chốt xong, có thêm field `IsClosed` (candle đang hình thành vs đã đóng)
 - ✅ Binance live stream đã merge và mở hai combined WebSocket dùng chung: kline cho 8 coin × 4 timeframe và aggregate trades cho 8 coin. `/ws` lọc theo subscription của từng browser, có reconnect/backoff.
 - ✅ sentiment-service FastAPI chạy được; `/analyze` dùng model lexicon xác định `crypto-lexicon/v1`, validate input, trả score/model version/timestamp thật và có test. FinBERT vẫn là nâng cấp ngoài MVP.
-- ✅ `internal/experiment`: Backtester + Evaluator xong, có test; `go vet`/`go test` sạch — SL/TP, gap fill, fee, slippage, tránh lookahead bias và same-candle re-entry. Xem ADR-0003, ADR-0009.
+- ⚠️ `internal/experiment`: Backtester + Evaluator, SL/TP, gap fill, fee, slippage, tránh lookahead bias và same-candle re-entry đã có test. `go vet` sạch nhưng full `go test ./...` hiện còn đỏ ở Search Loop HTTP/WebSocket (ID job dựa trên clock bị trùng trên Windows); không coi release-ready trước khi regression xanh. Xem ADR-0003, ADR-0009.
 - ✅ `internal/httpx`: router 2-mux public/protected; `POST /search/start`, `GET /experiments`, `GET /experiments/{id}`, `GET /strategies`, `/health` chạy thật. Request search giới hạn 1 MiB, reject field lạ/trailing JSON và trả `202 STARTED`. Auth dùng JWT cookie thật; `/ws` là server-push channel có xác thực cho candle, tiến độ search và leaderboard.
 - ✅ `Binance.FetchHistoricalCandles` REST thật: pagination 1000 klines, normalize `Candle`, chỉ nhận candle đã đóng; live kline WebSocket có reconnect/backoff và phát `CANDLE_UPDATE`.
 - ✅ Postgres repositories cho experiments/users/candles/sentiment và `cmd/backfill` đã hoàn thiện; default 2 năm/BTC, hỗ trợ `BACKFILL_SYMBOLS` + `BACKFILL_DAYS`, pace Binance request, upsert batch 500 và idempotent theo `(symbol,timeframe,open_time)`. Search production đọc range qua bounded cache. Migration `0003` chuẩn hóa JSON legacy, `0004` thêm `updated_at`, `0005` index leaderboard, `0006` tạo durable job queue và `0007` chuẩn hóa metadata của search.
 - ✅ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện; package strategy đạt 82.5% statement coverage trong lượt kiểm tra 2026-08-30.
-- ✅ Queue/Worker pool dùng durable PostgreSQL queue (3 workers): transaction ghi đồng thời `PENDING + job`, claim bằng `SKIP LOCKED`, retry/backoff, lease heartbeat và reclaim sau crash. Job chỉ lưu dataset reference/config, worker đọc candle qua bounded cache. Pipeline Candidate→Backtest→Evaluate→Rank, provenance và WebSocket progress/leaderboard đã hoàn thiện cho một candidate/request. Strategy/observer panic được cô lập để không làm chết worker.
-- ✅ `POST /search/loop` (Continuous Strategy Loop, ADR-0011): sinh nhiều candidate qua `RandomGenerator`, dừng theo max-candidates (bắt buộc) / max-duration / no-improvement (cả hai optional, OR semantics), dedup trong một lần chạy, `SEARCH_PROGRESS` là số thật (không còn placeholder) qua `SearchID`/`SearchTotal`. Batch nhiều candidate không còn là stretch. User-cancel vẫn là stretch — chưa có endpoint, chưa cần vì 3 điều kiện còn lại đã đảm bảo dừng.
-- ✅ Frontend UI responsive đã hoàn thiện theo design mẫu và được chuẩn hóa thành financial workstation sáng: sidebar cobalt, surface slate/white, xanh/đỏ chỉ biểu thị ngữ nghĩa thị trường, icon Lucide thay emoji, login/offline-demo rõ ràng. Auth, market catalog 8 coin, historical candles, realtime candle/aggregate trades, strategy list/search, experiments, sentiment analyze và progress/leaderboard đã nối Go API/WebSocket. LIVE mode không tự thay dữ liệu thật bằng mock; mock chỉ còn trong DEMO rõ ràng. News collector/24h aggregate vẫn là demo vì MVP backend chưa có collector endpoint.
+- ⚠️ Queue/Worker pool dùng durable PostgreSQL queue (3 workers), claim bằng `SKIP LOCKED`, retry/backoff, lease heartbeat và reclaim sau crash. `/search/start` ghi `PENDING + job` trong một transaction; `/search/loop` hiện vẫn ghi hai bước và cần chuyển sang `EnqueuePending` để loại crash window. Job chỉ lưu dataset reference/config, worker đọc candle qua bounded cache. Strategy/observer panic được cô lập để không làm chết worker.
+- ⚠️ `POST /search/loop` (ADR-0011) đã có `RandomGenerator` và nhận max-candidates / max-duration / no-improvement, nhưng chưa được đánh dấu hoàn tất: job ID có thể trùng trên Windows, PostgreSQL queue không tạo backpressure cho no-improvement, early-stop chưa có terminal search-run state và progress có thể không đạt `total`. Dedup hiện retry tối đa 10 lần rồi vẫn có thể nhận duplicate. User-cancel chưa có endpoint.
+- ✅ Frontend Discovery đã gọi thật `POST /search/loop`, gửi đủ ba giới hạn, bỏ timer/progress giả và dùng `SEARCH_PROGRESS` + `LEADERBOARD_UPDATE` trong LIVE mode. UI hỗ trợ `COMPLETED|STOPPED|FAILED` và giải thích HTTP 422 cần backfill; với backend hiện tại chỉ `COMPLETED` có thể suy ra từ `tested == total`, còn `STOPPED/FAILED` cấp search-run cần backend bổ sung `searchId/status/reason` trong event. Auth, catalog 8 coin, candles, aggregate trades, strategy list, experiments và sentiment analyze vẫn nối API thật; news collector/24h aggregate còn là DEMO rõ ràng.
 - ✅ **Auth (users/session)** — bcrypt, Postgres user repository, JWT HS256 1h, httpOnly SameSite=Lax cookie, protected-route middleware và logout cookie clearing đã hoàn thiện; `JWT_SECRET` tối thiểu 16 ký tự là biến môi trường bắt buộc.
 
 ## 1. Phân công (đã điều chỉnh so với bản đầu)
@@ -205,6 +205,7 @@ unit test/fallback composition. Worker pool và Backtester vẫn phụ thuộc i
 | Method | Path | Việc |
 |---|---|---|
 | POST | `/search/start` | Bắt đầu search — trả về ngay `{searchId, status: STARTED}`, không block chờ chạy xong |
+| POST | `/search/loop` | Bắt đầu Random Search 2–200 candidate với max-duration/no-improvement optional; trả HTTP 202 ngay |
 | GET | `/experiments` | Leaderboard — đọc từ bảng `experiments`, sort theo return |
 | GET | `/experiments/{id}` | Chi tiết 1 kết quả (click Top #1), gồm provenance |
 | GET | `/strategies` | List strategy đã đăng ký, cho strategy picker UI |
@@ -216,7 +217,7 @@ unit test/fallback composition. Worker pool và Backtester vẫn phụ thuộc i
 | POST | `/auth/login` | `{username, password}` → set session cookie |
 | POST | `/auth/logout` | Xoá session hiện tại |
 
-**Tất cả endpoint khác ở trên** (`/search/start`, `/experiments`,
+**Tất cả endpoint khác ở trên** (`/search/start`, `/search/loop`, `/experiments`,
 `/experiments/{id}`, `/strategies`, `/ws`) **yêu cầu session hợp lệ** — trừ
 `/health` và 2 endpoint `/auth/register` + `/auth/login`.
 

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/experiment"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/httpx"
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -121,7 +122,8 @@ func TestSearchLoop_RealProgressOverWebSocket(t *testing.T) {
 	}
 
 	maxTested := 0
-	for maxTested < 3 {
+	sawLeaderboard := false
+	for maxTested < 3 || !sawLeaderboard {
 		var envelope struct {
 			Type    string          `json:"type"`
 			Payload json.RawMessage `json:"payload"`
@@ -129,8 +131,19 @@ func TestSearchLoop_RealProgressOverWebSocket(t *testing.T) {
 		if err := wsjson.Read(ctx, conn, &envelope); err != nil {
 			t.Fatal(err)
 		}
+		if envelope.Type == "LEADERBOARD_UPDATE" {
+			var leaderboard []experiment.Result
+			if err := json.Unmarshal(envelope.Payload, &leaderboard); err != nil {
+				t.Fatal(err)
+			}
+			if len(leaderboard) == 0 || leaderboard[0].Status != "COMPLETED" {
+				t.Fatalf("leaderboard update has no completed result: %+v", leaderboard)
+			}
+			sawLeaderboard = true
+			continue
+		}
 		if envelope.Type != "SEARCH_PROGRESS" {
-			continue // e.g. LEADERBOARD_UPDATE, which has an array payload
+			continue
 		}
 		var progress struct {
 			Tested int `json:"tested"`

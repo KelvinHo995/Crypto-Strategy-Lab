@@ -1,62 +1,43 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { DiscoveryStats } from '../services/mockStrategyData';
+
+export interface DiscoveryLoopConfig {
+  timeframe: '5m' | '15m' | '1h' | '4h';
+  maxCandidates: number;
+  maxDurationSeconds: number;
+  noImprovementLimit: number;
+}
 
 interface LoopDiscoveryPanelProps {
   stats: DiscoveryStats;
-  onStatusChange: (status: 'IDLE' | 'RUNNING' | 'PAUSED' | 'COMPLETED') => void;
-  onUpdateIteration: (iter: number, tested: number) => void;
+  onStart: (config: DiscoveryLoopConfig) => void | Promise<void>;
+  onReset: () => void;
 }
 
 export function LoopDiscoveryPanel({
   stats,
-  onStatusChange,
-  onUpdateIteration,
+  onStart,
+  onReset,
 }: LoopDiscoveryPanelProps) {
-  const [searchMethod, setSearchMethod] = useState<'random' | 'domain' | 'genetic'>('random');
-
-  // Simulated Loop Discovery updates when running
-  useEffect(() => {
-    if (stats.status !== 'RUNNING' || stats.totalIterations <= 1) return;
-
-    const interval = setInterval(() => {
-      if (stats.iteration >= stats.totalIterations) {
-        onStatusChange('COMPLETED');
-        clearInterval(interval);
-        return;
-      }
-      
-      const step = Math.floor(Math.random() * 3) + 1; // Step up 1 to 3 iterations
-      const nextIter = Math.min(stats.iteration + step, stats.totalIterations);
-      const nextTested = stats.testedCandidates + step * 50; // 50 backtests per iteration
-
-      onUpdateIteration(nextIter, nextTested);
-    }, 1500);
-
-    return () => clearInterval(interval);
-  }, [stats.status, stats.iteration, stats.totalIterations, stats.testedCandidates, onStatusChange, onUpdateIteration]);
+  const [config, setConfig] = useState<DiscoveryLoopConfig>({
+    timeframe: '1h',
+    maxCandidates: 10,
+    maxDurationSeconds: 300,
+    noImprovementLimit: 5,
+  });
 
   const handleStart = () => {
-    if (stats.status === 'COMPLETED') {
-      onUpdateIteration(0, 0); // Reset
-    }
-    onStatusChange('RUNNING');
+    void onStart(config);
   };
 
-  const handlePause = () => {
-    onStatusChange('PAUSED');
-  };
-
-  const handleReset = () => {
-    onStatusChange('IDLE');
-    onUpdateIteration(0, 0);
-  };
-
-  const progressPercent = (stats.iteration / stats.totalIterations) * 100;
+  const progressPercent = stats.totalIterations > 0
+    ? Math.min(100, (stats.iteration / stats.totalIterations) * 100)
+    : 0;
 
   return (
     <div style={panelContainerStyle}>
       <h3 style={titleStyle}>Loop Discovery Engine</h3>
-      <small style={{color:'#f59e0b'}}>Backend MVP chạy 1 candidate/request; loop nhiều iteration là demo.</small>
+      <small style={liveContractStyle}>Random Search chạy qua API; tiến độ chỉ cập nhật từ WebSocket.</small>
 
       {/* Visual Flow diagram of Discovery Loop */}
       <div style={flowDiagramStyle}>
@@ -77,8 +58,8 @@ export function LoopDiscoveryPanel({
             <input
               type="radio"
               name="method"
-              checked={searchMethod === 'random'}
-              onChange={() => setSearchMethod('random')}
+              checked
+              readOnly
               style={radioStyle}
             />
             <div>
@@ -91,13 +72,13 @@ export function LoopDiscoveryPanel({
             <input
               type="radio"
               name="method"
-              checked={searchMethod === 'domain'}
-              onChange={() => setSearchMethod('domain')}
+              checked={false}
+              disabled
               style={radioStyle}
             />
             <div>
               <span style={radioTitleStyle}>Domain-guided</span>
-              <span style={radioDescStyle}>Searches within structural boundaries</span>
+              <span style={radioDescStyle}>Chưa có generator ở backend</span>
             </div>
           </label>
 
@@ -105,14 +86,66 @@ export function LoopDiscoveryPanel({
             <input
               type="radio"
               name="method"
-              checked={searchMethod === 'genetic'}
-              onChange={() => setSearchMethod('genetic')}
+              checked={false}
+              disabled
               style={radioStyle}
             />
             <div>
               <span style={radioTitleStyle}>Genetic Algorithm</span>
-              <span style={radioDescStyle}>Evolves variants over multi-generations</span>
+              <span style={radioDescStyle}>Chưa có generator ở backend</span>
             </div>
+          </label>
+        </div>
+      </div>
+
+      <div style={sectionStyle}>
+        <h4 style={sectionHeaderStyle}>Loop limits</h4>
+        <div style={settingsGridStyle}>
+          <label style={fieldLabelStyle}>
+            Timeframe
+            <select
+              value={config.timeframe}
+              disabled={stats.status === 'RUNNING'}
+              onChange={event => setConfig(current => ({ ...current, timeframe: event.target.value as DiscoveryLoopConfig['timeframe'] }))}
+              style={fieldStyle}
+            >
+              {['5m', '15m', '1h', '4h'].map(value => <option key={value}>{value}</option>)}
+            </select>
+          </label>
+          <label style={fieldLabelStyle}>
+            Candidates (2–200)
+            <input
+              type="number"
+              min={2}
+              max={200}
+              value={config.maxCandidates}
+              disabled={stats.status === 'RUNNING'}
+              onChange={event => setConfig(current => ({ ...current, maxCandidates: Number(event.target.value) }))}
+              style={fieldStyle}
+            />
+          </label>
+          <label style={fieldLabelStyle}>
+            Max duration (60–3600s)
+            <input
+              type="number"
+              min={60}
+              max={3600}
+              value={config.maxDurationSeconds}
+              disabled={stats.status === 'RUNNING'}
+              onChange={event => setConfig(current => ({ ...current, maxDurationSeconds: Number(event.target.value) }))}
+              style={fieldStyle}
+            />
+          </label>
+          <label style={fieldLabelStyle}>
+            No improvement limit
+            <input
+              type="number"
+              min={0}
+              value={config.noImprovementLimit}
+              disabled={stats.status === 'RUNNING'}
+              onChange={event => setConfig(current => ({ ...current, noImprovementLimit: Number(event.target.value) }))}
+              style={fieldStyle}
+            />
           </label>
         </div>
       </div>
@@ -140,8 +173,13 @@ export function LoopDiscoveryPanel({
           </div>
         </div>
 
+        {stats.searchId && <div style={searchIdStyle}>Search ID: {stats.searchId}</div>}
+        {stats.statusMessage && (
+          <div role="status" style={messageStyle(stats.status)}>{stats.statusMessage}</div>
+        )}
+
         {/* Best Strategy So Far details */}
-        {stats.iteration > 0 && (
+        {stats.bestStrategy && (
           <div style={bestStrategyCardStyle}>
             <div style={bestHeaderStyle}>
               Best Candidate So Far
@@ -167,16 +205,14 @@ export function LoopDiscoveryPanel({
 
       {/* Control Buttons */}
       <div style={controlsContainerStyle}>
-        {stats.status === 'RUNNING' ? (
-          <button onClick={handlePause} style={pauseButtonStyle}>
-            Pause Discovery
-          </button>
-        ) : (
-          <button onClick={handleStart} style={startButtonStyle}>
-            {stats.status === 'COMPLETED' ? 'Restart Loop' : 'Start Loop Discovery'}
-          </button>
-        )}
-        <button onClick={handleReset} style={resetButtonStyle}>
+        <button
+          onClick={handleStart}
+          style={{ ...startButtonStyle, opacity: stats.status === 'RUNNING' ? 0.55 : 1 }}
+          disabled={stats.status === 'RUNNING'}
+        >
+          {stats.status === 'RUNNING' ? 'Discovery đang chạy' : stats.status === 'IDLE' ? 'Start Loop Discovery' : 'Run new discovery'}
+        </button>
+        <button onClick={onReset} style={resetButtonStyle} disabled={stats.status === 'RUNNING'}>
           Reset
         </button>
       </div>
@@ -208,6 +244,14 @@ const titleStyle: React.CSSProperties = {
   letterSpacing: '0.05em',
   borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.5rem',
+};
+
+const liveContractStyle: React.CSSProperties = {
+  color: '#047857',
+  background: '#ecfdf5',
+  border: '1px solid #a7f3d0',
+  borderRadius: '5px',
+  padding: '0.4rem 0.5rem',
 };
 
 const flowDiagramStyle: React.CSSProperties = {
@@ -248,6 +292,33 @@ const sectionHeaderStyle: React.CSSProperties = {
   color: '#94a3b8',
   margin: 0,
   textTransform: 'uppercase',
+};
+
+const settingsGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: '0.5rem',
+};
+
+const fieldLabelStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.25rem',
+  color: '#64748b',
+  fontSize: '0.65rem',
+  fontWeight: 600,
+};
+
+const fieldStyle: React.CSSProperties = {
+  minWidth: 0,
+  width: '100%',
+  boxSizing: 'border-box',
+  border: '1px solid #cbd5e1',
+  borderRadius: '5px',
+  background: '#fff',
+  color: '#0f172a',
+  padding: '0.35rem 0.4rem',
+  fontSize: '0.72rem',
 };
 
 const radioGroupStyle: React.CSSProperties = {
@@ -307,12 +378,15 @@ const statusBadgeStyle = (status: string): React.CSSProperties => {
   if (status === 'RUNNING') {
     color = '#10b981';
     bgColor = 'rgba(16, 185, 129, 0.1)';
-  } else if (status === 'PAUSED') {
+  } else if (status === 'STOPPED') {
     color = '#f59e0b';
     bgColor = 'rgba(245, 158, 11, 0.1)';
   } else if (status === 'COMPLETED') {
     color = '#3b82f6';
     bgColor = 'rgba(59, 130, 246, 0.1)';
+  } else if (status === 'FAILED') {
+    color = '#dc2626';
+    bgColor = 'rgba(220, 38, 38, 0.08)';
   }
 
   return {
@@ -368,6 +442,22 @@ const statValueStyle: React.CSSProperties = {
   color: '#0f172a',
   fontFamily: 'monospace',
 };
+
+const searchIdStyle: React.CSSProperties = {
+  color: '#64748b',
+  fontFamily: 'monospace',
+  fontSize: '0.62rem',
+  overflowWrap: 'anywhere',
+};
+
+const messageStyle = (status: DiscoveryStats['status']): React.CSSProperties => ({
+  borderRadius: '5px',
+  border: `1px solid ${status === 'FAILED' ? '#fecaca' : status === 'STOPPED' ? '#fde68a' : '#bfdbfe'}`,
+  background: status === 'FAILED' ? '#fef2f2' : status === 'STOPPED' ? '#fffbeb' : '#eff6ff',
+  color: status === 'FAILED' ? '#b91c1c' : status === 'STOPPED' ? '#92400e' : '#1d4ed8',
+  padding: '0.45rem 0.5rem',
+  fontSize: '0.68rem',
+});
 
 const bestStrategyCardStyle: React.CSSProperties = {
   backgroundColor: 'rgba(6, 182, 212, 0.05)',
@@ -435,18 +525,6 @@ const startButtonStyle: React.CSSProperties = {
   fontWeight: '700',
   cursor: 'pointer',
   boxShadow: '0 2px 6px rgba(6, 182, 212, 0.2)',
-};
-
-const pauseButtonStyle: React.CSSProperties = {
-  flexGrow: 2,
-  backgroundColor: '#f59e0b',
-  color: '#ffffff',
-  border: 'none',
-  borderRadius: '4px',
-  padding: '0.5rem',
-  fontSize: '0.8rem',
-  fontWeight: '700',
-  cursor: 'pointer',
 };
 
 const resetButtonStyle: React.CSSProperties = {
