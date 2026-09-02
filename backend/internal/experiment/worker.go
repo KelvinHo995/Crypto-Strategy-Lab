@@ -9,6 +9,7 @@ import (
 
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/strategy"
+	"github.com/google/uuid"
 )
 
 type WorkerPool struct {
@@ -251,4 +252,7 @@ func DefaultStrategyVersions(names []string) map[string]string {
 	return versions
 }
 
-func NewJobID(now time.Time) string { return fmt.Sprintf("exp-%d", now.UnixNano()) }
+// UUID suffix: timestamp alone can collide across a tight generation loop or across instances.
+func NewJobID(now time.Time) string {
+	return fmt.Sprintf("exp-%d-%s", now.UnixNano(), uuid.NewString())
+}

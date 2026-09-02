@@ -135,9 +135,10 @@ backfilled; the client must not disguise it with generated data.
 The current release gate additionally requires the Search Loop scenario above
 to finish. A permanent value below `5/5`, a WebSocket timeout, repeated result
 IDs, or a loop that stays `RUNNING` after an early stop is a backend failure;
-do not compensate with a frontend timer. `STOPPED` and search-level `FAILED`
-can only be accepted once the backend publishes additive
-`{searchId,status,reason}` progress fields.
+do not compensate with a frontend timer. The backend now publishes additive
+`{searchId,status,reason}` progress fields for `STOPPED`/search-level `FAILED`
+(live-verified: a `noImprovementLimit` run correctly broadcast `STOPPED` the
+moment it stopped generating, well before its already-enqueued jobs finished).
 
 ## 6. Authenticated API smoke test
 

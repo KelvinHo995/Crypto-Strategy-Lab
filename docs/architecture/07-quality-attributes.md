@@ -39,9 +39,14 @@ low latency, without the frontend polling (spec ch.32.3).
 **Decision:** reconnect/retry logic owned entirely inside
 `internal/market`, isolated from strategy/experiment/frontend. Visible
 "reconnecting" state on the frontend rather than silent staleness.
-**Untested assumption to close before defense:** what happens to an
-in-flight backtest if candle data it depends on is mid-backfill or stale —
-this should be answered explicitly, not left implicit.
+**Answered:** a job whose on-demand candle fetch comes back short
+(`< experiment.MinCandlesForBacktest`) is retried through the same
+`Queue.Nack`/backoff/lease-exhaustion path as every other worker failure,
+not failed outright — see `internal/experiment/worker.go`'s `run()`. This
+covers the "mid-backfill" case (transient, a retry a few seconds later
+sees the rest of the data) without needing to special-case it: a request
+against a range with genuinely no data just exhausts retries and lands on
+`FAILED` the same way, a few seconds later instead of immediately.
 
 ## Performance
 

@@ -10,8 +10,8 @@ StrategyGenerator.Generate()
      │  produces a CandidateStrategy (see 05-strategy-flow.md)
      ▼
 Queue submission
-     │  /search/start → PostgresQueue.EnqueuePending(job, result), one transaction
-     │  /search/loop  → Repository.Save then Queue.Enqueue (open atomicity gap)
+     │  /search/start and /search/loop both →
+     │  PostgresQueue.EnqueuePending(job, result), one transaction
      ▼
 Worker pool (3 workers, SKIP LOCKED claim + lease heartbeat)
      │  load referenced candle range through bounded cache
@@ -95,22 +95,32 @@ uses `POST /search/loop`, which validates `maxCandidates` (2–200), optional
 `noImprovementLimit`. Enabled conditions have OR semantics: reaching any one
 stops further generation; queued work continues.
 
-That describes the intended policy, but there are implementation caveats that
-must remain visible until the backend work is complete:
+That describes the intended policy. `RunSearchLoop` now emits a terminal
+`onStopped(status, reason)` signal — `STOPPED` if some candidates are still
+running, `FAILED` if none were ever enqueued — the moment it stops early
+(cancellation, `max-duration`, `no-improvement`, or an enqueue failure), wired
+through `Hub.SearchLoopStopped` to a `SEARCH_PROGRESS{searchId,status,reason}`
+broadcast. Live-verified against Supabase: a `noImprovementLimit:1` run
+stopped at 3/10 candidates and broadcast `STOPPED`/`no-improvement`
+immediately, while the one already-enqueued straggler still completed and
+pushed `tested` to 4 afterward — generation stopping and queued work finishing
+are correctly signaled as separate things.
 
-- wall-clock time currently measures the generator goroutine, not the complete
-  search run;
+Two caveats remain, both accepted rather than fixed for now:
+
+- wall-clock time measures the generator goroutine, not the complete search
+  run (already-enqueued jobs can still be executing after `MaxDuration` trips);
 - the production PostgreSQL queue is durable but effectively unbounded, so the
-  generator can enqueue the requested maximum before completion-driven
-  no-improvement state changes;
-- the observer is removed when generation returns, while queued jobs can still
-  be running;
-- there is no persisted search-run status/reason, so an early stop does not emit
-  a terminal `STOPPED` event and progress can remain below the requested total;
-- candidate dedup retries ten times, then may still enqueue a duplicate.
+  generator can enqueue several candidates ahead of completion-driven
+  no-improvement state changes — the stop can overshoot `NoImprovementLimit`
+  by more than the "a few candidates" a bounded in-memory queue would have
+  capped it to. A bounded in-flight window or a persisted search coordinator
+  would tighten this further; not required at current candidate-count scale
+  (max 200).
 
-Consequently max-candidates is the only currently deterministic external bound.
-The other controls are accepted inputs but are not release-complete semantics.
+Candidate dedup also still retries ten times, then may enqueue a duplicate
+rather than fail the whole run over it — an accepted tradeoff (wasted compute
+and a possible duplicate leaderboard entry), not a correctness break.
 
 ## Implemented runtime states
 
@@ -134,13 +144,14 @@ candles exist. It does not wait for generated jobs. Today there is no standalone
 search-run resource: `STARTED` is an acknowledgement, not a queryable lifecycle
 record. Per-candidate states remain `PENDING|RUNNING|COMPLETED|FAILED`.
 
-`SEARCH_PROGRESS` currently contains only `{tested,total}` and is global to an
-authenticated WebSocket connection. `tested` counts terminal candidate rows;
-`total` is the requested maximum. The frontend never advances this value
-locally. It treats `tested == total` as `COMPLETED`, reports REST failures as
-`FAILED`, and supports additive future `{searchId,status,reason}` fields for
-explicit `STOPPED|FAILED` search-run events. Until those fields exist, an early
-stop cannot be represented accurately in the UI.
+`SEARCH_PROGRESS` is global to an authenticated WebSocket connection.
+Ordinary per-candidate ticks carry `{tested,total,searchId}`; `tested` counts
+terminal candidate rows and `total` is the requested maximum. The terminal
+early-stop broadcast additionally carries `{status,reason}` (`STOPPED` or
+`FAILED`). The frontend never advances progress locally — it treats
+`tested == total` as `COMPLETED`, reports REST failures as `FAILED`, and now
+renders `STOPPED`/`FAILED` directly from the additive fields the backend
+publishes.
 
 ## Trade simulation realism
 
