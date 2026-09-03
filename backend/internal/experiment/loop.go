@@ -112,7 +112,7 @@ generate:
 		}
 
 		id := NewJobID(time.Now())
-		versions := DefaultStrategyVersions(candidate.Strategies)
+		versions := DefaultStrategyVersions(candidate.Instances)
 		now := time.Now()
 		job := BacktestJob{
 			ID: id, SearchID: params.SearchID, SearchTotal: params.MaxCandidates,
@@ -128,8 +128,7 @@ generate:
 		}
 		pending := Result{
 			ID: id, SearchID: params.SearchID, SearchTotal: params.MaxCandidates,
-			CandidateID: candidate.ID, Strategies: candidate.Strategies,
-			Params: candidate.Params, Policy: candidate.Policy,
+			CandidateID: candidate.ID, Instances: candidate.Instances, Policy: candidate.Policy,
 			StrategyVersions: versions, DatasetPeriod: params.DatasetPeriod,
 			Status: "PENDING", CreatedAt: now.UnixMilli(),
 		}
@@ -164,8 +163,11 @@ generate:
 }
 
 func candidateKey(c strategy.CandidateStrategy) string {
-	strategies := append([]string(nil), c.Strategies...)
-	sort.Strings(strategies)
-	params, _ := json.Marshal(c.Params)
-	return strings.Join(strategies, ",") + "|" + c.Policy + "|" + string(params)
+	keys := make([]string, len(c.Instances))
+	for i, inst := range c.Instances {
+		data, _ := json.Marshal(inst)
+		keys[i] = string(data)
+	}
+	sort.Strings(keys)
+	return c.Policy + "|" + strings.Join(keys, ",")
 }

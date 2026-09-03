@@ -38,13 +38,9 @@ func saveResult(ctx context.Context, executor resultExecer, r Result) error {
 	if searchTotal < 1 {
 		searchTotal = 1
 	}
-	strategies, err := json.Marshal(r.Strategies)
+	instances, err := json.Marshal(r.Instances)
 	if err != nil {
-		return fmt.Errorf("marshal strategies: %w", err)
-	}
-	params, err := json.Marshal(r.Params)
-	if err != nil {
-		return fmt.Errorf("marshal params: %w", err)
+		return fmt.Errorf("marshal instances: %w", err)
 	}
 	versions, err := json.Marshal(r.StrategyVersions)
 	if err != nil {
@@ -53,16 +49,15 @@ func saveResult(ctx context.Context, executor resultExecer, r Result) error {
 
 	_, err = executor.ExecContext(ctx, `
 		INSERT INTO experiments (
-			id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
+			id, search_id, search_total, candidate_id, instances, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 		ON CONFLICT (id) DO UPDATE SET
 			search_id = EXCLUDED.search_id,
 			search_total = EXCLUDED.search_total,
 			candidate_id = EXCLUDED.candidate_id,
-			strategies = EXCLUDED.strategies,
-			params = EXCLUDED.params,
+			instances = EXCLUDED.instances,
 			policy = EXCLUDED.policy,
 			strategy_versions = EXCLUDED.strategy_versions,
 			dataset_period = EXCLUDED.dataset_period,
@@ -76,7 +71,7 @@ func saveResult(ctx context.Context, executor resultExecer, r Result) error {
 			status = EXCLUDED.status,
 			created_at = EXCLUDED.created_at,
 			updated_at = EXCLUDED.updated_at
-	`, r.ID, searchID, searchTotal, r.CandidateID, string(strategies), string(params), r.Policy, string(versions),
+	`, r.ID, searchID, searchTotal, r.CandidateID, string(instances), r.Policy, string(versions),
 		r.DatasetPeriod, r.Return, r.MDD, r.TradeCount, r.WinRate, r.Wins, r.Losses,
 		r.TotalProfit, r.Status, r.CreatedAt, time.Now().UnixMilli())
 	if err != nil {
@@ -87,7 +82,7 @@ func saveResult(ctx context.Context, executor resultExecer, r Result) error {
 
 func (p *PostgresRepository) Get(ctx context.Context, id string) (Result, error) {
 	row := p.db.QueryRowContext(ctx, `
-		SELECT id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
+		SELECT id, search_id, search_total, candidate_id, instances, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
 		FROM experiments WHERE id = $1
@@ -105,7 +100,7 @@ func (p *PostgresRepository) Get(ctx context.Context, id string) (Result, error)
 
 func (p *PostgresRepository) List(ctx context.Context) ([]Result, error) {
 	rows, err := p.db.QueryContext(ctx, `
-		SELECT id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
+		SELECT id, search_id, search_total, candidate_id, instances, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
 		FROM experiments
@@ -133,7 +128,7 @@ func (p *PostgresRepository) List(ctx context.Context) ([]Result, error) {
 
 func (p *PostgresRepository) ListBySearch(ctx context.Context, searchID string) ([]Result, error) {
 	rows, err := p.db.QueryContext(ctx, `
-		SELECT id, search_id, search_total, candidate_id, strategies, params, policy, strategy_versions,
+		SELECT id, search_id, search_total, candidate_id, instances, policy, strategy_versions,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
 		FROM experiments WHERE search_id = $1
@@ -160,10 +155,10 @@ type scanner interface {
 
 func scanResult(s scanner) (Result, error) {
 	var r Result
-	var strategies, params, versions []byte
+	var instances, versions []byte
 
 	err := s.Scan(
-		&r.ID, &r.SearchID, &r.SearchTotal, &r.CandidateID, &strategies, &params, &r.Policy, &versions,
+		&r.ID, &r.SearchID, &r.SearchTotal, &r.CandidateID, &instances, &r.Policy, &versions,
 		&r.DatasetPeriod, &r.Return, &r.MDD, &r.TradeCount, &r.WinRate, &r.Wins, &r.Losses,
 		&r.TotalProfit, &r.Status, &r.CreatedAt, &r.UpdatedAt,
 	)
@@ -171,24 +166,17 @@ func scanResult(s scanner) (Result, error) {
 		return Result{}, err
 	}
 
-	strategies, err = normalizeLegacyJSON(strategies)
+	instances, err = normalizeLegacyJSON(instances)
 	if err != nil {
-		return Result{}, fmt.Errorf("decode strategies: %w", err)
-	}
-	params, err = normalizeLegacyJSON(params)
-	if err != nil {
-		return Result{}, fmt.Errorf("decode params: %w", err)
+		return Result{}, fmt.Errorf("decode instances: %w", err)
 	}
 	versions, err = normalizeLegacyJSON(versions)
 	if err != nil {
 		return Result{}, fmt.Errorf("decode strategy versions: %w", err)
 	}
 
-	if err := json.Unmarshal(strategies, &r.Strategies); err != nil {
-		return Result{}, fmt.Errorf("unmarshal strategies: %w", err)
-	}
-	if err := json.Unmarshal(params, &r.Params); err != nil {
-		return Result{}, fmt.Errorf("unmarshal params: %w", err)
+	if err := json.Unmarshal(instances, &r.Instances); err != nil {
+		return Result{}, fmt.Errorf("unmarshal instances: %w", err)
 	}
 	if err := json.Unmarshal(versions, &r.StrategyVersions); err != nil {
 		return Result{}, fmt.Errorf("unmarshal strategy versions: %w", err)

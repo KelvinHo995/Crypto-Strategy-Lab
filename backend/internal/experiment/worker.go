@@ -229,8 +229,7 @@ func resultFromJob(job BacktestJob, status string) Result {
 		searchTotal = 1
 	}
 	return Result{ID: job.ID, SearchID: searchID, SearchTotal: searchTotal, CandidateID: job.Candidate.ID,
-		Strategies: append([]string(nil), job.Candidate.Strategies...),
-		Params:     cloneMap(job.Candidate.Params), Policy: job.Candidate.Policy,
+		Instances: cloneInstances(job.Candidate.Instances), Policy: job.Candidate.Policy,
 		StrategyVersions: cloneStringMap(job.StrategyVersions), DatasetPeriod: job.DatasetPeriod,
 		Status: status, CreatedAt: job.EnqueuedAt}
 }
@@ -250,10 +249,18 @@ func cloneStringMap(src map[string]string) map[string]string {
 	return dst
 }
 
-func DefaultStrategyVersions(names []string) map[string]string {
-	versions := make(map[string]string, len(names))
-	for _, name := range names {
-		versions[name] = "v1"
+func cloneInstances(src []strategy.StrategyInstance) []strategy.StrategyInstance {
+	dst := make([]strategy.StrategyInstance, len(src))
+	for i, inst := range src {
+		dst[i] = strategy.StrategyInstance{Type: inst.Type, Params: cloneMap(inst.Params), Weight: inst.Weight}
+	}
+	return dst
+}
+
+func DefaultStrategyVersions(instances []strategy.StrategyInstance) map[string]string {
+	versions := make(map[string]string, len(instances))
+	for _, inst := range instances {
+		versions[inst.Type] = "v1"
 	}
 	return versions
 }

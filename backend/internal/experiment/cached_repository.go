@@ -101,8 +101,7 @@ func cloneResults(source []Result) []Result {
 	}
 	results := make([]Result, len(source))
 	for index, result := range source {
-		result.Strategies = append([]string(nil), result.Strategies...)
-		result.Params = cloneMap(result.Params)
+		result.Instances = cloneInstances(result.Instances)
 		result.StrategyVersions = cloneStringMap(result.StrategyVersions)
 		results[index] = result
 	}

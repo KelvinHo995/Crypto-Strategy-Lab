@@ -13,13 +13,22 @@ export interface Trade {
   profit: number;
 }
 
+// One independently configured strategy within a composite — its own type,
+// params and weight. A candidate can hold more than one instance of the
+// same type (e.g. MA(20) and MA(50) combined), which a flat shared-params
+// model can't express.
+export interface StrategyInstance {
+  type: string;
+  params?: Record<string, unknown>;
+  weight?: number; // only meaningful when policy === 'weighted'
+}
+
 export interface ExperimentResult {
   id: string;
   searchId?: string;
   searchTotal?: number;
   candidateId: string;
-  strategies: string[]; // constituents snapshot
-  params: Record<string, unknown>; // parameters snapshot
+  instances: StrategyInstance[]; // constituents + params snapshot
   policy: string; // combination policy snapshot
   strategyVersions: Record<string, string>; // code/model versions (provenance tracking)
   datasetPeriod: string; // e.g. "fromTimestamp-toTimestamp"
@@ -40,7 +49,8 @@ export interface StartSearchRequest {
   from: number; // unix ms
   to: number; // unix ms
   capital: number;
-  strategies: string[];
+  instances: StrategyInstance[];
+  policy?: 'majority' | 'weighted';
 }
 
 export interface StartSearchResponse {

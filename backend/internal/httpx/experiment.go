@@ -15,12 +15,13 @@ import (
 )
 
 type StartSearchRequest struct {
-	Pair       string   `json:"pair"`
-	TimeFrame  string   `json:"timeframe"`
-	From       int64    `json:"from"`
-	To         int64    `json:"to"`
-	Capital    float64  `json:"capital"`
-	Strategies []string `json:"strategies"`
+	Pair      string                      `json:"pair"`
+	TimeFrame string                      `json:"timeframe"`
+	From      int64                       `json:"from"`
+	To        int64                       `json:"to"`
+	Capital   float64                     `json:"capital"`
+	Instances []strategy.StrategyInstance `json:"instances"`
+	Policy    string                      `json:"policy"`
 }
 
 func (r StartSearchRequest) Validate() error {
@@ -40,18 +41,18 @@ func (r StartSearchRequest) Validate() error {
 	if r.Capital <= 0 {
 		return errors.New("capital must be positive")
 	}
-	if len(r.Strategies) == 0 {
-		return errors.New("at least one strategy is required")
+	if len(r.Instances) == 0 {
+		return errors.New("at least one strategy instance is required")
 	}
-	seen := make(map[string]struct{}, len(r.Strategies))
-	for _, name := range r.Strategies {
-		if strings.TrimSpace(name) == "" {
-			return errors.New("strategy names cannot be empty")
+	// Duplicate types are allowed on purpose — e.g. MA(20) and MA(50) as two
+	// independently configured instances in the same composite.
+	for _, inst := range r.Instances {
+		if strings.TrimSpace(inst.Type) == "" {
+			return errors.New("strategy type cannot be empty")
 		}
-		if _, ok := seen[name]; ok {
-			return fmt.Errorf("strategy %s is duplicated", name)
-		}
-		seen[name] = struct{}{}
+	}
+	if r.Policy != "" && r.Policy != "majority" && r.Policy != "weighted" {
+		return errors.New("policy must be majority or weighted")
 	}
 	return nil
 }
@@ -73,20 +74,24 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 		}
 		req.Pair = strings.ToUpper(strings.TrimSpace(req.Pair))
 		req.TimeFrame = strings.TrimSpace(req.TimeFrame)
-		for i := range req.Strategies {
-			req.Strategies[i] = strings.TrimSpace(req.Strategies[i])
+		for i := range req.Instances {
+			req.Instances[i].Type = strings.TrimSpace(req.Instances[i].Type)
 		}
 		if err := req.Validate(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
+		policy := req.Policy
+		if policy == "" {
+			policy = "majority"
+		}
 		now := time.Now()
 		id := experiment.NewJobID(now)
 		candidate := strategy.CandidateStrategy{
-			ID:         fmt.Sprintf("cand-%d", now.UnixNano()),
-			Strategies: req.Strategies,
-			Policy:     "majority",
+			ID:        fmt.Sprintf("cand-%d", now.UnixNano()),
+			Instances: req.Instances,
+			Policy:    policy,
 		}
 		_, err := strategy.BuildFromCandidate(registry, candidate)
 		if err != nil {
@@ -94,7 +99,7 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 			return
 		}
 
-		versions := experiment.DefaultStrategyVersions(candidate.Strategies)
+		versions := experiment.DefaultStrategyVersions(candidate.Instances)
 		candles := fixtureCandles(req.Pair, req.From, req.To)
 		if candleRepo != nil {
 			candles, err = candleRepo.Range(r.Context(), req.Pair, req.TimeFrame, req.From, req.To)
@@ -118,7 +123,7 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 			StrategyVersions: versions, EnqueuedAt: now.UnixMilli(),
 		}
 		pending := experiment.Result{ID: id, SearchID: id, SearchTotal: 1, CandidateID: candidate.ID,
-			Strategies: candidate.Strategies, Params: candidate.Params, Policy: candidate.Policy,
+			Instances: candidate.Instances, Policy: candidate.Policy,
 			StrategyVersions: versions, DatasetPeriod: job.DatasetPeriod,
 			Status: "PENDING", CreatedAt: now.UnixMilli()}
 		if durable, ok := queue.(experiment.PendingQueue); ok {

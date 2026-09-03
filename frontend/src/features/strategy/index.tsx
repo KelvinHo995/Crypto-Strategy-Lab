@@ -13,7 +13,7 @@ import {
 import { ApiError, fetchMarkets, fetchStrategies, startSearch, startSearchLoop } from '../../shared/api';
 import { useWebSocketSubscription } from '../../shared/hooks';
 import type { WSSearchProgressPayload } from '../../types/websocket';
-import type { ExperimentResult } from '../../types/backtest';
+import type { ExperimentResult, StrategyInstance } from '../../types/backtest';
 import type { MarketInfo } from '../../types/candle';
 import { DEFAULT_MARKETS } from '../market/services/marketCatalog';
 import { useAppMode } from '../../shared/auth';
@@ -46,7 +46,7 @@ export function StrategyDiscoveryPage() {
     const completed = results.filter(result => result.status === 'COMPLETED').slice(0, 5);
     setLiveLeaderboard(completed.map((result, index) => ({
       rank: index + 1,
-      name: result.strategies.join(' + ') || result.candidateId,
+      name: result.instances.map(i => i.type).join(' + ') || result.candidateId,
       profit: result.totalProfit,
       winrate: result.winRate,
     })));
@@ -55,7 +55,7 @@ export function StrategyDiscoveryPage() {
       setStats(current => ({
         ...current,
         bestStrategy: {
-          name: best.strategies.join(' + ') || best.candidateId,
+          name: best.instances.map(i => i.type).join(' + ') || best.candidateId,
           profit: best.totalProfit,
           winrate: best.winRate,
           mdd: best.mdd,
@@ -72,19 +72,16 @@ export function StrategyDiscoveryPage() {
   };
 
   const handleStartBacktest = async (config: {
-    strategies: string[];
-    weights: Record<string, number>;
+    instances: StrategyInstance[];
     policy: 'majority' | 'weighted';
   }) => {
-    // Generate description list
-    const activeNames = config.strategies
-      .map(id => instances.find(inst => inst.id === id)?.name || id)
-      .join(' + ');
-
-    const strategyNames = [...new Set(config.strategies.map(id => instances.find(inst => inst.id === id)?.type).filter((name): name is string => Boolean(name)))];
-    if (strategyNames.length === 0) return;
+    if (config.instances.length === 0) return;
+    const activeNames = config.instances.map(inst => inst.type).join(' + ');
     try {
-      await startSearch({ pair: symbol, timeframe: '1h', from: Date.now() - 180 * 86400000, to: Date.now(), capital: 10000, strategies: strategyNames });
+      await startSearch({
+        pair: symbol, timeframe: '1h', from: Date.now() - 180 * 86400000, to: Date.now(), capital: 10000,
+        instances: config.instances, policy: config.policy,
+      });
       alert(`Đã gửi backtest thật: ${activeNames}. Theo dõi tiến độ qua WebSocket.`);
     } catch (error) {
       alert(`Không thể gửi backtest: ${String(error)}. Cần migration và backfill trước.`);

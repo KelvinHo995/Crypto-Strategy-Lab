@@ -50,13 +50,19 @@ func (g *RandomGenerator) Generate() CandidateStrategy {
 		policy = "weighted"
 	}
 
-	params := generateRandomParams(picked)
+	instances := make([]StrategyInstance, len(picked))
+	for i, name := range picked {
+		instances[i] = StrategyInstance{
+			Type:   name,
+			Params: generateRandomParamsFor(name),
+			Weight: 0.1 + float64(randomInt(90))/100.0, // 0.1-1.0; ignored under majority policy
+		}
+	}
 
 	return CandidateStrategy{
-		ID:         generateID(),
-		Strategies: picked,
-		Params:     params,
-		Policy:     policy,
+		ID:        generateID(),
+		Instances: instances,
+		Policy:    policy,
 	}
 }
 
@@ -77,26 +83,34 @@ func generateID() string {
 	return hex.EncodeToString(b)
 }
 
-func generateRandomParams(strategies []string) map[string]any {
-	params := map[string]any{}
-	for _, name := range strategies {
-		switch name {
-		case "MA":
-			params["maShortWindow"] = 5 + randomInt(46)  // 5-50
-			params["maLongWindow"] = 50 + randomInt(151) // 50-200
-		case "RSI":
-			params["rsiPeriod"] = 7 + randomInt(22)               // 7-28
-			params["rsiOverbought"] = float64(65 + randomInt(16)) // 65-80
-			params["rsiOversold"] = float64(20 + randomInt(16))   // 20-35
-		case "Bollinger":
-			params["bollingerPeriod"] = 10 + randomInt(31)                // 10-40
-			params["bollingerStdDev"] = 1.5 + float64(randomInt(15))/10.0 // 1.5-3.0
-		case "SR":
-			params["srWindow"] = 10 + randomInt(41)                       // 10-50
-			params["srTolerance"] = 0.001 + float64(randomInt(10))/1000.0 // 0.1% to 1%
-		case "SMC":
-			params["smcLookback"] = 5 + randomInt(26) // 5-30
+func generateRandomParamsFor(name string) map[string]any {
+	switch name {
+	case "MA":
+		return map[string]any{
+			"maShortWindow": 5 + randomInt(46),   // 5-50
+			"maLongWindow":  50 + randomInt(151), // 50-200
 		}
+	case "RSI":
+		return map[string]any{
+			"rsiPeriod":     7 + randomInt(22),           // 7-28
+			"rsiOverbought": float64(65 + randomInt(16)), // 65-80
+			"rsiOversold":   float64(20 + randomInt(16)), // 20-35
+		}
+	case "Bollinger":
+		return map[string]any{
+			"bollingerPeriod": 10 + randomInt(31),                // 10-40
+			"bollingerStdDev": 1.5 + float64(randomInt(15))/10.0, // 1.5-3.0
+		}
+	case "SR":
+		return map[string]any{
+			"srWindow":    10 + randomInt(41),                    // 10-50
+			"srTolerance": 0.001 + float64(randomInt(10))/1000.0, // 0.1% to 1%
+		}
+	case "SMC":
+		return map[string]any{
+			"smcLookback": 5 + randomInt(26), // 5-30
+		}
+	default:
+		return map[string]any{}
 	}
-	return params
 }

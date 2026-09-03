@@ -169,7 +169,7 @@ foreach ($market in $markets) {
   if (@($candles).Count -lt 202) { throw "Insufficient candles for $($market.symbol)" } # experiment.MinCandlesForBacktest
 }
 
-$request = @{pair='ADAUSDT';timeframe='1h';from=$from;to=$to;capital=10000;strategies=@('MA','RSI')} | ConvertTo-Json
+$request = @{pair='ADAUSDT';timeframe='1h';from=$from;to=$to;capital=10000;instances=@(@{type='MA'},@{type='RSI'})} | ConvertTo-Json
 $started = Invoke-RestMethod -Uri "$base/search/start" -Method Post -ContentType 'application/json' -Body $request -WebSession $session
 for ($attempt = 0; $attempt -lt 40; $attempt++) {
   $result = Invoke-RestMethod -Uri "$base/experiments/$($started.searchId)" -WebSession $session

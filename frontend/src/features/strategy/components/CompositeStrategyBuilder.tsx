@@ -1,13 +1,12 @@
 import { useState, useMemo } from 'react';
 import { type SingleStrategyInstance, COMPOSITE_PRESETS } from '../services/mockStrategyData';
+import type { StrategyInstance } from '../../../types/backtest';
 
 interface CompositeStrategyBuilderProps {
   singleInstances: SingleStrategyInstance[];
   onStartBacktest: (config: {
-    strategies: string[];
-    weights: Record<string, number>;
+    instances: StrategyInstance[];
     policy: 'majority' | 'weighted';
-    threshold: number;
   }) => void;
 }
 
@@ -140,19 +139,20 @@ export function CompositeStrategyBuilder({
       return;
     }
     
-    // Normalize weights before submitting
+    // Normalize weights, then pair each selected instance with its own
+    // type/params/weight — no shared bag, so MA(20) and MA(50) (or any two
+    // instances of the same type) stay independently configured.
     const sum = selectedIds.reduce((acc, id) => acc + (weights[id] ?? 0), 0);
-    const normalizedWeights: Record<string, number> = {};
-    selectedIds.forEach((id) => {
-      normalizedWeights[id] = sum > 0 ? Number(((weights[id] ?? 0) / sum).toFixed(2)) : 0;
-    });
+    const instances: StrategyInstance[] = selectedIds
+      .map((id): StrategyInstance | null => {
+        const inst = singleInstances.find((i) => i.id === id);
+        if (!inst) return null;
+        const weight = sum > 0 ? Number(((weights[id] ?? 0) / sum).toFixed(2)) : 0;
+        return { type: inst.type, params: inst.params, weight };
+      })
+      .filter((inst): inst is StrategyInstance => inst !== null);
 
-    onStartBacktest({
-      strategies: selectedIds,
-      weights: normalizedWeights,
-      policy,
-      threshold,
-    });
+    onStartBacktest({ instances, policy });
   };
 
   const getCompositeSignalStyle = (sig: 'LONG' | 'SHORT' | 'HOLD') => {

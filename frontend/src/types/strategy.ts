@@ -1,10 +1,3 @@
-export interface CandidateStrategy {
-  id: string;
-  strategies: string[]; // List of constituent strategies (e.g. ["MA", "RSI"])
-  params: Record<string, unknown>; // Parameters mapped by strategy keys
-  policy: string; // e.g. "majority" | "weighted"
-}
-
 export interface StrategyInfo {
   name: string; // The identifier of the strategy (e.g. "MA", "RSI", "Bollinger")
   description?: string;

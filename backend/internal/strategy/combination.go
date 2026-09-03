@@ -105,19 +105,35 @@ func (cs *CombinedStrategy) MinLookback() int {
 	return max
 }
 
-func resolveCombinationPolicy(policyName string, count int) CombinationPolicy {
+func resolveCombinationPolicy(policyName string, weights []float64) CombinationPolicy {
 	if policyName == "weighted" {
-		weights := make([]float64, count)
-		// simple default weights
-		for i := 0; i < count; i++ {
-			weights[i] = 1.0 / float64(count)
-		}
-		// giving slightly more weight to the first one just to differentiate
-		if count > 0 {
-			weights[0] += 0.1
-		}
-		return WeightedPolicy{Weights: weights}
+		return WeightedPolicy{Weights: normalizeWeights(weights)}
 	}
-	// default to majority
 	return MajorityPolicy{}
+}
+
+// normalizeWeights scales the supplied weights to sum to 1. If none were
+// supplied (all zero — e.g. a caller that only cares about majority voting
+// left them unset), falls back to equal weights rather than producing a
+// policy that can never fire.
+func normalizeWeights(weights []float64) []float64 {
+	if len(weights) == 0 {
+		return nil
+	}
+	sum := 0.0
+	for _, w := range weights {
+		sum += w
+	}
+	normalized := make([]float64, len(weights))
+	if sum <= 0 {
+		equal := 1.0 / float64(len(weights))
+		for i := range normalized {
+			normalized[i] = equal
+		}
+		return normalized
+	}
+	for i, w := range weights {
+		normalized[i] = w / sum
+	}
+	return normalized
 }

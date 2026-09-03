@@ -51,31 +51,33 @@ export const AVAILABLE_STRATEGIES_META: StrategyInfo[] = [
   },
   {
     name: 'MA',
-    description: 'Moving Average - Trend-following indicator tracing averages over a sliding candle window.',
+    description: 'Moving Average crossover - a fast window crossing above/below a slower window signals a trend shift.',
     parameters: {
-      maWindow: { type: 'number', default: 20, description: 'MA period window' },
+      maShortWindow: { type: 'number', default: 20, description: 'Fast MA period' },
+      maLongWindow: { type: 'number', default: 50, description: 'Slow MA period' },
     },
   },
   {
     name: 'Bollinger',
     description: 'Bollinger Bands - Volatility bands placed above and below a moving average base line.',
     parameters: {
-      bbPeriod: { type: 'number', default: 20, description: 'Bands time period' },
-      bbStdDev: { type: 'number', default: 2, description: 'Standard deviation multiplier' },
+      bollingerPeriod: { type: 'number', default: 20, description: 'Bands time period' },
+      bollingerStdDev: { type: 'number', default: 2, description: 'Standard deviation multiplier' },
     },
   },
   {
     name: 'SR',
     description: 'Support / Resistance zones - Traces structural high/low pivots to detect bounces or breakouts.',
     parameters: {
-      srSensitivity: { type: 'number', default: 3, description: 'Pivot search strength' },
+      srWindow: { type: 'number', default: 20, description: 'Pivot lookback window' },
+      srTolerance: { type: 'number', default: 0.005, description: 'Proximity tolerance to a pivot (e.g. 0.005 = 0.5%)' },
     },
   },
   {
     name: 'SMC',
     description: 'Smart Money Concepts - Minimal structure break indicator detecting order blocks and swing levels.',
     parameters: {
-      smcThreshold: { type: 'number', default: 0.05, description: 'Structure break volatility factor' },
+      smcLookback: { type: 'number', default: 10, description: 'Swing high/low lookback window' },
     },
   },
 ];
@@ -92,18 +94,18 @@ export const DEFAULT_SINGLE_STRATEGIES: SingleStrategyInstance[] = [
   },
   {
     id: 'ma-20',
-    name: 'MA (20)',
+    name: 'MA (10/20)',
     type: 'MA',
-    description: 'Moving Average 20 Period',
-    params: { maWindow: 20 },
+    description: 'Fast crossover, 10/20 period',
+    params: { maShortWindow: 10, maLongWindow: 20 },
     currentSignal: 'HOLD',
   },
   {
     id: 'ma-50',
-    name: 'MA (50)',
+    name: 'MA (20/50)',
     type: 'MA',
-    description: 'Moving Average 50 Period',
-    params: { maWindow: 50 },
+    description: 'Slower crossover, 20/50 period',
+    params: { maShortWindow: 20, maLongWindow: 50 },
     currentSignal: 'BUY',
   },
   {
@@ -111,15 +113,15 @@ export const DEFAULT_SINGLE_STRATEGIES: SingleStrategyInstance[] = [
     name: 'Bollinger Bands (20, 2)',
     type: 'Bollinger',
     description: 'BB period 20, multiplier 2.0',
-    params: { bbPeriod: 20, bbStdDev: 2 },
+    params: { bollingerPeriod: 20, bollingerStdDev: 2 },
     currentSignal: 'SELL',
   },
   {
     id: 'sr-3',
     name: 'Support & Resistance',
     type: 'SR',
-    description: 'Structural pivots (sensitivity: 3)',
-    params: { srSensitivity: 3 },
+    description: 'Structural pivots, window 20',
+    params: { srWindow: 20, srTolerance: 0.005 },
     currentSignal: 'HOLD',
   },
 ];

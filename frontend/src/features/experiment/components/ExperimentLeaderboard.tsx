@@ -27,7 +27,7 @@ export function ExperimentLeaderboard({
   // Sort and filter logic
   const getProcessedData = () => {
     const filtered = experiments.filter((exp) => {
-      const matchSearch = exp.strategies.join(' + ').toLowerCase().includes(searchQuery.toLowerCase()) || 
+      const matchSearch = exp.instances.map(i => i.type).join(' + ').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           exp.id.toLowerCase().includes(searchQuery.toLowerCase());
       return matchSearch;
     });
@@ -141,7 +141,7 @@ export function ExperimentLeaderboard({
                     </td>
                     <td style={tdLeftStyle}>
                       <span style={compositionStyle}>
-                        {exp.strategies.join(' + ')}
+                        {exp.instances.map(i => i.type).join(' + ')}
                       </span>
                       <span style={policyStyle}>{exp.policy}</span>
                     </td>

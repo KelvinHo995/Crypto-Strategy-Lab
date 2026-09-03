@@ -5,8 +5,11 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-122',
     candidateId: 'cand-001',
-    strategies: ['MA', 'RSI', 'SR'],
-    params: { maWindow: 20, rsiPeriod: 14, rsiOverbought: 70, rsiOversold: 30, srSensitivity: 3 },
+    instances: [
+      { type: 'MA', params: { maShortWindow: 20, maLongWindow: 50 }, weight: 0.4 },
+      { type: 'RSI', params: { rsiPeriod: 14, rsiOverbought: 70, rsiOversold: 30 }, weight: 0.35 },
+      { type: 'SR', params: { srWindow: 20, srTolerance: 0.005 }, weight: 0.25 },
+    ],
     policy: 'weighted',
     strategyVersions: { MA: 'v1.2.0', RSI: 'v2.0.1', SR: 'v1.0.0' },
     datasetPeriod: '2024-01-01 to 2024-12-31',
@@ -23,8 +26,10 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-121',
     candidateId: 'cand-002',
-    strategies: ['RSI', 'Bollinger'],
-    params: { rsiPeriod: 14, rsiOverbought: 70, rsiOversold: 30, bbPeriod: 20, bbStdDev: 2.0 },
+    instances: [
+      { type: 'RSI', params: { rsiPeriod: 14, rsiOverbought: 70, rsiOversold: 30 } },
+      { type: 'Bollinger', params: { bollingerPeriod: 20, bollingerStdDev: 2.0 } },
+    ],
     policy: 'majority',
     strategyVersions: { RSI: 'v2.0.1', Bollinger: 'v1.1.0' },
     datasetPeriod: '2024-01-01 to 2024-12-31',
@@ -41,8 +46,10 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-120',
     candidateId: 'cand-003',
-    strategies: ['SMC', 'MA'],
-    params: { smcThreshold: 0.05, maWindow: 50 },
+    instances: [
+      { type: 'SMC', params: { smcLookback: 10 }, weight: 0.5 },
+      { type: 'MA', params: { maShortWindow: 20, maLongWindow: 50 }, weight: 0.5 },
+    ],
     policy: 'weighted',
     strategyVersions: { SMC: 'v1.0.2', MA: 'v1.2.0' },
     datasetPeriod: '2024-01-01 to 2024-12-31',
@@ -59,8 +66,12 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-119',
     candidateId: 'cand-004',
-    strategies: ['MA', 'MA'],
-    params: { maFastWindow: 20, maSlowWindow: 50 },
+    // Two MA instances, independently configured (fast + slow) — the
+    // exact case a flat shared-params model couldn't represent.
+    instances: [
+      { type: 'MA', params: { maShortWindow: 5, maLongWindow: 20 } },
+      { type: 'MA', params: { maShortWindow: 20, maLongWindow: 50 } },
+    ],
     policy: 'majority',
     strategyVersions: { MA: 'v1.2.0' },
     datasetPeriod: '2024-01-01 to 2024-12-31',
@@ -77,8 +88,7 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-118',
     candidateId: 'cand-005',
-    strategies: ['SR'],
-    params: { srSensitivity: 3 },
+    instances: [{ type: 'SR', params: { srWindow: 20, srTolerance: 0.005 } }],
     policy: 'majority',
     strategyVersions: { SR: 'v1.0.0' },
     datasetPeriod: '2024-01-01 to 2024-12-31',
@@ -95,8 +105,11 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-117',
     candidateId: 'cand-006',
-    strategies: ['SMC', 'RSI', 'Bollinger'],
-    params: { smcThreshold: 0.08, rsiPeriod: 10, bbPeriod: 14, bbStdDev: 1.8 },
+    instances: [
+      { type: 'SMC', params: { smcLookback: 8 }, weight: 0.3 },
+      { type: 'RSI', params: { rsiPeriod: 10, rsiOverbought: 70, rsiOversold: 30 }, weight: 0.35 },
+      { type: 'Bollinger', params: { bollingerPeriod: 14, bollingerStdDev: 1.8 }, weight: 0.35 },
+    ],
     policy: 'weighted',
     strategyVersions: { SMC: 'v1.0.2', RSI: 'v2.0.1', Bollinger: 'v1.1.0' },
     datasetPeriod: '2024-01-01 to 2024-12-31',
@@ -113,8 +126,7 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-116',
     candidateId: 'cand-007',
-    strategies: ['RSI'],
-    params: { rsiPeriod: 14, rsiOverbought: 80, rsiOversold: 20 },
+    instances: [{ type: 'RSI', params: { rsiPeriod: 14, rsiOverbought: 80, rsiOversold: 20 } }],
     policy: 'majority',
     strategyVersions: { RSI: 'v2.0.1' },
     datasetPeriod: '2024-01-01 to 2024-12-31',
@@ -131,8 +143,7 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-115',
     candidateId: 'cand-008',
-    strategies: ['Bollinger'],
-    params: { bbPeriod: 20, bbStdDev: 2.5 },
+    instances: [{ type: 'Bollinger', params: { bollingerPeriod: 20, bollingerStdDev: 2.5 } }],
     policy: 'majority',
     strategyVersions: { Bollinger: 'v1.1.0' },
     datasetPeriod: '2024-01-01 to 2024-12-31',

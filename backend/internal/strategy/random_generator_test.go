@@ -20,7 +20,7 @@ func TestRandomGenerator_Generate(t *testing.T) {
 		t.Errorf("Expected candidate ID to not be empty")
 	}
 
-	if len(candidate.Strategies) == 0 {
+	if len(candidate.Instances) == 0 {
 		t.Errorf("Expected candidate to have strategies")
 	}
 
@@ -42,8 +42,8 @@ func TestRandomGenerator_Generate(t *testing.T) {
 func TestBuildFromCandidate_Error(t *testing.T) {
 	registry := strategy.NewRegistry()
 	candidate := strategy.CandidateStrategy{
-		ID:         "123",
-		Strategies: []string{"NonExistent"},
+		ID:        "123",
+		Instances: []strategy.StrategyInstance{{Type: "NonExistent"}},
 	}
 
 	_, err := strategy.BuildFromCandidate(registry, candidate)

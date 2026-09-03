@@ -18,8 +18,11 @@ type sequentialGenerator struct{ n int }
 func (g *sequentialGenerator) Generate() strategy.CandidateStrategy {
 	g.n++
 	return strategy.CandidateStrategy{
-		ID: fmt.Sprintf("cand-%d", g.n), Strategies: []string{"MA"},
-		Params: map[string]any{"maShortWindow": g.n}, Policy: "majority",
+		ID: fmt.Sprintf("cand-%d", g.n),
+		Instances: []strategy.StrategyInstance{
+			{Type: "MA", Params: map[string]any{"maShortWindow": g.n}},
+		},
+		Policy: "majority",
 	}
 }
 
@@ -29,7 +32,13 @@ type constantGenerator struct{ calls int }
 
 func (g *constantGenerator) Generate() strategy.CandidateStrategy {
 	g.calls++
-	return strategy.CandidateStrategy{ID: "same", Strategies: []string{"MA"}, Params: map[string]any{"maShortWindow": 5}, Policy: "majority"}
+	return strategy.CandidateStrategy{
+		ID: "same",
+		Instances: []strategy.StrategyInstance{
+			{Type: "MA", Params: map[string]any{"maShortWindow": 5}},
+		},
+		Policy: "majority",
+	}
 }
 
 type fakePool struct {
