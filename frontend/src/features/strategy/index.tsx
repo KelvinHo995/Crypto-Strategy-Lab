@@ -28,6 +28,7 @@ export function StrategyDiscoveryPage() {
   const [liveLeaderboard, setLiveLeaderboard] = useState<typeof MINI_LEADERBOARD_DATA>([]);
   const miniLeaderboard = mode === 'DEMO' ? MINI_LEADERBOARD_DATA : liveLeaderboard;
   const activeSearchId = useRef<string | null>(null);
+  const loopRequestInFlight = useRef(false);
 
   useEffect(() => {
     if (mode !== 'LIVE') return;
@@ -92,6 +93,7 @@ export function StrategyDiscoveryPage() {
   };
 
   const handleStartLoop = async (config: DiscoveryLoopConfig) => {
+    if (loopRequestInFlight.current || stats.status === 'RUNNING') return;
     if (mode !== 'LIVE') {
       setStats({ ...DEFAULT_DISCOVERY_STATS, status: 'FAILED', statusMessage: 'Đăng nhập LIVE mode để chạy Search Loop thật.' });
       return;
@@ -110,6 +112,7 @@ export function StrategyDiscoveryPage() {
     }
 
     activeSearchId.current = null;
+    loopRequestInFlight.current = true;
     setStats({
       ...DEFAULT_DISCOVERY_STATS,
       totalIterations: config.maxCandidates,
@@ -143,6 +146,8 @@ export function StrategyDiscoveryPage() {
         ? 'Không đủ 21 candle trong khoảng đã chọn. Hãy chạy backfill cho market/timeframe này rồi thử lại.'
         : `Không thể bắt đầu Search Loop: ${error instanceof Error ? error.message : String(error)}`;
       setStats(current => ({ ...current, status: 'FAILED', statusMessage: message }));
+    } finally {
+      loopRequestInFlight.current = false;
     }
   };
 

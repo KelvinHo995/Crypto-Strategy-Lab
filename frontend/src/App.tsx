@@ -4,6 +4,7 @@ import { ErrorBoundary, WebSocketStateBanner } from './shared/components/index';
 import { AuthGate } from './shared/components/AuthGate';
 import { useAppMode } from './shared/auth';
 import { wsManager } from './shared/ws';
+import { ThemeProvider, ThemeToggle } from './shared/theme';
 
 const MarketDashboard = lazy(() => import('./features/market/index').then((module) => ({ default: module.MarketDashboard })));
 const StrategyDiscoveryPage = lazy(() => import('./features/strategy/index').then((module) => ({ default: module.StrategyDiscoveryPage })));
@@ -52,7 +53,10 @@ function AuthenticatedApp() {
         <section className="app-workspace">
           <header className="workspace-header">
             <div><span className="page-kicker">Trading workspace</span><h1>{activeItem.label}</h1></div>
-            <div className="live-pill"><Radio size={15} /> {mode === 'LIVE' ? 'Live infrastructure' : 'Offline demo'}</div>
+            <div className="workspace-actions">
+              <div className="live-pill"><Radio size={15} /> {mode === 'LIVE' ? 'Live infrastructure' : 'Offline demo'}</div>
+              <ThemeToggle />
+            </div>
           </header>
           <WebSocketStateBanner />
           <main className="app-main">
@@ -68,5 +72,7 @@ function AuthenticatedApp() {
     </ErrorBoundary>
   );
 }
-function App() { return <AuthGate><AuthenticatedApp /></AuthGate>; }
+function App() {
+  return <ThemeProvider><AuthGate><AuthenticatedApp /></AuthGate></ThemeProvider>;
+}
 export default App;
