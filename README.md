@@ -13,7 +13,7 @@ Full-stack quantitative strategy lab for realtime Binance candles, composable tr
 
 1. Copy `backend/.env.example` to `backend/.env` and set `DATABASE_URL` plus a `JWT_SECRET` of at least 16 characters.
 2. Set `DATABASE_URL`, then run `go run ./cmd/migrate` from `backend/`. It applies
-   every idempotent migration in numeric order (`0001` through `0007`).
+   every idempotent migration in numeric order (`0001` through `0008`).
 3. Start the three processes in separate terminals:
 
 ```bash
@@ -55,6 +55,13 @@ cd sentiment-service && uv run python -m unittest discover -s tests -v
 Architecture decisions and runtime contracts live in `docs/`. See `PLAN.md` for
 scope and ownership, and [`docs/e2e-testing.md`](docs/e2e-testing.md) for the
 complete Supabase/Binance/fullstack verification runbook.
+
+## Demo
+
+See [`docs/e2e-testing.md`](docs/e2e-testing.md) §5 "Browser acceptance
+scenarios" for the walkthrough: realtime multi-timeframe charts, strategy
+selection, composite generation, backtest run, leaderboard, and sentiment
+analysis, all against the real backend/Supabase.
 
 ## Team ownership
 
