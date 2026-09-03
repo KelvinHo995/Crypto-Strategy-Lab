@@ -28,22 +28,38 @@ func NewService(analyzer Analyzer, repo Repository) *Service {
 	return &Service{analyzer: analyzer, repo: repo}
 }
 
-func (s *Service) AnalyzeAndStore(ctx context.Context, newsID, text string, publishedAt int64) (Observation, error) {
+// AnalyzeInput is everything the collector already has in hand about an
+// article at ingestion time — Title/Source/URL are stored alongside the
+// analysis output so a consumer can display something readable, not just
+// an opaque news_id and a score.
+type AnalyzeInput struct {
+	NewsID      string
+	Title       string
+	Text        string
+	Source      string
+	URL         string
+	PublishedAt int64
+}
+
+func (s *Service) AnalyzeAndStore(ctx context.Context, input AnalyzeInput) (Observation, error) {
 	if s == nil || s.analyzer == nil || s.repo == nil {
 		return Observation{}, fmt.Errorf("%w: service unavailable", ErrAnalyze)
 	}
-	newsID = strings.TrimSpace(newsID)
-	if newsID == "" || strings.TrimSpace(text) == "" || publishedAt <= 0 {
+	newsID := strings.TrimSpace(input.NewsID)
+	if newsID == "" || strings.TrimSpace(input.Text) == "" || input.PublishedAt <= 0 {
 		return Observation{}, fmt.Errorf("%w: news id, text, and publishedAt are required", ErrAnalyze)
 	}
 
-	result, err := s.analyzer.Analyze(ctx, newsID, text)
+	result, err := s.analyzer.Analyze(ctx, newsID, input.Text)
 	if err != nil {
 		return Observation{}, fmt.Errorf("%w: %v", ErrAnalyze, err)
 	}
 	observation := Observation{
 		NewsID:       result.NewsID,
-		PublishedAt:  publishedAt,
+		Title:        strings.TrimSpace(input.Title),
+		Source:       strings.TrimSpace(input.Source),
+		URL:          strings.TrimSpace(input.URL),
+		PublishedAt:  input.PublishedAt,
 		Sentiment:    result.Sentiment,
 		Score:        result.Score,
 		ModelName:    result.Model.Name,
@@ -87,7 +103,10 @@ func (s *Service) IngestNews(ctx context.Context, items []news.NewsItem) ([]Obse
 		if _, alreadyAnalyzed := existing[item.ID]; alreadyAnalyzed {
 			continue
 		}
-		observation, err := s.AnalyzeAndStore(ctx, item.ID, item.Text, item.PublishedAt)
+		observation, err := s.AnalyzeAndStore(ctx, AnalyzeInput{
+			NewsID: item.ID, Title: item.Title, Text: item.Text,
+			Source: item.Source, URL: item.URL, PublishedAt: item.PublishedAt,
+		})
 		if err != nil {
 			return observations, fmt.Errorf("ingest news %q: %w", item.ID, err)
 		}

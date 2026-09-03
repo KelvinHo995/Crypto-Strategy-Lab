@@ -123,8 +123,17 @@ Expected health checks:
    mini-leaderboard must match the WebSocket payload instead of fixture rows.
 5. On **Backtests**, confirm the default date range is the latest 90 days, run
    a simulation and wait for `COMPLETED`. Open its result/provenance details.
-6. On **Market news**, run the sample sentiment action. It must be labelled
-   `LIVE`; the fixture article feed and aggregate remain labelled `DEMO`.
+6. Ingest real news before checking this step:
+   ```powershell
+   cd backend
+   $env:NEWS_RSS_FEEDS='https://www.coindesk.com/arc/outboundfeeds/rss/,https://decrypt.co/feed'
+   go run ./cmd/news-ingest
+   ```
+   On **Market news**, confirm the feed and sentiment breakdown show the
+   ingested articles labelled `LIVE`, with clickable titles linking to the
+   source URL. Ingestion is an operator-run job, not a page action — there is
+   no in-page trigger. Without a recent ingest run, the page falls back to
+   the fixture article feed and aggregate labelled `DEMO`.
 7. Reload the page. The httpOnly session cookie should keep the user signed in
    and the WebSocket should reconnect and restore active subscriptions.
 
