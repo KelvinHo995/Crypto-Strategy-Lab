@@ -40,7 +40,7 @@ func TestWebSocketReceivesSearchProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
-	body := `{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":10000000,"capital":1000,"strategies":["MA"]}`
+	body := `{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":10000000,"capital":1000,"instances":[{"type":"MA"}]}`
 	resp, err := http.Post(srv.URL+"/search/start", "application/json", bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatal(err)

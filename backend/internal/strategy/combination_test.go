@@ -54,3 +54,34 @@ func TestCombinedStrategy_MinLookback(t *testing.T) {
 		t.Fatalf("MinLookback() = %d, want 51 (max across wrapped strategies, not either one alone)", got)
 	}
 }
+
+// Before this fix, weighted policy always auto-computed roughly-equal
+// weights server-side regardless of what a caller asked for. Custom weights
+// must actually change the outcome now, not just be accepted and ignored.
+func TestResolveCombinationPolicy_RespectsCustomWeights(t *testing.T) {
+	policy := resolveCombinationPolicy("weighted", []float64{0.9, 0.1})
+	weighted, ok := policy.(WeightedPolicy)
+	if !ok {
+		t.Fatalf("policy = %T, want WeightedPolicy", policy)
+	}
+	if weighted.Weights[0] <= weighted.Weights[1] {
+		t.Fatalf("weights = %v, want first much larger than second — custom weights must be respected, not auto-equalized", weighted.Weights)
+	}
+	// A weak second vote should not be able to override a dominant first vote.
+	if got := weighted.Combine([]Signal{Sell, Buy}); got != Sell {
+		t.Fatalf("Combine() = %v, want Sell (weight 0.9 on Sell should dominate weight 0.1 on Buy)", got)
+	}
+}
+
+func TestResolveCombinationPolicy_FallsBackToEqualWeightsWhenUnset(t *testing.T) {
+	policy := resolveCombinationPolicy("weighted", []float64{0, 0, 0})
+	weighted, ok := policy.(WeightedPolicy)
+	if !ok {
+		t.Fatal("policy is not WeightedPolicy")
+	}
+	for _, w := range weighted.Weights {
+		if w != 1.0/3.0 {
+			t.Fatalf("weights = %v, want equal fallback when none were supplied", weighted.Weights)
+		}
+	}
+}

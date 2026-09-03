@@ -48,9 +48,9 @@ func TestPostgresQueueAtomicEnqueueClaimAndAck(t *testing.T) {
 
 	queue := experiment.NewPostgresQueue(db)
 	job := experiment.BacktestJob{ID: id, SearchID: id, SearchTotal: 1, Pair: "BTCUSDT", Timeframe: "1h", From: 1, To: 2,
-		Candidate: strategy.CandidateStrategy{ID: "candidate", Strategies: []string{"MA"}, Policy: "majority"},
+		Candidate: strategy.CandidateStrategy{ID: "candidate", Instances: []strategy.StrategyInstance{{Type: "MA"}}, Policy: "majority"},
 		Config:    experiment.Config{Pair: "BTCUSDT", StartingCapital: 1000}, DatasetPeriod: "1-2", EnqueuedAt: time.Now().UnixMilli()}
-	pending := experiment.Result{ID: id, SearchID: id, SearchTotal: 1, CandidateID: "candidate", Strategies: []string{"MA"}, Params: map[string]any{}, Policy: "majority", StrategyVersions: map[string]string{"MA": "v1"}, DatasetPeriod: "1-2", Status: "PENDING", CreatedAt: job.EnqueuedAt}
+	pending := experiment.Result{ID: id, SearchID: id, SearchTotal: 1, CandidateID: "candidate", Instances: []strategy.StrategyInstance{{Type: "MA"}}, Policy: "majority", StrategyVersions: map[string]string{"MA": "v1"}, DatasetPeriod: "1-2", Status: "PENDING", CreatedAt: job.EnqueuedAt}
 	if err := queue.EnqueuePending(ctx, job, pending); err != nil {
 		t.Fatalf("enqueue pending: %v; apply migrations through 0007", err)
 	}
@@ -88,9 +88,9 @@ func TestPostgresQueueExhaustedRetryFailsExperiment(t *testing.T) {
 
 	queue := experiment.NewPostgresQueue(db)
 	job := experiment.BacktestJob{ID: id, SearchID: id, SearchTotal: 1, Pair: "BTCUSDT", Timeframe: "1h", From: 1, To: 2,
-		Candidate: strategy.CandidateStrategy{ID: "candidate", Strategies: []string{"MA"}, Policy: "majority"},
+		Candidate: strategy.CandidateStrategy{ID: "candidate", Instances: []strategy.StrategyInstance{{Type: "MA"}}, Policy: "majority"},
 		Config:    experiment.Config{Pair: "BTCUSDT", StartingCapital: 1000}, DatasetPeriod: "1-2", EnqueuedAt: time.Now().UnixMilli()}
-	pending := experiment.Result{ID: id, SearchID: id, SearchTotal: 1, CandidateID: "candidate", Strategies: []string{"MA"}, Params: map[string]any{}, Policy: "majority", StrategyVersions: map[string]string{"MA": "v1"}, DatasetPeriod: "1-2", Status: "PENDING", CreatedAt: job.EnqueuedAt}
+	pending := experiment.Result{ID: id, SearchID: id, SearchTotal: 1, CandidateID: "candidate", Instances: []strategy.StrategyInstance{{Type: "MA"}}, Policy: "majority", StrategyVersions: map[string]string{"MA": "v1"}, DatasetPeriod: "1-2", Status: "PENDING", CreatedAt: job.EnqueuedAt}
 	if err := queue.EnqueuePending(ctx, job, pending); err != nil {
 		t.Fatal(err)
 	}

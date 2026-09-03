@@ -67,11 +67,11 @@ export function ProvenanceModal({
             </div>
           </div>
 
-          {/* Strategy parameters JSON config */}
+          {/* Strategy instances (type + params + weight) JSON config */}
           <div style={sectionStyle}>
-            <h4 style={sectionTitleStyle}>Active Parameters Schema (JSON)</h4>
+            <h4 style={sectionTitleStyle}>Active Instances Schema (JSON)</h4>
             <pre style={jsonCodeStyle}>
-              {JSON.stringify(experiment.params, null, 2)}
+              {JSON.stringify(experiment.instances, null, 2)}
             </pre>
           </div>
         </div>

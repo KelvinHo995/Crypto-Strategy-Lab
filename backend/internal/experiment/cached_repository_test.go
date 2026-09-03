@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/experiment"
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/strategy"
 )
 
 type countingExperimentRepository struct {
@@ -23,7 +24,7 @@ func (r *countingExperimentRepository) List(context.Context) ([]experiment.Resul
 	r.mu.Lock()
 	r.lists++
 	r.mu.Unlock()
-	return []experiment.Result{{ID: "one", Strategies: []string{"MA"}}}, nil
+	return []experiment.Result{{ID: "one", Instances: []strategy.StrategyInstance{{Type: "MA"}}}}, nil
 }
 func (r *countingExperimentRepository) ListBySearch(context.Context, string) ([]experiment.Result, error) {
 	return nil, nil

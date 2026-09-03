@@ -55,7 +55,7 @@ func TestWorkerPoolRun_RecoversPanicAndMarksFailed(t *testing.T) {
 	job := experiment.BacktestJob{
 		ID: "job-panic",
 		Candidate: strategy.CandidateStrategy{
-			ID: "cand-1", Strategies: []string{"Evil"}, Policy: "majority",
+			ID: "cand-1", Instances: []strategy.StrategyInstance{{Type: "Evil"}}, Policy: "majority",
 		},
 		Candles: []market.Candle{{Symbol: "BTCUSDT", OpenTime: 1, Open: 100, High: 101, Low: 99, Close: 100}},
 		Config: experiment.Config{
@@ -101,7 +101,7 @@ func TestWorkerPoolRun_ObserverPanicDoesNotStopWorker(t *testing.T) {
 		job := experiment.BacktestJob{
 			ID: id,
 			Candidate: strategy.CandidateStrategy{
-				ID: "candidate-" + id, Strategies: []string{"Hold"}, Policy: "majority",
+				ID: "candidate-" + id, Instances: []strategy.StrategyInstance{{Type: "Hold"}}, Policy: "majority",
 			},
 			Candles: []market.Candle{{Symbol: "BTCUSDT", OpenTime: 1, Open: 100, High: 101, Low: 99, Close: 100}},
 			Config: experiment.Config{
@@ -150,7 +150,7 @@ func TestWorkerPoolAddObserver_CoexistsAndUnsubscribes(t *testing.T) {
 		job := experiment.BacktestJob{
 			ID: id,
 			Candidate: strategy.CandidateStrategy{
-				ID: "candidate-" + id, Strategies: []string{"Hold"}, Policy: "majority",
+				ID: "candidate-" + id, Instances: []strategy.StrategyInstance{{Type: "Hold"}}, Policy: "majority",
 			},
 			Candles: []market.Candle{{Symbol: "BTCUSDT", OpenTime: 1, Open: 100, High: 101, Low: 99, Close: 100}},
 			Config: experiment.Config{
@@ -226,7 +226,7 @@ func TestWorkerPoolRun_RetriesInsufficientCandlesInsteadOfFailingOutright(t *tes
 		Timeframe: "1h",
 		From:      1,
 		To:        2,
-		Candidate: strategy.CandidateStrategy{ID: "candidate-thin", Strategies: []string{"Hold"}, Policy: "majority"},
+		Candidate: strategy.CandidateStrategy{ID: "candidate-thin", Instances: []strategy.StrategyInstance{{Type: "Hold"}}, Policy: "majority"},
 		Config: experiment.Config{
 			Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
 			StopLossPct: 0.02, TakeProfitPct: 0.04, FeePct: 0.001, SlippageBps: 5, Window: 1,
@@ -301,7 +301,7 @@ func TestWorkerPoolRun_SizesWindowFromResolvedStrategyNotJobConfig(t *testing.T)
 
 	job := experiment.BacktestJob{
 		ID:        "job-window-sizing",
-		Candidate: strategy.CandidateStrategy{ID: "cand-ma-default", Strategies: []string{"MA"}, Policy: "majority"},
+		Candidate: strategy.CandidateStrategy{ID: "cand-ma-default", Instances: []strategy.StrategyInstance{{Type: "MA"}}, Policy: "majority"},
 		Candles:   candles,
 		Config: experiment.Config{
 			Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,

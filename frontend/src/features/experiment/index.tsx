@@ -92,7 +92,7 @@ export function ExperimentDashboard() {
         from: new Date(config.fromDate).getTime(),
         to: new Date(config.toDate).getTime(),
         capital: config.capital,
-        strategies: ['MA'],
+        instances: [{ type: 'MA' }],
       });
       activeSearchId.current = started.searchId;
       runTimeout.current = window.setTimeout(() => {
@@ -119,7 +119,7 @@ export function ExperimentDashboard() {
 
   const handleReplicate = (exp: ExperimentResult) => {
     setSelectedExpForMeta(null);
-    alert(`Replicated Strategy combination [${exp.strategies.join(' + ')}] into Builder state!`);
+    alert(`Replicated Strategy combination [${exp.instances.map(i => i.type).join(' + ')}] into Builder state!`);
     // In production, this would sync with a global strategy builder state/store
   };
 
@@ -148,7 +148,7 @@ export function ExperimentDashboard() {
           <div style={summaryColStyle}>
             <div style={summaryHeaderStyle}>
               <h4>Active Simulation Summary: <span style={activeIdStyle}>{activeExp.id}</span></h4>
-              <span style={activeStrategiesStyle}>{activeExp.strategies.join(' + ')}</span>
+              <span style={activeStrategiesStyle}>{activeExp.instances.map(i => i.type).join(' + ')}</span>
             </div>
             <PerformanceSummaryCard
               profit={activeExp.totalProfit}

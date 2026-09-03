@@ -11,12 +11,19 @@ backfill persists only closed candles. Live updates may carry
 
 ## Search and experiments
 
-`POST /search/start` accepts `{pair,timeframe,from,to,capital,strategies}` and
-returns HTTP 202 `{searchId,status:"STARTED"}`. The result transitions through
+`POST /search/start` accepts `{pair,timeframe,from,to,capital,instances,policy}`,
+where `instances` is `[{type,params,weight}]` — each entry is an
+independently configured strategy (own params, own weight), so a composite
+can combine more than one instance of the same type (e.g. MA(20) and MA(50))
+without them sharing params. `policy` is `"majority"` (default) or
+`"weighted"`; `weight` on each instance is only used under `"weighted"` and
+is normalized server-side to sum to 1. Returns HTTP 202
+`{searchId,status:"STARTED"}`. The result transitions through
 `PENDING|RUNNING|COMPLETED|FAILED`. `GET /experiments` returns ranked results;
-`GET /experiments/{id}` returns one provenance snapshot. Every persisted result
-also carries `searchId` and `searchTotal`; the one-candidate flow uses the
-result ID and `1`.
+`GET /experiments/{id}` returns one provenance snapshot, including the exact
+`instances` and `policy` that ran — not a lossy flat `strategies[]`+`params{}`
+snapshot. Every persisted result also carries `searchId` and `searchTotal`;
+the one-candidate flow uses the result ID and `1`.
 
 `POST /search/loop` accepts:
 
