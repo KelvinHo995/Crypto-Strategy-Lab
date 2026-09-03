@@ -34,6 +34,9 @@ func (a *recordingAnalyzer) Analyze(_ context.Context, newsID, text string) (sen
 type recordingRepository struct {
 	observations map[string]sentiment.Observation
 	saves        int
+	existsChecks int
+	checkedIDs   []string
+	existsErr    error
 }
 
 func (r *recordingRepository) Save(_ context.Context, observation sentiment.Observation) error {
@@ -43,6 +46,21 @@ func (r *recordingRepository) Save(_ context.Context, observation sentiment.Obse
 	r.observations[observation.NewsID] = observation
 	r.saves++
 	return nil
+}
+
+func (r *recordingRepository) ExistingNewsIDs(_ context.Context, newsIDs []string) (map[string]struct{}, error) {
+	r.existsChecks++
+	r.checkedIDs = append([]string(nil), newsIDs...)
+	if r.existsErr != nil {
+		return nil, r.existsErr
+	}
+	existing := make(map[string]struct{})
+	for _, newsID := range newsIDs {
+		if _, ok := r.observations[newsID]; ok {
+			existing[newsID] = struct{}{}
+		}
+	}
+	return existing, nil
 }
 
 func (r *recordingRepository) ListSince(context.Context, int64) ([]sentiment.Observation, error) {
@@ -104,6 +122,9 @@ func TestIngestMultipleArticles(t *testing.T) {
 	if len(observations) != 2 || len(analyzer.calls) != 2 || len(repo.observations) != 2 {
 		t.Fatalf("observations=%d calls=%d stored=%d", len(observations), len(analyzer.calls), len(repo.observations))
 	}
+	if repo.existsChecks != 1 || len(repo.checkedIDs) != 2 {
+		t.Fatalf("existence checks=%d checked IDs=%v, want one batch check", repo.existsChecks, repo.checkedIDs)
+	}
 }
 
 func TestIngestDuplicateArticleIsIdempotent(t *testing.T) {
@@ -120,11 +141,49 @@ func TestIngestDuplicateArticleIsIdempotent(t *testing.T) {
 		t.Fatalf("batch observations=%d calls=%d stored=%d", len(observations), len(analyzer.calls), len(repo.observations))
 	}
 
-	if _, err := service.IngestNews(context.Background(), []news.NewsItem{article}); err != nil {
+	repeated, err := service.IngestNews(context.Background(), []news.NewsItem{article})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(repo.observations) != 1 || repo.saves != 2 {
-		t.Fatalf("stored=%d saves=%d, repeated ingestion should upsert one logical row", len(repo.observations), repo.saves)
+	if len(repeated) != 0 || len(analyzer.calls) != 1 || len(repo.observations) != 1 || repo.saves != 1 {
+		t.Fatalf("repeated=%d calls=%d stored=%d saves=%d, existing article should be skipped", len(repeated), len(analyzer.calls), len(repo.observations), repo.saves)
+	}
+}
+
+func TestIngestSkipsExistingAndAnalyzesNewArticle(t *testing.T) {
+	analyzer := &recordingAnalyzer{}
+	existingArticle := testNewsItem("news-existing")
+	repo := &recordingRepository{observations: map[string]sentiment.Observation{
+		existingArticle.ID: {NewsID: existingArticle.ID},
+	}}
+	service := sentiment.NewService(analyzer, repo)
+
+	observations, err := service.IngestNews(context.Background(), []news.NewsItem{
+		existingArticle,
+		testNewsItem("news-new"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.existsChecks != 1 || len(repo.checkedIDs) != 2 {
+		t.Fatalf("existence checks=%d checked IDs=%v, want one batch check", repo.existsChecks, repo.checkedIDs)
+	}
+	if len(observations) != 1 || len(analyzer.calls) != 1 || analyzer.calls[0] != "news-new" || repo.saves != 1 {
+		t.Fatalf("observations=%d analyzer calls=%v saves=%d", len(observations), analyzer.calls, repo.saves)
+	}
+}
+
+func TestIngestStopsBeforeAnalysisWhenExistenceCheckFails(t *testing.T) {
+	analyzer := &recordingAnalyzer{}
+	repo := &recordingRepository{existsErr: errors.New("database unavailable")}
+	service := sentiment.NewService(analyzer, repo)
+
+	_, err := service.IngestNews(context.Background(), []news.NewsItem{testNewsItem("news-1")})
+	if !errors.Is(err, sentiment.ErrStore) {
+		t.Fatalf("error=%v, want ErrStore", err)
+	}
+	if len(analyzer.calls) != 0 || repo.saves != 0 {
+		t.Fatal("existence-check failure must stop before analysis")
 	}
 }
 
@@ -154,5 +213,44 @@ func TestIngestReportsProviderFailure(t *testing.T) {
 	}
 	if len(analyzer.calls) != 0 || repo.saves != 0 {
 		t.Fatal("provider failure should not analyze or persist articles")
+	}
+}
+
+func TestIngestKeepsItemsFromPartiallyAvailableProvider(t *testing.T) {
+	analyzer := &recordingAnalyzer{}
+	repo := &recordingRepository{}
+	provider := &fakeNewsProvider{
+		items: []news.NewsItem{testNewsItem("news-1")},
+		err:   errors.New("one source unavailable"),
+	}
+	service := sentiment.NewService(analyzer, repo)
+
+	observations, err := service.IngestFromProvider(context.Background(), provider, 500)
+	if !errors.Is(err, sentiment.ErrFetchNews) {
+		t.Fatalf("error = %v, want ErrFetchNews", err)
+	}
+	if len(observations) != 1 || len(analyzer.calls) != 1 || repo.saves != 1 {
+		t.Fatalf("observations=%d calls=%d saves=%d", len(observations), len(analyzer.calls), repo.saves)
+	}
+}
+
+func TestIngestPreservesPartialProviderErrorWhenAllItemsAlreadyExist(t *testing.T) {
+	analyzer := &recordingAnalyzer{}
+	article := testNewsItem("news-1")
+	repo := &recordingRepository{observations: map[string]sentiment.Observation{
+		article.ID: {NewsID: article.ID},
+	}}
+	provider := &fakeNewsProvider{
+		items: []news.NewsItem{article},
+		err:   errors.New("one source unavailable"),
+	}
+	service := sentiment.NewService(analyzer, repo)
+
+	observations, err := service.IngestFromProvider(context.Background(), provider, 500)
+	if !errors.Is(err, sentiment.ErrFetchNews) {
+		t.Fatalf("error = %v, want ErrFetchNews", err)
+	}
+	if len(observations) != 0 || len(analyzer.calls) != 0 || repo.saves != 0 {
+		t.Fatalf("observations=%d calls=%d saves=%d", len(observations), len(analyzer.calls), repo.saves)
 	}
 }

@@ -40,6 +40,18 @@ override the two-year default, and `BACKFILL_REQUEST_PAUSE_MS` to tune Binance
 request pacing. `BACKFILL_SYMBOL` remains supported for older scripts. Invalid
 symbols fail fast instead of silently filling a different market.
 
+Ingest recent RSS news through the existing sentiment service and persist the
+resulting observations with:
+
+```bash
+go run ./cmd/news-ingest
+```
+
+Set `NEWS_RSS_FEEDS` to a comma-separated list of RSS 2.0 URLs.
+`NEWS_LOOKBACK` controls the fetch window and defaults to `24h`. The command is
+safe to rerun: stable article IDs already in `sentiment_results` are skipped
+before analysis, with the existing upsert retained as a persistence safeguard.
+
 ## Structure
 - `cmd/server` — entrypoint, HTTP/WebSocket wiring only, no business logic
 - `cmd/migrate` — idempotent ordered PostgreSQL/Supabase migration runner
