@@ -80,8 +80,15 @@ export function StrategyDiscoveryPage() {
     const activeNames = config.instances.map(inst => inst.type).join(' + ');
     try {
       await startSearch({
-        pair: symbol, timeframe: '1h', from: Date.now() - 180 * 86400000, to: Date.now(), capital: 10000,
-        instances: config.instances, policy: config.policy,
+        pair: symbol,
+        timeframe: '1h',
+        from: Date.now() - 180 * 86400000,
+        to: Date.now(),
+        capital: 10000,
+        fee: 0.1,
+        slippage: 5,
+        instances: config.instances,
+        policy: config.policy,
       });
       alert(`Đã gửi backtest thật: ${activeNames}. Theo dõi tiến độ qua WebSocket.`);
     } catch (error) {

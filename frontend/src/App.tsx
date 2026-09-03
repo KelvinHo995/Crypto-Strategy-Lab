@@ -1,17 +1,18 @@
-import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
+import { lazy, Suspense, useEffect, type ComponentType } from 'react';
 import { BarChart3, ChartCandlestick, FlaskConical, Newspaper, Radio, Trophy } from 'lucide-react';
 import { ErrorBoundary, WebSocketStateBanner } from './shared/components/index';
 import { AuthGate } from './shared/components/AuthGate';
 import { useAppMode } from './shared/auth';
 import { wsManager } from './shared/ws';
 import { ThemeProvider, ThemeToggle } from './shared/theme';
+import { useExperimentStore, type WorkspaceTab } from './shared/stores/useExperimentStore';
 
 const MarketDashboard = lazy(() => import('./features/market/index').then((module) => ({ default: module.MarketDashboard })));
 const StrategyDiscoveryPage = lazy(() => import('./features/strategy/index').then((module) => ({ default: module.StrategyDiscoveryPage })));
 const ExperimentDashboard = lazy(() => import('./features/experiment/index').then((module) => ({ default: module.ExperimentDashboard })));
 const NewsCrawlerDashboard = lazy(() => import('./features/news/index').then((module) => ({ default: module.NewsCrawlerDashboard })));
 
-type Tab = 'charts' | 'leaderboard' | 'builder' | 'news';
+type Tab = WorkspaceTab;
 const navigation: Array<{ id: Tab; label: string; caption: string; icon: ComponentType<{ size?: number }> }> = [
   { id: 'charts', label: 'Market', caption: 'Realtime charts', icon: ChartCandlestick },
   { id: 'builder', label: 'Strategies', caption: 'Build & discover', icon: FlaskConical },
@@ -21,7 +22,8 @@ const navigation: Array<{ id: Tab; label: string; caption: string; icon: Compone
 
 function AuthenticatedApp() {
   const mode = useAppMode();
-  const [activeTab, setActiveTab] = useState<Tab>('charts');
+  const activeTab = useExperimentStore((state) => state.activeTab);
+  const setActiveTab = useExperimentStore((state) => state.setActiveTab);
   const activeItem = navigation.find((item) => item.id === activeTab) ?? navigation[0];
   useEffect(() => {
     if (mode !== 'LIVE') return;

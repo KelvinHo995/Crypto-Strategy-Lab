@@ -49,8 +49,12 @@ export interface StartSearchRequest {
   from: number; // unix ms
   to: number; // unix ms
   capital: number;
+  fee?: number;
+  slippage?: number;
   instances: StrategyInstance[];
   policy?: 'majority' | 'weighted';
+  strategies?: string[];
+  params?: Record<string, unknown>;
 }
 
 export interface StartSearchResponse {
