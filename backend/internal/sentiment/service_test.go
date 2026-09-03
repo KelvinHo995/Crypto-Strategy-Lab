@@ -29,6 +29,10 @@ func (f *fakeRepository) Save(_ context.Context, observation sentiment.Observati
 	return f.err
 }
 
+func (f *fakeRepository) ExistingNewsIDs(context.Context, []string) (map[string]struct{}, error) {
+	return nil, f.err
+}
+
 // ListSince has no upper bound to filter on. If the test didn't set an
 // explicit PublishedAt, it's stamped to earliestPublishedAt itself — always
 // within bounds for whatever timestamp the test's caller used to derive it.

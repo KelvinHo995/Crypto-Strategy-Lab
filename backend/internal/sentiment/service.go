@@ -58,6 +58,15 @@ func (s *Service) AnalyzeAndStore(ctx context.Context, newsID, text string, publ
 
 func (s *Service) IngestNews(ctx context.Context, items []news.NewsItem) ([]Observation, error) {
 	observations := make([]Observation, 0, len(items))
+	if len(items) == 0 {
+		return observations, nil
+	}
+	if s == nil || s.analyzer == nil || s.repo == nil {
+		return observations, fmt.Errorf("%w: service unavailable", ErrAnalyze)
+	}
+
+	uniqueItems := make([]news.NewsItem, 0, len(items))
+	newsIDs := make([]string, 0, len(items))
 	seen := make(map[string]struct{}, len(items))
 	for _, item := range items {
 		item.ID = strings.TrimSpace(item.ID)
@@ -65,7 +74,19 @@ func (s *Service) IngestNews(ctx context.Context, items []news.NewsItem) ([]Obse
 			continue
 		}
 		seen[item.ID] = struct{}{}
+		uniqueItems = append(uniqueItems, item)
+		newsIDs = append(newsIDs, item.ID)
+	}
 
+	existing, err := s.repo.ExistingNewsIDs(ctx, newsIDs)
+	if err != nil {
+		return observations, fmt.Errorf("%w: check existing news IDs: %w", ErrStore, err)
+	}
+
+	for _, item := range uniqueItems {
+		if _, alreadyAnalyzed := existing[item.ID]; alreadyAnalyzed {
+			continue
+		}
 		observation, err := s.AnalyzeAndStore(ctx, item.ID, item.Text, item.PublishedAt)
 		if err != nil {
 			return observations, fmt.Errorf("ingest news %q: %w", item.ID, err)
@@ -79,9 +100,13 @@ func (s *Service) IngestFromProvider(ctx context.Context, provider news.NewsProv
 	if provider == nil {
 		return nil, fmt.Errorf("%w: provider is required", ErrFetchNews)
 	}
-	items, err := provider.Fetch(ctx, sinceTimestamp)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrFetchNews, err)
+	items, fetchErr := provider.Fetch(ctx, sinceTimestamp)
+	observations, ingestErr := s.IngestNews(ctx, items)
+	if ingestErr != nil {
+		return observations, ingestErr
 	}
-	return s.IngestNews(ctx, items)
+	if fetchErr != nil {
+		return observations, fmt.Errorf("%w: %w", ErrFetchNews, fetchErr)
+	}
+	return observations, nil
 }

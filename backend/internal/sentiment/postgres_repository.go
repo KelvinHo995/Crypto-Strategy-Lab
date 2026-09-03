@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 type PostgresRepository struct {
@@ -32,6 +34,38 @@ func (r *PostgresRepository) Save(ctx context.Context, observation Observation) 
 		return fmt.Errorf("save sentiment observation: %w", err)
 	}
 	return nil
+}
+
+func (r *PostgresRepository) ExistingNewsIDs(ctx context.Context, newsIDs []string) (map[string]struct{}, error) {
+	existing := make(map[string]struct{})
+	if len(newsIDs) == 0 {
+		return existing, nil
+	}
+
+	placeholders := make([]string, len(newsIDs))
+	args := make([]any, len(newsIDs))
+	for i, newsID := range newsIDs {
+		placeholders[i] = "$" + strconv.Itoa(i+1)
+		args[i] = newsID
+	}
+	query := `SELECT news_id FROM sentiment_results WHERE news_id IN (` + strings.Join(placeholders, ",") + `)`
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("check existing sentiment observations: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var newsID string
+		if err := rows.Scan(&newsID); err != nil {
+			return nil, fmt.Errorf("scan existing sentiment observation: %w", err)
+		}
+		existing[newsID] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read existing sentiment observations: %w", err)
+	}
+	return existing, nil
 }
 
 func (r *PostgresRepository) ListSince(ctx context.Context, earliestPublishedAt int64) ([]Observation, error) {
