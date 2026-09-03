@@ -140,7 +140,7 @@ export function StrategyDiscoveryPage() {
     } catch (error) {
       activeSearchId.current = null;
       const message = error instanceof ApiError && error.status === 422
-        ? 'Không đủ 21 candle trong khoảng đã chọn. Hãy chạy backfill cho market/timeframe này rồi thử lại.'
+        ? 'Không đủ candle trong khoảng đã chọn (cần tối thiểu 202 để phủ lookback worst-case). Hãy chạy backfill cho market/timeframe này rồi thử lại.'
         : `Không thể bắt đầu Search Loop: ${error instanceof Error ? error.message : String(error)}`;
       setStats(current => ({ ...current, status: 'FAILED', statusMessage: message }));
     } finally {

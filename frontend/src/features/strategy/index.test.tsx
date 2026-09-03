@@ -82,7 +82,7 @@ describe('StrategyDiscoveryPage Search Loop integration', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Loop Discovery' }));
 
-    expect(await screen.findByText(/Không đủ 21 candle/)).toBeTruthy();
+    expect(await screen.findByText(/Không đủ candle/)).toBeTruthy();
     expect(screen.getByText('FAILED')).toBeTruthy();
   });
 
@@ -105,8 +105,7 @@ describe('StrategyDiscoveryPage Search Loop integration', () => {
       searchId: 'search-1',
       searchTotal: 10,
       candidateId: 'candidate-1',
-      strategies: ['MA', 'RSI'],
-      params: {},
+      instances: [{ type: 'MA' }, { type: 'RSI' }],
       policy: 'majority',
       strategyVersions: { MA: 'v1', RSI: 'v1' },
       datasetPeriod: '1-2',
