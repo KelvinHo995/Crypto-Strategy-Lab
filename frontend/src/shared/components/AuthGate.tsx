@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { authApi } from '../api';
 import { ArrowRight, BarChart3, Database, LineChart, ShieldCheck } from 'lucide-react';
 import { AppModeContext, type AppMode } from '../auth';
+import { ThemeToggle } from '../theme';
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<AppMode | null>(null);
@@ -36,6 +37,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (mode) return <AppModeContext.Provider value={mode}>{children}</AppModeContext.Provider>;
   return <main className="auth-page">
+    <ThemeToggle className="auth-theme-toggle" />
     <section className="auth-intro">
       <div className="auth-brand"><BarChart3 size={22} /> Crypto Strategy Lab</div>
       <div>

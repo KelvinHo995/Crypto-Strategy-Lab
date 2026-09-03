@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   createChart,
   CandlestickSeries,
@@ -49,6 +49,7 @@ export function TradingChart({
   srZones,
   markers,
 }: TradingChartProps) {
+  const [isDark, setIsDark] = useState(() => document.documentElement.dataset.theme === 'dark');
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -61,24 +62,31 @@ export function TradingChart({
   const srPriceLinesRef = useRef<IPriceLine[]>([]); // To clean up price lines
 
   useEffect(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => setIsDark(root.dataset.theme === 'dark'));
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     if (!chartContainerRef.current) return;
 
     // 1. Initialize Chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { color: '#ffffff' },
-        textColor: '#64748b',
+        background: { color: isDark ? '#0b1220' : '#ffffff' },
+        textColor: isDark ? '#94a3b8' : '#64748b',
       },
       grid: {
-        vertLines: { color: '#f1f5f9' },
-        horzLines: { color: '#f1f5f9' },
+        vertLines: { color: isDark ? '#1e293b' : '#f1f5f9' },
+        horzLines: { color: isDark ? '#1e293b' : '#f1f5f9' },
       },
       rightPriceScale: {
-        borderColor: '#0f172a',
+        borderColor: isDark ? '#334155' : '#cbd5e1',
         autoScale: true,
       },
       timeScale: {
-        borderColor: '#0f172a',
+        borderColor: isDark ? '#334155' : '#cbd5e1',
         timeVisible: true,
         secondsVisible: false,
       },
@@ -147,7 +155,7 @@ export function TradingChart({
       markersPluginRef.current = null;
       srPriceLinesRef.current = [];
     };
-  }, []);
+  }, [isDark]);
 
   // Update chart data whenever props change
   useEffect(() => {
@@ -308,10 +316,10 @@ export function TradingChart({
         markersPluginRef.current.setMarkers([]);
       }
     }
-  }, [candles, ma20Line, bbands, srZones, markers]);
+  }, [candles, ma20Line, bbands, srZones, markers, isDark]);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div className="trading-chart" style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div
         ref={chartContainerRef}
         style={{ width: '100%', height: '100%', minHeight: '260px' }}
