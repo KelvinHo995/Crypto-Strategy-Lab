@@ -1,7 +1,19 @@
 # ADR-0006: Sentiment analysis is a separate Python service, not a Go package
 
 **Status:** Accepted
-**Owner:** Market Data / Frontend (Person 1 builds it, Person 4 consumes it in UI)
+**Owner:** Market Data + Sentiment Service (Võ Thành Đạt builds the News Collector and sentiment-service; Frontend consumes it in UI)
+
+> **Implementation status (2026-09-03):** the `NewsProvider` interface and
+> the Go-side ingestion pipeline (`sentiment.Service.IngestNews` /
+> `IngestFromProvider` — dedup, error handling, persistence) are built and
+> tested. What's still open: no concrete `NewsProvider` implementation
+> exists (no RSS/News API/crawler actually wired up), and nothing calls
+> these methods in production — no endpoint, no job. This ADR's diagram
+> below describes the agreed *shape*, not yet a working pipeline. Assigned
+> to Võ Thành Đạt: one concrete `NewsProvider` (RSS — explicitly one of the
+> three named options in spec §28, see Decision) plus one way to
+> trigger it (`POST /news/ingest`, mirroring the existing `POST
+> /sentiment/analyze` pattern).
 
 ## Context
 
@@ -42,6 +54,19 @@ from *each other* (spec ch.28): the collector only produces `NewsItem`s from
 whatever source (RSS/API/crawler), and doesn't know a sentiment model
 exists; the sentiment service only classifies text, and doesn't know where
 the text came from. Neither is coupled to the other's implementation.
+
+Spec §28 ("News không được gắn cứng với một crawler") names exactly three
+peer implementations behind one `News Provider` abstraction — **RSS, News
+API, Crawler** — all returning the same standardized `NewsItem`, "nhờ đó
+việc thay nguồn dữ liệu không ảnh hưởng đến các module phía sau." RSS is
+listed as a first-class option, not a lesser fallback — picking it isn't
+cutting a corner against the spec, it's implementing exactly what's named.
+A professor's lecture note about using an LLM to interpret HTML tags and
+cache the result applies specifically to the **Crawler** branch (raw HTML
+has no stable structure, so a tag-extraction step can break and need
+"healing") — it isn't a requirement across all three options, since RSS
+and News API both already return structured data with no tags to extract
+in the first place.
 
 ## Alternatives considered
 

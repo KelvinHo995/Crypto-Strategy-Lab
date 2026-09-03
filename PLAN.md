@@ -12,6 +12,7 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ `Candle` struct chốt xong, có thêm field `IsClosed` (candle đang hình thành vs đã đóng)
 - ✅ Binance live stream đã merge và mở hai combined WebSocket dùng chung: kline cho 8 coin × 4 timeframe và aggregate trades cho 8 coin. `/ws` lọc theo subscription của từng browser, có reconnect/backoff.
 - ✅ sentiment-service FastAPI chạy được; `/analyze` dùng model lexicon xác định `crypto-lexicon/v1`, validate input, trả score/model version/timestamp thật và có test. FinBERT vẫn là nâng cấp ngoài MVP.
+- ⚠️ **News Collector** — `internal/news.NewsProvider` (interface) và pipeline ingest (`sentiment.Service.IngestNews`/`IngestFromProvider`, dedup + lưu Postgres) đã code xong và có test, nhưng chưa có implementation thật (không RSS, không News API, không crawler nào được nối) và chưa có endpoint/job nào gọi tới — pipeline tồn tại nhưng mồ côi. Giao Võ Thành Đạt: 1 `NewsProvider` cụ thể (RSS — spec §28 liệt kê RSS/News API/Crawler là 3 lựa chọn ngang hàng, không phải RSS là phương án yếu hơn) + 1 endpoint `POST /news/ingest` gọi `IngestFromProvider` có sẵn. Xem ADR-0006 "Implementation status".
 - ✅ `internal/experiment`: Backtester + Evaluator, SL/TP, gap fill, fee, slippage, tránh lookahead bias và same-candle re-entry đã có test; `go vet`/`go test ./...` sạch. `NewJobID` nay ghép UUID sau timestamp (`exp-<unixnano>-<uuid>`) nên không còn phụ thuộc độ phân giải clock của OS — an toàn cả trong vòng lặp sinh candidate liên tục lẫn giữa nhiều backend instance dùng chung `PostgresQueue`. Đã sửa lỗi thật: `Config.Window` từng cố định (20), nhỏ hơn nhu cầu thật của MA mặc định (50) và của `RandomGenerator` (tới 200) — MA lặng lẽ trả `Hold` mãi mãi, `COMPLETED` với 0 trade trông như kết quả hợp lệ. Nay mỗi strategy tự báo `MinLookback()`, worker tính window đúng theo từng candidate đã resolve — verified sống: loop với `maLongWindow` tới 192 đều có trade thật (195–3200), không còn 0. Xem ADR-0003, ADR-0009, [06-search-backtest-flow.md](docs/architecture/06-search-backtest-flow.md).
 - ✅ `internal/httpx`: router 2-mux public/protected; `POST /search/start`, `GET /experiments`, `GET /experiments/{id}`, `GET /strategies`, `/health` chạy thật. Request search giới hạn 1 MiB, reject field lạ/trailing JSON và trả `202 STARTED`. Auth dùng JWT cookie thật; `/ws` là server-push channel có xác thực cho candle, tiến độ search và leaderboard.
 - ✅ `Binance.FetchHistoricalCandles` REST thật: pagination 1000 klines, normalize `Candle`, chỉ nhận candle đã đóng; live kline WebSocket có reconnect/backoff và phát `CANDLE_UPDATE`.
@@ -355,7 +356,7 @@ Format: Context · Decision · Alternatives · Consequences · Evidence
 3. **Why separate Backtester and Evaluator?** (Người 3)
 4. **Why queue/worker (or why NOT Kafka)?** (Người 2 + 3)
 5. **Why modular monolith vs microservices?** (cả nhóm)
-6. **Why separate News Collector and Sentiment Service?** (Người 1/4 tùy ai làm sentiment)
+6. **Why separate News Collector and Sentiment Service?** (Người 1 — Võ Thành Đạt, đã chốt ownership; xem ADR-0006's "Implementation status" cho spec còn thiếu)
 7. **Why JWT (1h expiry) instead of a server-side session table?** (cần gán người — xem §0)
 
 ---
