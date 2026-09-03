@@ -98,9 +98,12 @@ export function ChartCard({
 
 
 
-  // 2. Realtime WebSocket Subscription
+  // 2. Realtime WebSocket Subscription — only once real history has loaded,
+  // so a stray tick can't seed the chart with a single candle (autoScale
+  // then zooms to fit that one point, which looks broken) while history is
+  // still loading or failed to load.
   useWebSocketSubscription('CANDLE_UPDATE', (candle: Candle) => {
-    if (candle.symbol === symbol && candle.timeframe === timeframe) {
+    if (dataMode === 'API' && candle.symbol === symbol && candle.timeframe === timeframe) {
       handleRealtimeUpdate(candle);
     }
   });
