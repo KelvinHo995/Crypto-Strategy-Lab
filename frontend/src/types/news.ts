@@ -13,6 +13,9 @@ export interface SentimentAnalysis {
 
 export interface SentimentObservation {
   newsId: string;
+  title?: string;
+  source?: string;
+  url?: string;
   publishedAt: number;
   sentiment: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
   score: number;

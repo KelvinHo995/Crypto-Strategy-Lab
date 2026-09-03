@@ -1,35 +1,6 @@
 import type { NewsItem } from '../../../types/news';
 
-export interface ExtractionTemplateInfo {
-  version: string;
-  confidenceScore: number;
-  extractedFields: number;
-  rawHtmlPreview: string;
-  jsonTemplatePreview: string;
-}
-
-export interface SelfHealingStats {
-  autoHealEnabled: boolean;
-  emptyFieldsPct: number;
-  formatErrorsPct: number;
-  totalErrorsPct: number;
-  proposedTemplate: string;
-}
-
-export interface SentimentOverview {
-  positivePct: number;
-  neutralPct: number;
-  negativePct: number;
-  eventsDistribution: { name: string; pct: number }[];
-  mlopsMetrics: {
-    avgConfidence: number;
-    totalAnalyzed: number;
-    sourceCoverage: number;
-    activeSources: string;
-  };
-}
-
-// 1. Mock list of 15 realistic cryptocurrency news articles with sentiment analysis DTO metadata
+// Mock list of realistic cryptocurrency news articles with sentiment analysis DTO metadata
 export const MOCK_NEWS_FEED: NewsItem[] = [
   {
     id: 'news-001',
@@ -135,67 +106,3 @@ export const MOCK_NEWS_FEED: NewsItem[] = [
     }
   }
 ];
-
-// 2. Mock LLM Extraction Template preview
-export const MOCK_EXTRACTION_TEMPLATE: ExtractionTemplateInfo = {
-  version: 'v1.4.2',
-  confidenceScore: 0.92,
-  extractedFields: 5,
-  rawHtmlPreview: `<!-- Coindesk raw scrap preview -->
-<div class="news-article-card">
-  <h2 class="title-class-xyz">SEC Approves Spot Ethereum ETFs...</h2>
-  <span class="pub-date" data-unix="1723020000">5m ago</span>
-  <p class="summary-body">The SEC has approved spot Ethereum ETFs...</p>
-  <div class="author-info">By CoinDesk Team</div>
-  <a href="/eth-etf-approved" class="link-tag">Read Article</a>
-</div>`,
-  jsonTemplatePreview: `{
-  "template_version": "v1.4.2",
-  "selectors": {
-    "title": "div.news-article-card > h2.title-class-xyz",
-    "summary": "div.news-article-card > p.summary-body",
-    "source": "div.author-info",
-    "publishedAt": "span.pub-date[data-unix]",
-    "url": "a.link-tag[href]"
-  },
-  "asset_heuristics": ["ETH", "Solana", "BTC"]
-}`,
-};
-
-// 3. Mock Self-healing loop diagnostics
-export const MOCK_SELF_HEALING_STATS: SelfHealingStats = {
-  autoHealEnabled: true,
-  emptyFieldsPct: 8.7,
-  formatErrorsPct: 3.2,
-  totalErrorsPct: 11.9,
-  proposedTemplate: `{
-  "template_version": "v1.4.3",
-  "selectors": {
-    "title": "div.news-article-card h2",
-    "summary": "p.summary-body, div.article-body",
-    "source": "div.author-info, span.publisher",
-    "publishedAt": "span.pub-date",
-    "url": "a.link-tag"
-  }
-}`,
-};
-
-// 4. Mock 24h Sentiment statistics & MLOps quality metrics
-export const MOCK_SENTIMENT_OVERVIEW: SentimentOverview = {
-  positivePct: 58,
-  neutralPct: 27,
-  negativePct: 15,
-  eventsDistribution: [
-    { name: 'ETF & Institutional Flow', pct: 28 },
-    { name: 'Protocol Upgrade / Code', pct: 22 },
-    { name: 'Regulation & Policy', pct: 15 },
-    { name: 'Partnerships & Ecosystem', pct: 12 },
-    { name: 'Market Speculation & Trends', pct: 23 },
-  ],
-  mlopsMetrics: {
-    avgConfidence: 0.78,
-    totalAnalyzed: 1248,
-    sourceCoverage: 92,
-    activeSources: '23 / 25',
-  },
-};

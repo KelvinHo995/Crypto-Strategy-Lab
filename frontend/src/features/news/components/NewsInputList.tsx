@@ -78,7 +78,13 @@ export function NewsInputList({ news }: NewsInputListProps) {
               <span style={getAssetBadgeStyle(item.title)}>
                 {item.title.toUpperCase().includes('ETH') ? 'ETH' : item.title.toUpperCase().includes('SOL') ? 'SOL' : 'BTC'}
               </span>
-              {item.title}
+              {item.url ? (
+                <a href={item.url} target="_blank" rel="noopener noreferrer" style={titleLinkStyle}>
+                  {item.title}
+                </a>
+              ) : (
+                item.title
+              )}
             </h5>
 
             {/* Summary */}
@@ -103,11 +109,6 @@ export function NewsInputList({ news }: NewsInputListProps) {
           </div>
         ))}
       </div>
-
-      {/* Footer Link */}
-      <button style={viewAllStyle}>
-        View All Market News →
-      </button>
     </div>
   );
 }
@@ -223,16 +224,7 @@ const modelMetaStyle: React.CSSProperties = {
   fontFamily: 'monospace',
 };
 
-const viewAllStyle: React.CSSProperties = {
-  backgroundColor: 'transparent',
-  border: 'none',
-  color: '#2563eb',
-  cursor: 'pointer',
-  fontSize: '0.8rem',
-  fontWeight: '600',
-  textAlign: 'center',
-  paddingTop: '1rem',
-  borderTop: '1px solid #e2e8f0',
-  marginTop: '0.5rem',
-  width: '100%',
+const titleLinkStyle: React.CSSProperties = {
+  color: 'inherit',
+  textDecoration: 'none',
 };

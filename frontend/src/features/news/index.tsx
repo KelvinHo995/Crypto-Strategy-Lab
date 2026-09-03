@@ -1,55 +1,52 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ErrorBoundary } from '../../shared/components';
 import { NewsCrawlerHeader } from './components/NewsCrawlerHeader';
 import { NewsInputList } from './components/NewsInputList';
-import { ExtractionPipelinePanel } from './components/ExtractionPipelinePanel';
 import { SentimentAnalyticsPanel } from './components/SentimentAnalyticsPanel';
 import { MOCK_NEWS_FEED } from './services/mockNewsData';
-import type { NewsItem } from '../../types/news';
-import { analyzeSentiment } from '../../shared/api';
+import type { NewsItem, SentimentObservation } from '../../types/news';
+import { fetchSentimentObservations } from '../../shared/api';
+
+function toNewsItem(observation: SentimentObservation): NewsItem {
+  return {
+    id: observation.newsId,
+    title: observation.title || observation.newsId,
+    content: '',
+    source: observation.source || 'RSS',
+    url: observation.url,
+    publishedAt: observation.publishedAt,
+    sentiment: {
+      newsId: observation.newsId,
+      sentiment: observation.sentiment,
+      score: observation.score,
+      model: { name: observation.modelName, version: observation.modelVersion },
+      createdAt: observation.analyzedAt,
+    },
+    analysisSource: 'LIVE',
+  };
+}
 
 export function NewsCrawlerDashboard() {
   const [newsFeed, setNewsFeed] = useState<NewsItem[]>(MOCK_NEWS_FEED);
-  const [isCrawling, setIsCrawling] = useState(false);
+  const [observations, setObservations] = useState<SentimentObservation[]>([]);
   const [analysisStatus, setAnalysisStatus] = useState<'DEMO' | 'LIVE' | 'ERROR'>('DEMO');
-  const [analysisMessage, setAnalysisMessage] = useState('Sample articles are local fixtures; analyze a sample to verify the live backend pipeline.');
+  const [analysisMessage, setAnalysisMessage] = useState('Showing local sample articles — waiting on the live ingestion pipeline.');
 
-  const handleCrawlStart = async () => {
-    setIsCrawling(true);
-    setAnalysisMessage('Sending sample article through Go API, FastAPI model, and PostgreSQL...');
-    const publishedAt = Date.now();
-    const newId = `live-news-${publishedAt}`;
-    try {
-      const observation = await analyzeSentiment(
-        newId,
-        'Bitcoin records bullish gains after major regulatory approval and strong institutional inflow.',
-        publishedAt,
-      );
-      const newArticle: NewsItem = {
-        id: newId,
-        title: 'Bitcoin institutional inflow strengthens after regulatory approval',
-        content: 'Bitcoin records bullish gains after major regulatory approval and strong institutional inflow.',
-        source: 'Live pipeline sample',
-        publishedAt,
-        sentiment: {
-          newsId: newId,
-          sentiment: observation.sentiment,
-          score: observation.score,
-          model: { name: observation.modelName, version: observation.modelVersion },
-          createdAt: observation.analyzedAt,
-        },
-        analysisSource: 'LIVE',
-      };
-      setNewsFeed((prev) => [newArticle, ...prev]);
-      setAnalysisStatus('LIVE');
-      setAnalysisMessage(`Stored ${observation.newsId} with ${observation.modelName}/${observation.modelVersion}.`);
-    } catch (error) {
-      setAnalysisStatus('ERROR');
-      setAnalysisMessage(`Live sentiment failed: ${String(error)}`);
-    } finally {
-      setIsCrawling(false);
-    }
-  };
+  useEffect(() => {
+    // Real, already-ingested articles (via the RSS ingestion pipeline) — if
+    // there are none yet, the demo fixtures stay so the page isn't empty.
+    // A failed fetch is not shown as an error here either: this is a
+    // background load, not something the user triggered.
+    fetchSentimentObservations()
+      .then((real) => {
+        setObservations(real);
+        if (real.length === 0) return;
+        setNewsFeed(real.map(toNewsItem));
+        setAnalysisStatus('LIVE');
+        setAnalysisMessage(`Showing ${real.length} real analyzed article(s) from the last 24h.`);
+      })
+      .catch(() => undefined);
+  }, []);
 
   return (
     <ErrorBoundary
@@ -66,23 +63,15 @@ export function NewsCrawlerDashboard() {
           <strong>{analysisStatus}</strong> {analysisMessage}
         </div>
         {/* Top Controls Bar */}
-        <NewsCrawlerHeader onCrawlStart={handleCrawlStart} isCrawling={isCrawling} />
+        <NewsCrawlerHeader />
 
-        {/* 3-Column Layout */}
+        {/* 2-Column Layout: real feed + real sentiment breakdown */}
         <div style={gridStyle}>
-          {/* Column 1: Input feed list */}
           <div style={columnStyle}>
             <NewsInputList news={newsFeed} />
           </div>
-
-          {/* Column 2: HTML extraction pipeline */}
           <div style={columnStyle}>
-            <ExtractionPipelinePanel />
-          </div>
-
-          {/* Column 3: Output sentiment analytics */}
-          <div style={columnStyle}>
-            <SentimentAnalyticsPanel />
+            <SentimentAnalyticsPanel observations={observations} />
           </div>
         </div>
       </div>

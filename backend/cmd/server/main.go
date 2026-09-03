@@ -72,7 +72,7 @@ func main() {
 	}
 
 	router := httpx.NewRouterWithContext(ctx, registry, repo, httpx.Dependencies{
-		Auth: authService, Candles: candleRepo, Live: binance, Sentiment: sentimentService, Queue: jobQueue,
+		Auth: authService, Candles: candleRepo, Live: binance, Sentiment: sentimentService, SentimentReader: sentimentRepo, Queue: jobQueue,
 	})
 	defer router.Close()
 

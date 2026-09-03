@@ -3,9 +3,11 @@ package httpx_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/httpx"
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/sentiment"
@@ -19,10 +21,10 @@ type fakeSentimentService struct {
 	publishedAt int64
 }
 
-func (f *fakeSentimentService) AnalyzeAndStore(_ context.Context, newsID, text string, publishedAt int64) (sentiment.Observation, error) {
-	f.newsID = newsID
-	f.text = text
-	f.publishedAt = publishedAt
+func (f *fakeSentimentService) AnalyzeAndStore(_ context.Context, input sentiment.AnalyzeInput) (sentiment.Observation, error) {
+	f.newsID = input.NewsID
+	f.text = input.Text
+	f.publishedAt = input.PublishedAt
 	return f.observation, f.err
 }
 
@@ -82,5 +84,76 @@ func TestAnalyzeSentimentMapsDependencyErrors(t *testing.T) {
 				t.Fatalf("status = %d, want %d", w.Code, test.want)
 			}
 		})
+	}
+}
+
+type fakeSentimentReader struct {
+	observations []sentiment.Observation
+	err          error
+	sinceCalled  int64
+}
+
+func (f *fakeSentimentReader) ListSince(_ context.Context, earliestPublishedAt int64) ([]sentiment.Observation, error) {
+	f.sinceCalled = earliestPublishedAt
+	return f.observations, f.err
+}
+
+func TestListSentimentObservations_ReturnsRecentFirst(t *testing.T) {
+	reader := &fakeSentimentReader{observations: []sentiment.Observation{
+		{NewsID: "old", Title: "Older article", PublishedAt: 1000},
+		{NewsID: "new", Title: "Newer article", PublishedAt: 3000},
+		{NewsID: "mid", Title: "Middle article", PublishedAt: 2000},
+	}}
+	router := httpx.NewRouterWithContext(context.Background(), newTestRegistry(), newFakeRepo(), httpx.Dependencies{SentimentReader: reader})
+	defer router.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/sentiment/observations", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	var got []sentiment.Observation
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0].NewsID != "new" || got[1].NewsID != "mid" || got[2].NewsID != "old" {
+		t.Fatalf("order = %+v, want newest first", got)
+	}
+}
+
+func TestListSentimentObservations_DefaultsSinceWindow(t *testing.T) {
+	reader := &fakeSentimentReader{}
+	router := httpx.NewRouterWithContext(context.Background(), newTestRegistry(), newFakeRepo(), httpx.Dependencies{SentimentReader: reader})
+	defer router.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/sentiment/observations", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	dayAgo := time.Now().Add(-25 * time.Hour).UnixMilli()
+	if reader.sinceCalled < dayAgo {
+		t.Fatalf("since = %d, want roughly 24h ago (%d)", reader.sinceCalled, dayAgo)
+	}
+}
+
+func TestListSentimentObservations_AcceptsSinceParam(t *testing.T) {
+	reader := &fakeSentimentReader{}
+	router := httpx.NewRouterWithContext(context.Background(), newTestRegistry(), newFakeRepo(), httpx.Dependencies{SentimentReader: reader})
+	defer router.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/sentiment/observations?since=500", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if reader.sinceCalled != 500 {
+		t.Fatalf("since = %d, want 500", reader.sinceCalled)
 	}
 }

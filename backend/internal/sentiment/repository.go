@@ -9,6 +9,9 @@ var ErrNotFound = errors.New("sentiment observation not found")
 
 type Observation struct {
 	NewsID       string  `json:"newsId"`
+	Title        string  `json:"title,omitempty"`
+	Source       string  `json:"source,omitempty"`
+	URL          string  `json:"url,omitempty"`
 	PublishedAt  int64   `json:"publishedAt"`
 	Sentiment    string  `json:"sentiment"`
 	Score        float64 `json:"score"`

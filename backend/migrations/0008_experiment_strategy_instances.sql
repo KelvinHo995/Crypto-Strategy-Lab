@@ -6,6 +6,6 @@
 -- Existing rows lose their old strategies/params detail (acceptable: this
 -- is dev/demo data, not graded historical state) but keep every other
 -- column untouched.
-ALTER TABLE experiments ADD COLUMN instances TEXT NOT NULL DEFAULT '[]';
-ALTER TABLE experiments DROP COLUMN strategies;
-ALTER TABLE experiments DROP COLUMN params;
+ALTER TABLE experiments ADD COLUMN IF NOT EXISTS instances TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE experiments DROP COLUMN IF EXISTS strategies;
+ALTER TABLE experiments DROP COLUMN IF EXISTS params;

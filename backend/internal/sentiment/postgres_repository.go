@@ -19,17 +19,20 @@ func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 func (r *PostgresRepository) Save(ctx context.Context, observation Observation) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO sentiment_results (
-			news_id, published_at, sentiment, score, model_name, model_version, analyzed_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7)
+			news_id, title, source, url, published_at, sentiment, score, model_name, model_version, analyzed_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 		ON CONFLICT (news_id) DO UPDATE SET
+			title = EXCLUDED.title,
+			source = EXCLUDED.source,
+			url = EXCLUDED.url,
 			published_at = EXCLUDED.published_at,
 			sentiment = EXCLUDED.sentiment,
 			score = EXCLUDED.score,
 			model_name = EXCLUDED.model_name,
 			model_version = EXCLUDED.model_version,
 			analyzed_at = EXCLUDED.analyzed_at
-	`, observation.NewsID, observation.PublishedAt, observation.Sentiment,
-		observation.Score, observation.ModelName, observation.ModelVersion, observation.AnalyzedAt)
+	`, observation.NewsID, observation.Title, observation.Source, observation.URL, observation.PublishedAt,
+		observation.Sentiment, observation.Score, observation.ModelName, observation.ModelVersion, observation.AnalyzedAt)
 	if err != nil {
 		return fmt.Errorf("save sentiment observation: %w", err)
 	}
@@ -70,7 +73,7 @@ func (r *PostgresRepository) ExistingNewsIDs(ctx context.Context, newsIDs []stri
 
 func (r *PostgresRepository) ListSince(ctx context.Context, earliestPublishedAt int64) ([]Observation, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT news_id, published_at, sentiment, score, model_name, model_version, analyzed_at
+		SELECT news_id, title, source, url, published_at, sentiment, score, model_name, model_version, analyzed_at
 		FROM sentiment_results
 		WHERE published_at >= $1
 		ORDER BY published_at ASC
@@ -83,7 +86,7 @@ func (r *PostgresRepository) ListSince(ctx context.Context, earliestPublishedAt 
 	var observations []Observation
 	for rows.Next() {
 		var o Observation
-		if err := rows.Scan(&o.NewsID, &o.PublishedAt, &o.Sentiment, &o.Score, &o.ModelName, &o.ModelVersion, &o.AnalyzedAt); err != nil {
+		if err := rows.Scan(&o.NewsID, &o.Title, &o.Source, &o.URL, &o.PublishedAt, &o.Sentiment, &o.Score, &o.ModelName, &o.ModelVersion, &o.AnalyzedAt); err != nil {
 			return nil, fmt.Errorf("scan sentiment observation: %w", err)
 		}
 		observations = append(observations, o)

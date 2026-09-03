@@ -103,6 +103,7 @@ export async function startSearchLoop(request: StartSearchLoopRequest): Promise<
   return (await apiClient.post<StartSearchLoopResponse>('/search/loop', request)).data;
 }
 
-export async function analyzeSentiment(newsId: string, text: string, publishedAt: number): Promise<SentimentObservation> {
-  return (await apiClient.post<SentimentObservation>('/sentiment/analyze', { newsId, text, publishedAt })).data;
+export async function fetchSentimentObservations(sinceMs?: number): Promise<SentimentObservation[]> {
+  const params = sinceMs !== undefined ? { since: sinceMs } : undefined;
+  return (await apiClient.get<SentimentObservation[]>('/sentiment/observations', { params })).data;
 }

@@ -62,7 +62,7 @@ func TestServiceAnalyzeAndStore(t *testing.T) {
 
 	repo := &fakeRepository{}
 	service := sentiment.NewService(&fakeAnalyzer{result: result}, repo)
-	observation, err := service.AnalyzeAndStore(context.Background(), "news-1", "bullish rally", 456_000)
+	observation, err := service.AnalyzeAndStore(context.Background(), sentiment.AnalyzeInput{NewsID: "news-1", Text: "bullish rally", PublishedAt: 456_000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,14 +79,14 @@ func TestServiceAnalyzeAndStore(t *testing.T) {
 
 func TestServiceReportsAnalysisAndStorageErrors(t *testing.T) {
 	analyzeFailure := sentiment.NewService(&fakeAnalyzer{err: errors.New("service down")}, &fakeRepository{})
-	if _, err := analyzeFailure.AnalyzeAndStore(context.Background(), "news-1", "text", 1); !errors.Is(err, sentiment.ErrAnalyze) {
+	if _, err := analyzeFailure.AnalyzeAndStore(context.Background(), sentiment.AnalyzeInput{NewsID: "news-1", Text: "text", PublishedAt: 1}); !errors.Is(err, sentiment.ErrAnalyze) {
 		t.Fatalf("analysis error = %v", err)
 	}
 
 	var result sentiment.Result
 	result.NewsID = "news-1"
 	storeFailure := sentiment.NewService(&fakeAnalyzer{result: result}, &fakeRepository{err: errors.New("database down")})
-	if _, err := storeFailure.AnalyzeAndStore(context.Background(), "news-1", "text", 1); !errors.Is(err, sentiment.ErrStore) {
+	if _, err := storeFailure.AnalyzeAndStore(context.Background(), sentiment.AnalyzeInput{NewsID: "news-1", Text: "text", PublishedAt: 1}); !errors.Is(err, sentiment.ErrStore) {
 		t.Fatalf("storage error = %v", err)
 	}
 }
