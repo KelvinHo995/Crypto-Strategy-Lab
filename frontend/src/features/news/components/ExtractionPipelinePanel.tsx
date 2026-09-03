@@ -4,18 +4,45 @@ import {
   MOCK_SELF_HEALING_STATS,
 } from '../services/mockNewsData';
 
-export function ExtractionPipelinePanel() {
+export interface ExtractionData {
+  title: string;
+  source: string;
+  rawHtml: string;
+  jsonTemplate: string;
+  confidenceScore: number;
+  extractedFields: number;
+  version: string;
+}
+
+interface ExtractionPipelinePanelProps {
+  activeExtractionData?: ExtractionData;
+}
+
+export function ExtractionPipelinePanel({
+  activeExtractionData,
+}: ExtractionPipelinePanelProps) {
   const [autoHeal, setAutoHeal] = useState(MOCK_SELF_HEALING_STATS.autoHealEnabled);
-  const [templateVersion, setTemplateVersion] = useState(MOCK_EXTRACTION_TEMPLATE.version);
+  const [templateVersion, setTemplateVersion] = useState(
+    activeExtractionData?.version || MOCK_EXTRACTION_TEMPLATE.version
+  );
   const [isApplying, setIsApplying] = useState(false);
+
+  const rawHtml = activeExtractionData?.rawHtml || MOCK_EXTRACTION_TEMPLATE.rawHtmlPreview;
+  const jsonTemplate = activeExtractionData?.jsonTemplate || MOCK_EXTRACTION_TEMPLATE.jsonTemplatePreview;
+  const confidenceScore = activeExtractionData?.confidenceScore ?? MOCK_EXTRACTION_TEMPLATE.confidenceScore;
+  const extractedFields = activeExtractionData?.extractedFields ?? MOCK_EXTRACTION_TEMPLATE.extractedFields;
+  const articleTitle = activeExtractionData?.title || 'Selected Article';
+  const articleSource = activeExtractionData?.source || 'Web Scraper';
 
   const handleApplyTemplate = () => {
     setIsApplying(true);
     setTimeout(() => {
       setTemplateVersion('v1.4.3');
       setIsApplying(false);
-      alert('Self-healing success: Applied new Extraction Template version v1.4.3. Expected error rate reduced to 4.1%!');
-    }, 1500);
+      alert(
+        'Self-healing success: Applied new Extraction Template version v1.4.3. Expected error rate reduced to 4.1%!'
+      );
+    }, 1200);
   };
 
   return (
@@ -23,7 +50,13 @@ export function ExtractionPipelinePanel() {
       {/* SECTION 1: LLM-ASSISTED EXTRACTION */}
       <div style={sectionStyle}>
         <div style={sectionHeaderStyle}>
-          <h4 style={titleStyle}>LLM-Assisted Extraction</h4>
+          <div>
+            <h4 style={titleStyle}>LLM-Assisted Extraction</h4>
+            <span style={activeTargetStyle}>
+              Target: <strong style={{ color: '#2563eb' }}>{articleSource}</strong> —{' '}
+              {articleTitle.length > 35 ? articleTitle.slice(0, 35) + '...' : articleTitle}
+            </span>
+          </div>
           <span style={versionBadgeStyle}>Template: {templateVersion} </span>
         </div>
 
@@ -41,12 +74,12 @@ export function ExtractionPipelinePanel() {
         {/* Code previews carousel/tabs split */}
         <div style={codeSplitGridStyle}>
           <div>
-            <div style={codeHeaderStyle}>Raw HTML Snippet</div>
-            <pre style={codePreviewStyle}>{MOCK_EXTRACTION_TEMPLATE.rawHtmlPreview}</pre>
+            <div style={codeHeaderStyle}>Raw HTML Snippet ({articleSource})</div>
+            <pre style={codePreviewStyle}>{rawHtml}</pre>
           </div>
           <div>
-            <div style={codeHeaderStyle}>Generated JSON Template</div>
-            <pre style={codePreviewStyle}>{MOCK_EXTRACTION_TEMPLATE.jsonTemplatePreview}</pre>
+            <div style={codeHeaderStyle}>Generated JSON Template & DTO</div>
+            <pre style={codePreviewStyle}>{jsonTemplate}</pre>
           </div>
         </div>
 
@@ -54,11 +87,15 @@ export function ExtractionPipelinePanel() {
         <div style={metricFlexStyle}>
           <div style={metricBoxStyle}>
             <span style={metricLabelStyle}>LLM Confidence</span>
-            <span style={metricValueStyle}>{(MOCK_EXTRACTION_TEMPLATE.confidenceScore * 100).toFixed(0)}%</span>
+            <span style={{ ...metricValueStyle, color: '#10b981' }}>
+              {(confidenceScore * 100).toFixed(0)}%
+            </span>
           </div>
           <div style={metricBoxStyle}>
             <span style={metricLabelStyle}>Mapped Fields</span>
-            <span style={{ ...metricValueStyle, color: '#2563eb' }}>{MOCK_EXTRACTION_TEMPLATE.extractedFields} / 5</span>
+            <span style={{ ...metricValueStyle, color: '#2563eb' }}>
+              {extractedFields} / 5
+            </span>
           </div>
         </div>
       </div>
@@ -103,7 +140,9 @@ export function ExtractionPipelinePanel() {
             </div>
             <div style={errorColStyle}>
               <span style={errorLabelStyle}>Total Failures</span>
-              <span style={{ ...errorValueStyle, color: '#ef4444' }}>{MOCK_SELF_HEALING_STATS.totalErrorsPct}%</span>
+              <span style={{ ...errorValueStyle, color: '#ef4444' }}>
+                {MOCK_SELF_HEALING_STATS.totalErrorsPct}%
+              </span>
             </div>
           </div>
         </div>
@@ -117,6 +156,7 @@ export function ExtractionPipelinePanel() {
             </div>
             <pre style={proposalCodeStyle}>{MOCK_SELF_HEALING_STATS.proposedTemplate}</pre>
             <button
+              type="button"
               onClick={handleApplyTemplate}
               disabled={isApplying}
               style={isApplying ? activeApplyBtnStyle : applyBtnStyle}
@@ -154,23 +194,30 @@ const sectionStyle: React.CSSProperties = {
 const sectionHeaderStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
-  alignItems: 'center',
+  alignItems: 'flex-start',
 };
 
 const titleStyle: React.CSSProperties = {
   fontSize: '0.85rem',
   fontWeight: '700',
-  color: '#cbd5e1',
+  color: '#475569',
   margin: 0,
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
+};
+
+const activeTargetStyle: React.CSSProperties = {
+  fontSize: '0.7rem',
+  color: '#64748b',
+  display: 'block',
+  marginTop: '0.15rem',
 };
 
 const versionBadgeStyle: React.CSSProperties = {
   fontSize: '0.7rem',
   backgroundColor: 'rgba(16, 185, 129, 0.15)',
   border: '1px solid #10b981',
-  color: '#10b981',
+  color: '#059669',
   padding: '0.15rem 0.4rem',
   borderRadius: '4px',
   fontWeight: '700',
@@ -180,7 +227,7 @@ const flowContainerStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
-  backgroundColor: '#ffffff',
+  backgroundColor: '#f8fafc',
   padding: '0.4rem 0.5rem',
   borderRadius: '6px',
   border: '1px solid #e2e8f0',
@@ -189,15 +236,16 @@ const flowContainerStyle: React.CSSProperties = {
 const flowStepStyle: React.CSSProperties = {
   fontSize: '0.65rem',
   fontWeight: '700',
-  color: '#94a3b8',
+  color: '#64748b',
   border: '1px solid #cbd5e1',
   padding: '0.15rem 0.35rem',
   borderRadius: '4px',
+  backgroundColor: '#ffffff',
 };
 
 const flowArrowStyle: React.CSSProperties = {
   fontSize: '0.75rem',
-  color: '#475569',
+  color: '#94a3b8',
 };
 
 const codeSplitGridStyle: React.CSSProperties = {
@@ -214,7 +262,7 @@ const codeHeaderStyle: React.CSSProperties = {
 };
 
 const codePreviewStyle: React.CSSProperties = {
-  backgroundColor: '#ffffff',
+  backgroundColor: '#f8fafc',
   border: '1px solid #e2e8f0',
   borderRadius: '4px',
   padding: '0.5rem',
@@ -222,8 +270,10 @@ const codePreviewStyle: React.CSSProperties = {
   fontSize: '0.65rem',
   margin: 0,
   fontFamily: 'monospace',
-  maxHeight: '110px',
+  maxHeight: '120px',
   overflow: 'auto',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-all',
 };
 
 const metricFlexStyle: React.CSSProperties = {
@@ -233,7 +283,8 @@ const metricFlexStyle: React.CSSProperties = {
 
 const metricBoxStyle: React.CSSProperties = {
   flex: 1,
-  backgroundColor: '#e2e8f0',
+  backgroundColor: '#f8fafc',
+  border: '1px solid #e2e8f0',
   borderRadius: '6px',
   padding: '0.4rem',
   display: 'flex',
@@ -249,7 +300,7 @@ const metricLabelStyle: React.CSSProperties = {
 const metricValueStyle: React.CSSProperties = {
   fontSize: '0.85rem',
   fontWeight: '700',
-  color: '#cbd5e1',
+  color: '#0f172a',
 };
 
 const switchLabelStyle: React.CSSProperties = {
@@ -265,7 +316,7 @@ const checkboxStyle: React.CSSProperties = {
 
 const switchTextStyle: React.CSSProperties = {
   fontSize: '0.75rem',
-  color: '#94a3b8',
+  color: '#64748b',
   fontWeight: '600',
 };
 
@@ -305,11 +356,11 @@ const errorLabelStyle: React.CSSProperties = {
 const errorValueStyle: React.CSSProperties = {
   fontSize: '0.8rem',
   fontWeight: '700',
-  color: '#cbd5e1',
+  color: '#0f172a',
 };
 
 const healingProposalCardStyle: React.CSSProperties = {
-  backgroundColor: '#ffffff',
+  backgroundColor: '#f8fafc',
   border: '1px solid #e2e8f0',
   borderRadius: '6px',
   padding: '0.5rem',
@@ -323,12 +374,12 @@ const proposalHeaderStyle: React.CSSProperties = {
   justifyContent: 'space-between',
   fontSize: '0.7rem',
   fontWeight: '600',
-  color: '#cbd5e1',
+  color: '#475569',
 };
 
 const proposalCodeStyle: React.CSSProperties = {
   backgroundColor: '#ffffff',
-  color: '#f59e0b',
+  color: '#d97706',
   fontSize: '0.65rem',
   margin: 0,
   fontFamily: 'monospace',
@@ -341,7 +392,7 @@ const proposalCodeStyle: React.CSSProperties = {
 
 const applyBtnStyle: React.CSSProperties = {
   backgroundColor: '#10b981',
-  color: '#064e3b',
+  color: '#ffffff',
   border: 'none',
   borderRadius: '4px',
   padding: '0.4rem',

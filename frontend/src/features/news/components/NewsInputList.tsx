@@ -3,10 +3,19 @@ import type { NewsItem } from '../../../types/news';
 
 interface NewsInputListProps {
   news: NewsItem[];
+  selectedArticleId?: string | null;
+  onSelectArticle?: (id: string) => void;
 }
 
-export function NewsInputList({ news }: NewsInputListProps) {
+export function NewsInputList({
+  news,
+  selectedArticleId,
+  onSelectArticle,
+}: NewsInputListProps) {
   const [now] = useState(() => Date.now());
+  const [isViewAllModalOpen, setIsViewAllModalOpen] = useState(false);
+  const [modalArticle, setModalArticle] = useState<NewsItem | null>(null);
+
   const getFormattedTime = (timestamp: number): string => {
     const diffMins = Math.floor((now - timestamp) / (60 * 1000));
     if (diffMins < 1) return 'Just now';
@@ -27,87 +36,198 @@ export function NewsInputList({ news }: NewsInputListProps) {
     }
   };
 
-  const getAssetBadgeStyle = (title: string): React.CSSProperties => {
+  const getAssetInfo = (title: string, content = ''): { label: string; style: React.CSSProperties } => {
+    const text = `${title} ${content}`.toUpperCase();
+    let label = 'BTC';
     let bgColor = 'rgba(245, 158, 11, 0.15)';
     let color = '#f59e0b';
 
-    if (title.toUpperCase().includes('ETH') || title.toUpperCase().includes('ETHEREUM')) {
+    if (text.includes('ETH') || text.includes('ETHEREUM')) {
+      label = 'ETH';
       bgColor = 'rgba(99, 102, 241, 0.15)';
       color = '#6366f1';
-    } else if (title.toUpperCase().includes('SOL') || title.toUpperCase().includes('SOLANA')) {
+    } else if (text.includes('SOL') || text.includes('SOLANA')) {
+      label = 'SOL';
       bgColor = 'rgba(6, 182, 212, 0.15)';
       color = '#2563eb';
-    } else if (title.toUpperCase().includes('BNB')) {
+    } else if (text.includes('BNB') || text.includes('BINANCE')) {
+      label = 'BNB';
       bgColor = 'rgba(234, 179, 8, 0.15)';
       color = '#eab308';
+    } else if (text.includes('XRP') || text.includes('RIPPLE')) {
+      label = 'XRP';
+      bgColor = 'rgba(14, 165, 233, 0.15)';
+      color = '#0ea5e9';
+    } else if (text.includes('ADA') || text.includes('CARDANO')) {
+      label = 'ADA';
+      bgColor = 'rgba(59, 130, 246, 0.15)';
+      color = '#3b82f6';
+    } else if (text.includes('DOGE')) {
+      label = 'DOGE';
+      bgColor = 'rgba(217, 119, 6, 0.15)';
+      color = '#d97706';
     }
 
     return {
-      fontSize: '0.6rem',
-      fontWeight: '700',
-      backgroundColor: bgColor,
-      color,
-      padding: '0.1rem 0.3rem',
-      borderRadius: '4px',
-      marginRight: '0.5rem',
-      display: 'inline-block',
-      verticalAlign: 'middle',
+      label,
+      style: {
+        fontSize: '0.6rem',
+        fontWeight: '700',
+        backgroundColor: bgColor,
+        color,
+        padding: '0.1rem 0.35rem',
+        borderRadius: '4px',
+        marginRight: '0.45rem',
+        display: 'inline-block',
+        verticalAlign: 'middle',
+      },
     };
+  };
+
+  const handleCardClick = (item: NewsItem) => {
+    onSelectArticle?.(item.id);
+  };
+
+  const handleCardDoubleClick = (item: NewsItem) => {
+    setModalArticle(item);
+    setIsViewAllModalOpen(true);
   };
 
   return (
     <div style={panelContainerStyle}>
       {/* Header */}
       <div style={headerStyle}>
-        <h4 style={titleStyle}>Input Feed News</h4>
+        <h4 style={titleStyle}>Input Feed News ({news.length})</h4>
         <span style={timeStyle}>Updated: {new Date().toTimeString().split(' ')[0]}</span>
       </div>
 
       {/* News List */}
       <div style={listStyle}>
-        {news.map((item) => (
-          <div key={item.id} style={cardStyle}>
-            {/* Publisher & Time */}
-            <div style={metaRowStyle}>
-              <span style={sourceStyle}>{item.source}</span>
-              <span style={dateStyle}>{getFormattedTime(item.publishedAt)}</span>
-            </div>
-
-            {/* Title */}
-            <h5 style={newsTitleStyle}>
-              <span style={getAssetBadgeStyle(item.title)}>
-                {item.title.toUpperCase().includes('ETH') ? 'ETH' : item.title.toUpperCase().includes('SOL') ? 'SOL' : 'BTC'}
-              </span>
-              {item.title}
-            </h5>
-
-            {/* Summary */}
-            <p style={summaryStyle}>{item.content}</p>
-
-            {/* Sentiment DTO Analytics Badge */}
-            {item.sentiment && (
-              <div style={sentimentRowStyle}>
-                <div style={{display:'flex',gap:'0.35rem',alignItems:'center'}}>
-                  <span style={{ ...sourceBadgeStyle, ...(item.analysisSource === 'LIVE' ? liveSourceStyle : demoSourceStyle) }}>
-                    {item.analysisSource === 'LIVE' ? 'LIVE' : 'DEMO'}
-                  </span>
-                  <span style={{ ...badgeStyle, ...getSentimentStyle(item.sentiment.sentiment) }}>
-                    {item.sentiment.sentiment} ({(item.sentiment.score * 100).toFixed(0)}%)
-                  </span>
+        {news.length === 0 ? (
+          <div style={emptyStyle}>Không có tin bài nào khớp với bộ lọc đã chọn.</div>
+        ) : (
+          news.map((item) => {
+            const isSelected = item.id === selectedArticleId;
+            const assetInfo = getAssetInfo(item.title, item.content);
+            return (
+              <div
+                key={item.id}
+                onClick={() => handleCardClick(item)}
+                onDoubleClick={() => handleCardDoubleClick(item)}
+                style={isSelected ? activeCardStyle : cardStyle}
+                title="Click để trích xuất sang Cột 2 (Double click để xem toàn văn)"
+              >
+                {/* Publisher & Time */}
+                <div style={metaRowStyle}>
+                  <span style={sourceStyle}>{item.source}</span>
+                  <span style={dateStyle}>{getFormattedTime(item.publishedAt)}</span>
                 </div>
-                <span style={modelMetaStyle} title="MLOps Traceability Model Information">
-                  {item.sentiment.model.name} ({item.sentiment.model.version})
-                </span>
+
+                {/* Title */}
+                <h5 style={newsTitleStyle}>
+                  <span style={assetInfo.style}>{assetInfo.label}</span>
+                  {item.title}
+                </h5>
+
+                {/* Summary */}
+                <p style={summaryStyle}>{item.content}</p>
+
+                {/* Sentiment DTO Analytics Badge */}
+                {item.sentiment && (
+                  <div style={sentimentRowStyle}>
+                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                      <span
+                        style={{
+                          ...sourceBadgeStyle,
+                          ...(item.analysisSource === 'LIVE' ? liveSourceStyle : demoSourceStyle),
+                        }}
+                      >
+                        {item.analysisSource === 'LIVE' ? 'LIVE' : 'DEMO'}
+                      </span>
+                      <span style={{ ...badgeStyle, ...getSentimentStyle(item.sentiment.sentiment) }}>
+                        {item.sentiment.sentiment} ({(item.sentiment.score * 100).toFixed(0)}%)
+                      </span>
+                    </div>
+                    <span style={modelMetaStyle} title="MLOps Traceability Model Information">
+                      {item.sentiment.model.name} ({item.sentiment.model.version})
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
+            );
+          })
+        )}
       </div>
 
       {/* Footer Link */}
-      <button style={viewAllStyle}>
-        View All Market News →
+      <button
+        type="button"
+        onClick={() => {
+          setModalArticle(null);
+          setIsViewAllModalOpen(true);
+        }}
+        style={viewAllStyle}
+      >
+        View All Market News ({news.length}) →
       </button>
+
+      {/* Full Article / View All Modal */}
+      {isViewAllModalOpen && (
+        <div style={modalOverlayStyle} onClick={() => setIsViewAllModalOpen(false)}>
+          <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>
+              <h3 style={modalTitleStyle}>
+                {modalArticle ? 'Article Full View & Metadata' : 'All Market News Feed Archive'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsViewAllModalOpen(false)}
+                style={modalCloseBtnStyle}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={modalBodyStyle}>
+              {modalArticle ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
+                    <strong>Nguồn: {modalArticle.source}</strong>
+                    <span>Thời gian: {new Date(modalArticle.publishedAt).toLocaleString()}</span>
+                  </div>
+                  <h2 style={{ fontSize: '1.15rem', color: '#0f172a', margin: '0.5rem 0' }}>{modalArticle.title}</h2>
+                  <p style={{ fontSize: '0.9rem', lineHeight: '1.6', color: '#334155' }}>{modalArticle.content}</p>
+                  {modalArticle.url && (
+                    <a href={modalArticle.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontSize: '0.8rem' }}>
+                      Mở link gốc ({modalArticle.url}) ↗
+                    </a>
+                  )}
+                  {modalArticle.sentiment && (
+                    <div style={{ padding: '0.75rem', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0', marginTop: '0.5rem' }}>
+                      <strong>Kết quả Sentiment:</strong> {modalArticle.sentiment.sentiment} ({Math.round(modalArticle.sentiment.score * 100)}%) - Model: {modalArticle.sentiment.model.name} ({modalArticle.sentiment.model.version})
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {news.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        onSelectArticle?.(item.id);
+                        setModalArticle(item);
+                      }}
+                      style={{ padding: '0.6rem', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer' }}
+                    >
+                      <div style={{ fontSize: '0.7rem', color: '#64748b' }}>#{idx + 1} • {item.source} • {new Date(item.publishedAt).toLocaleTimeString()}</div>
+                      <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#0f172a' }}>{item.title}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -138,7 +258,7 @@ const headerStyle: React.CSSProperties = {
 const titleStyle: React.CSSProperties = {
   fontSize: '0.85rem',
   fontWeight: '700',
-  color: '#cbd5e1',
+  color: '#475569',
   margin: 0,
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
@@ -159,11 +279,30 @@ const listStyle: React.CSSProperties = {
   flexGrow: 1,
 };
 
+const emptyStyle: React.CSSProperties = {
+  textAlign: 'center',
+  padding: '2rem 1rem',
+  color: '#94a3b8',
+  fontSize: '0.8rem',
+};
+
 const cardStyle: React.CSSProperties = {
-  backgroundColor: '#e2e8f0',
-  border: '1px solid #cbd5e1',
+  backgroundColor: '#f8fafc',
+  border: '1px solid #e2e8f0',
   borderRadius: '6px',
   padding: '0.75rem',
+  cursor: 'pointer',
+  transition: 'all 0.15s ease',
+};
+
+const activeCardStyle: React.CSSProperties = {
+  backgroundColor: 'rgba(59, 130, 246, 0.08)',
+  border: '1px solid #3b82f6',
+  borderRadius: '6px',
+  padding: '0.75rem',
+  cursor: 'pointer',
+  boxShadow: '0 0 0 1px #3b82f6',
+  transition: 'all 0.15s ease',
 };
 
 const metaRowStyle: React.CSSProperties = {
@@ -174,7 +313,7 @@ const metaRowStyle: React.CSSProperties = {
 };
 
 const sourceStyle: React.CSSProperties = {
-  color: '#3b82f6',
+  color: '#2563eb',
   fontWeight: '700',
 };
 
@@ -192,7 +331,7 @@ const newsTitleStyle: React.CSSProperties = {
 
 const summaryStyle: React.CSSProperties = {
   fontSize: '0.75rem',
-  color: '#94a3b8',
+  color: '#475569',
   margin: '0 0 0.6rem 0',
   lineHeight: '1.4',
 };
@@ -231,8 +370,65 @@ const viewAllStyle: React.CSSProperties = {
   fontSize: '0.8rem',
   fontWeight: '600',
   textAlign: 'center',
-  paddingTop: '1rem',
+  paddingTop: '0.75rem',
   borderTop: '1px solid #e2e8f0',
   marginTop: '0.5rem',
   width: '100%',
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(15, 23, 42, 0.65)',
+  backdropFilter: 'blur(4px)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 1200,
+  padding: '1rem',
+};
+
+const modalContentStyle: React.CSSProperties = {
+  backgroundColor: '#ffffff',
+  borderRadius: '12px',
+  border: '1px solid #cbd5e1',
+  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+  width: '100%',
+  maxWidth: '640px',
+  maxHeight: '85vh',
+  display: 'flex',
+  flexDirection: 'column',
+  overflow: 'hidden',
+};
+
+const modalHeaderStyle: React.CSSProperties = {
+  padding: '1rem 1.25rem',
+  borderBottom: '1px solid #e2e8f0',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  backgroundColor: '#f8fafc',
+};
+
+const modalTitleStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: '1rem',
+  fontWeight: '700',
+  color: '#0f172a',
+};
+
+const modalCloseBtnStyle: React.CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  fontSize: '1.1rem',
+  color: '#64748b',
+  cursor: 'pointer',
+};
+
+const modalBodyStyle: React.CSSProperties = {
+  padding: '1.25rem',
+  overflowY: 'auto',
 };

@@ -1,6 +1,17 @@
 import { useState, useMemo } from 'react';
-import { type SingleStrategyInstance, COMPOSITE_PRESETS } from '../services/mockStrategyData';
+import { type SingleStrategyInstance, type CompositePreset, COMPOSITE_PRESETS } from '../services/mockStrategyData';
 import type { StrategyInstance } from '../../../types/backtest';
+
+const CUSTOM_PRESETS_KEY = 'crypto_custom_presets';
+
+function loadCustomPresets(): CompositePreset[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_PRESETS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
 
 interface CompositeStrategyBuilderProps {
   singleInstances: SingleStrategyInstance[];
@@ -14,6 +25,7 @@ export function CompositeStrategyBuilder({
   singleInstances,
   onStartBacktest,
 }: CompositeStrategyBuilderProps) {
+  const [customPresets, setCustomPresets] = useState<CompositePreset[]>(loadCustomPresets);
   // Track selected indicators for composition
   const [selectedIds, setSelectedIds] = useState<string[]>(['rsi-14', 'ma-20', 'sr-3']);
   const [weights, setWeights] = useState<Record<string, number>>({
@@ -24,9 +36,11 @@ export function CompositeStrategyBuilder({
   const [policy, setPolicy] = useState<'majority' | 'weighted'>('weighted');
   const [threshold, setThreshold] = useState<number>(0.3);
 
+  const allPresets = useMemo(() => [...COMPOSITE_PRESETS, ...customPresets], [customPresets]);
+
   // Load preset configurations
   const applyPreset = (presetName: string) => {
-    const preset = COMPOSITE_PRESETS.find((p) => p.name === presetName);
+    const preset = allPresets.find((p) => p.name === presetName);
     if (!preset) return;
 
     // Filter preset strategies to only those available in list
@@ -166,6 +180,33 @@ export function CompositeStrategyBuilder({
     }
   };
 
+  const handleSavePreset = () => {
+    if (selectedIds.length === 0) {
+      alert('Vui lòng chọn ít nhất một chỉ báo trước khi lưu Composite Strategy!');
+      return;
+    }
+
+    const defaultName = `Preset-${selectedIds.map((id) => id.split('-')[0].toUpperCase()).join('+')}-${Date.now().toString().slice(-4)}`;
+    const inputName = window.prompt('Đặt tên cho tổ hợp chiến lược mới:', defaultName);
+    if (!inputName || !inputName.trim()) return;
+
+    const newPreset: CompositePreset = {
+      name: inputName.trim(),
+      strategies: [...selectedIds],
+      weights: { ...weights },
+      policy,
+    };
+
+    const nextPresets = [newPreset, ...customPresets.filter((p) => p.name !== newPreset.name)];
+    setCustomPresets(nextPresets);
+    try {
+      localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(nextPresets));
+      alert(`✓ Đã lưu thành công preset "${inputName.trim()}"! Bạn có thể chọn lại nhanh ở danh sách Quick Presets phía trên.`);
+    } catch (err) {
+      alert(`Không thể lưu preset: ${String(err)}`);
+    }
+  };
+
   const sumOfWeights = selectedIds.reduce((acc, id) => acc + (weights[id] ?? 0), 0);
 
   return (
@@ -176,15 +217,20 @@ export function CompositeStrategyBuilder({
       <div style={presetSectionStyle}>
         <span style={sectionLabelStyle}>Quick Combination Presets:</span>
         <div style={presetButtonGroupStyle}>
-          {COMPOSITE_PRESETS.map((preset) => (
-            <button
-              key={preset.name}
-              onClick={() => applyPreset(preset.name)}
-              style={presetButtonStyle}
-            >
-              {preset.name}
-            </button>
-          ))}
+          {allPresets.map((preset) => {
+            const isCustom = customPresets.some((cp) => cp.name === preset.name);
+            return (
+              <button
+                key={preset.name}
+                type="button"
+                onClick={() => applyPreset(preset.name)}
+                style={isCustom ? customPresetButtonStyle : presetButtonStyle}
+                title={isCustom ? 'Custom Saved Preset' : 'Standard Default Preset'}
+              >
+                {isCustom ? `★ ${preset.name}` : preset.name}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -295,10 +341,15 @@ export function CompositeStrategyBuilder({
 
       {/* Action buttons */}
       <div style={actionsContainerStyle}>
-        <button style={saveButtonStyle}>
-          Save Composite Strategy
+        <button
+          type="button"
+          onClick={handleSavePreset}
+          style={saveButtonStyle}
+          title="Save current combination to Custom Presets"
+        >
+          💾 Save Composite Strategy
         </button>
-        <button onClick={handleBacktestSubmit} style={backtestButtonStyle}>
+        <button type="button" onClick={handleBacktestSubmit} style={backtestButtonStyle}>
           Run Backtest Now
         </button>
       </div>
@@ -351,13 +402,25 @@ const presetButtonGroupStyle: React.CSSProperties = {
 };
 
 const presetButtonStyle: React.CSSProperties = {
-  backgroundColor: '#e2e8f0',
-  color: '#94a3b8',
+  backgroundColor: '#f1f5f9',
+  color: '#475569',
   border: '1px solid #cbd5e1',
   borderRadius: '4px',
   padding: '0.25rem 0.5rem',
   fontSize: '0.7rem',
   fontWeight: '600',
+  cursor: 'pointer',
+  transition: 'all 0.15s',
+};
+
+const customPresetButtonStyle: React.CSSProperties = {
+  backgroundColor: 'rgba(37, 99, 235, 0.1)',
+  color: '#2563eb',
+  border: '1px solid #3b82f6',
+  borderRadius: '4px',
+  padding: '0.25rem 0.5rem',
+  fontSize: '0.7rem',
+  fontWeight: '700',
   cursor: 'pointer',
   transition: 'all 0.15s',
 };
@@ -566,21 +629,21 @@ const actionsContainerStyle: React.CSSProperties = {
 
 const saveButtonStyle: React.CSSProperties = {
   flexGrow: 1,
-  backgroundColor: 'transparent',
-  color: '#94a3b8',
-  border: '1px solid #475569',
+  backgroundColor: '#f8fafc',
+  color: '#1e293b',
+  border: '1px solid #cbd5e1',
   borderRadius: '6px',
   padding: '0.6rem',
   fontSize: '0.85rem',
   fontWeight: '600',
   cursor: 'pointer',
-  transition: 'background-color 0.2s',
+  transition: 'all 0.15s ease',
 };
 
 const backtestButtonStyle: React.CSSProperties = {
   flexGrow: 2,
   backgroundColor: '#10b981', // Green-500
-  color: '#064e3b',
+  color: '#ffffff',
   border: 'none',
   borderRadius: '6px',
   padding: '0.6rem',
@@ -588,5 +651,5 @@ const backtestButtonStyle: React.CSSProperties = {
   fontWeight: '700',
   cursor: 'pointer',
   boxShadow: '0 2px 8px rgba(16, 185, 129, 0.2)',
-  transition: 'background-color 0.2s',
+  transition: 'all 0.15s ease',
 };

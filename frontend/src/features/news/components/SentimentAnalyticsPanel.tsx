@@ -1,10 +1,15 @@
 import { MOCK_SENTIMENT_OVERVIEW } from '../services/mockNewsData';
+import { useExperimentStore } from '../../../shared/stores/useExperimentStore';
 
 export function SentimentAnalyticsPanel() {
   const data = MOCK_SENTIMENT_OVERVIEW;
+  const setActiveTab = useExperimentStore((s) => s.setActiveTab);
 
   const handleApplyStrategy = () => {
-    alert('NewsSentimentStrategy has been integrated!\nThis adds a sentiment threshold filter (score > 0.8 to buy, score < 0.2 to sell) as an entry constraint to the strategy builder.');
+    alert(
+      'Đã kích hoạt NewsSentimentStrategy và chuyển sang Strategy Builder!\n\nChiến lược này áp dụng bộ lọc Sentiment Threshold (score > 0.8 để BUY, score < 0.2 để SELL) làm điều kiện vào lệnh.'
+    );
+    setActiveTab('builder');
   };
 
   return (
@@ -17,13 +22,22 @@ export function SentimentAnalyticsPanel() {
         <div style={gaugeAreaStyle}>
           <div style={gaugeLabelsStyle}>
             <span style={{ color: '#10b981' }}>Positive ({data.positivePct}%)</span>
-            <span style={{ color: '#94a3b8' }}>Neutral ({data.neutralPct}%)</span>
+            <span style={{ color: '#64748b' }}>Neutral ({data.neutralPct}%)</span>
             <span style={{ color: '#ef4444' }}>Negative ({data.negativePct}%)</span>
           </div>
           <div style={gaugeBarContainerStyle}>
-            <div style={{ ...gaugeFillStyle, width: `${data.positivePct}%`, backgroundColor: '#10b981' }} title="Positive" />
-            <div style={{ ...gaugeFillStyle, width: `${data.neutralPct}%`, backgroundColor: '#475569' }} title="Neutral" />
-            <div style={{ ...gaugeFillStyle, width: `${data.negativePct}%`, backgroundColor: '#ef4444' }} title="Negative" />
+            <div
+              style={{ ...gaugeFillStyle, width: `${data.positivePct}%`, backgroundColor: '#10b981' }}
+              title="Positive"
+            />
+            <div
+              style={{ ...gaugeFillStyle, width: `${data.neutralPct}%`, backgroundColor: '#94a3b8' }}
+              title="Neutral"
+            />
+            <div
+              style={{ ...gaugeFillStyle, width: `${data.negativePct}%`, backgroundColor: '#ef4444' }}
+              title="Negative"
+            />
           </div>
         </div>
 
@@ -72,7 +86,7 @@ export function SentimentAnalyticsPanel() {
       {/* KHỐI 2: STRATEGY ENGINE INTEGRATION */}
       <div style={integrationCardStyle}>
         <h4 style={{ ...titleStyle, color: '#2563eb' }}>Strategy Engine Integration</h4>
-        
+
         {/* Visual pipeline representation */}
         <div style={pipeContainerStyle}>
           <div style={pipeBoxStyle}>News Sentiment</div>
@@ -81,16 +95,15 @@ export function SentimentAnalyticsPanel() {
         </div>
 
         <p style={pipeDescStyle}>
-          Allows filtering strategy entry conditions based on live sentiment score. E.g. Block BUY signals if news sentiment is heavily negative.
+          Allows filtering strategy entry conditions based on live sentiment score. E.g. Block BUY signals if
+          news sentiment is heavily negative.
         </p>
 
         {/* Strategy plugin trigger */}
         <div style={actionRowStyle}>
-          <span style={strategyBadgeStyle}>
-            NewsSentimentStrategy
-          </span>
-          <button onClick={handleApplyStrategy} style={applyBtnStyle}>
-            Apply to Builder
+          <span style={strategyBadgeStyle}>NewsSentimentStrategy</span>
+          <button type="button" onClick={handleApplyStrategy} style={applyBtnStyle} title="Apply News Sentiment Filter to Builder">
+            Áp dụng vào Strategy Builder →
           </button>
         </div>
       </div>
@@ -123,7 +136,7 @@ const sectionStyle: React.CSSProperties = {
 const titleStyle: React.CSSProperties = {
   fontSize: '0.85rem',
   fontWeight: '700',
-  color: '#cbd5e1',
+  color: '#475569',
   margin: 0,
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
@@ -144,10 +157,10 @@ const gaugeAreaStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '0.4rem',
-  backgroundColor: '#e2e8f0',
+  backgroundColor: '#f8fafc',
   padding: '0.6rem',
   borderRadius: '6px',
-  border: '1px solid #cbd5e1',
+  border: '1px solid #e2e8f0',
 };
 
 const gaugeLabelsStyle: React.CSSProperties = {
@@ -194,12 +207,12 @@ const distLabelRowStyle: React.CSSProperties = {
 };
 
 const distLabelStyle: React.CSSProperties = {
-  color: '#cbd5e1',
+  color: '#475569',
   fontWeight: '500',
 };
 
 const distValStyle: React.CSSProperties = {
-  color: '#94a3b8',
+  color: '#0f172a',
   fontWeight: '600',
 };
 
@@ -228,7 +241,7 @@ const mlopsGridStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '0.4rem',
-  backgroundColor: '#ffffff',
+  backgroundColor: '#f8fafc',
   padding: '0.5rem 0.75rem',
   borderRadius: '6px',
   border: '1px solid #e2e8f0',
@@ -245,13 +258,13 @@ const mlopsLabelStyle: React.CSSProperties = {
 };
 
 const mlopsValueStyle: React.CSSProperties = {
-  color: '#cbd5e1',
+  color: '#0f172a',
   fontWeight: '600',
 };
 
 const integrationCardStyle: React.CSSProperties = {
-  backgroundColor: 'rgba(6, 182, 212, 0.03)',
-  border: '1px solid rgba(6, 182, 212, 0.2)',
+  backgroundColor: 'rgba(59, 130, 246, 0.04)',
+  border: '1px solid rgba(59, 130, 246, 0.2)',
   borderRadius: '8px',
   padding: '0.75rem',
   display: 'flex',
@@ -267,11 +280,12 @@ const pipeContainerStyle: React.CSSProperties = {
   backgroundColor: '#ffffff',
   padding: '0.4rem',
   borderRadius: '4px',
+  border: '1px solid #e2e8f0',
 };
 
 const pipeBoxStyle: React.CSSProperties = {
   fontSize: '0.7rem',
-  color: '#94a3b8',
+  color: '#64748b',
   border: '1px solid #cbd5e1',
   padding: '0.2rem 0.4rem',
   borderRadius: '4px',
@@ -289,7 +303,7 @@ const pipeBoxActiveStyle: React.CSSProperties = {
 
 const pipeLineStyle: React.CSSProperties = {
   fontSize: '0.7rem',
-  color: '#475569',
+  color: '#94a3b8',
 };
 
 const pipeDescStyle: React.CSSProperties = {
@@ -308,7 +322,7 @@ const actionRowStyle: React.CSSProperties = {
 
 const strategyBadgeStyle: React.CSSProperties = {
   fontSize: '0.65rem',
-  backgroundColor: 'rgba(6, 182, 212, 0.1)',
+  backgroundColor: 'rgba(59, 130, 246, 0.1)',
   border: '1px solid #2563eb',
   color: '#2563eb',
   padding: '0.2rem 0.4rem',
@@ -321,10 +335,10 @@ const applyBtnStyle: React.CSSProperties = {
   color: '#ffffff',
   border: 'none',
   borderRadius: '4px',
-  padding: '0.35rem 0.65rem',
-  fontSize: '0.7rem',
+  padding: '0.4rem 0.85rem',
+  fontSize: '0.75rem',
   fontWeight: '700',
   cursor: 'pointer',
   outline: 'none',
-  boxShadow: '0 2px 4px rgba(6, 182, 212, 0.1)',
+  boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
 };

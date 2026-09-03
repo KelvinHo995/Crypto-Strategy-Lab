@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { fetchMarkets } from '../../../shared/api';
+import { fetchMarkets, fetchStrategies } from '../../../shared/api';
 import { useAppMode } from '../../../shared/auth';
 import { DEFAULT_MARKETS } from '../../market/services/marketCatalog';
 import type { MarketInfo } from '../../../types/candle';
+import type { StrategyInstance } from '../../../types/backtest';
+
+const DEFAULT_STRATEGIES = ['MA', 'RSI', 'SR', 'MACD', 'BBands'];
 
 interface BacktestConfigPanelProps {
   onRunBacktest: (config: {
@@ -12,6 +15,9 @@ interface BacktestConfigPanelProps {
     toDate: string;
     capital: number;
     fee: number;
+    slippage: number;
+    instances: StrategyInstance[];
+    policy: 'majority' | 'weighted';
   }) => void;
   isLoading: boolean;
 }
@@ -27,20 +33,48 @@ export function BacktestConfigPanel({
 }: BacktestConfigPanelProps) {
   const mode = useAppMode();
   const [markets, setMarkets] = useState<MarketInfo[]>(DEFAULT_MARKETS);
+  const [strategies, setStrategies] = useState<string[]>(DEFAULT_STRATEGIES);
+  const [selectedStrategies, setSelectedStrategies] = useState<string[]>(['MA', 'RSI']);
+  const [policy, setPolicy] = useState<'majority' | 'weighted'>('weighted');
+
   const [symbol, setSymbol] = useState('BTCUSDT');
-  const [timeframe, setTimeframe] = useState('5m');
+  const [timeframe, setTimeframe] = useState('1h');
   const [fromDate, setFromDate] = useState(() => dateInputValue(-90));
   const [toDate, setToDate] = useState(() => dateInputValue());
   const [capital, setCapital] = useState(10000);
   const [fee, setFee] = useState(0.1); // 0.1% standard exchange fee
+  const [slippage, setSlippage] = useState(5); // 5 bps standard slippage
 
   useEffect(() => {
     if (mode !== 'LIVE') return;
     fetchMarkets().then(setMarkets).catch(() => setMarkets(DEFAULT_MARKETS));
+    fetchStrategies().then(setStrategies).catch(() => setStrategies(DEFAULT_STRATEGIES));
   }, [mode]);
+
+  const toggleStrategy = (type: string) => {
+    setSelectedStrategies((prev) => {
+      if (prev.includes(type)) {
+        if (prev.length === 1) return prev; // Keep at least one
+        return prev.filter((s) => s !== type);
+      }
+      return [...prev, type];
+    });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (selectedStrategies.length === 0) {
+      alert('Vui lòng chọn ít nhất một chỉ báo chiến lược để chạy backtest.');
+      return;
+    }
+
+    const equalWeight = Number((1 / selectedStrategies.length).toFixed(2));
+    const instances: StrategyInstance[] = selectedStrategies.map((type) => ({
+      type,
+      params: {},
+      weight: equalWeight,
+    }));
+
     onRunBacktest({
       symbol,
       timeframe,
@@ -48,6 +82,9 @@ export function BacktestConfigPanel({
       toDate,
       capital,
       fee,
+      slippage,
+      instances,
+      policy,
     });
   };
 
@@ -65,7 +102,11 @@ export function BacktestConfigPanel({
               style={selectStyle}
               disabled={isLoading}
             >
-              {markets.map(market => <option key={market.symbol} value={market.symbol}>{market.baseAsset}/{market.quoteAsset}</option>)}
+              {markets.map((market) => (
+                <option key={market.symbol} value={market.symbol}>
+                  {market.baseAsset}/{market.quoteAsset}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -119,7 +160,7 @@ export function BacktestConfigPanel({
               value={capital}
               min="100"
               max="10000000"
-              onChange={(e) => setCapital(parseFloat(e.target.value))}
+              onChange={(e) => setCapital(parseFloat(e.target.value) || 0)}
               style={inputStyle}
               disabled={isLoading}
               required
@@ -135,22 +176,82 @@ export function BacktestConfigPanel({
               min="0"
               max="2"
               step="0.01"
-              onChange={(e) => setFee(parseFloat(e.target.value))}
+              onChange={(e) => setFee(parseFloat(e.target.value) || 0)}
               style={inputStyle}
               disabled={isLoading}
               required
             />
           </div>
+
+          {/* Slippage */}
+          <div style={formGroupStyle}>
+            <label style={labelStyle}>Slippage (bps)</label>
+            <input
+              type="number"
+              value={slippage}
+              min="0"
+              max="100"
+              step="1"
+              onChange={(e) => setSlippage(parseFloat(e.target.value) || 0)}
+              style={inputStyle}
+              disabled={isLoading}
+              required
+            />
+          </div>
+
+          {/* Policy */}
+          {selectedStrategies.length > 1 && (
+            <div style={formGroupStyle}>
+              <label style={labelStyle}>Combination Policy</label>
+              <select
+                value={policy}
+                onChange={(e) => setPolicy(e.target.value as 'majority' | 'weighted')}
+                style={selectStyle}
+                disabled={isLoading}
+              >
+                <option value="weighted">Weighted Voting</option>
+                <option value="majority">Majority Voting</option>
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* Strategy Indicators Selection */}
+        <div style={strategySectionStyle}>
+          <label style={labelStyle}>
+            Strategy Constituents ({selectedStrategies.length} selected):
+          </label>
+          <div style={chipsContainerStyle}>
+            {strategies.map((strat) => {
+              const isSelected = selectedStrategies.includes(strat);
+              return (
+                <button
+                  key={strat}
+                  type="button"
+                  onClick={() => toggleStrategy(strat)}
+                  disabled={isLoading}
+                  style={isSelected ? activeChipStyle : chipStyle}
+                  title={`Toggle ${strat} strategy`}
+                >
+                  {strat} {isSelected ? '✓' : '+'}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Submit button */}
-        <button type="submit" disabled={isLoading} style={isLoading ? activeSubmitBtnStyle : submitBtnStyle}>
+        <button
+          type="submit"
+          disabled={isLoading}
+          style={isLoading ? activeSubmitBtnStyle : submitBtnStyle}
+        >
           {isLoading ? (
             <span style={spinnerContainerStyle}>
               <span style={spinnerStyle} /> Processing Backtest...
             </span>
           ) : (
-            'Kích hoạt Backtest'
+            `Kích hoạt Backtest (${selectedStrategies.join(' + ')})`
           )}
         </button>
       </form>
@@ -184,13 +285,13 @@ const titleStyle: React.CSSProperties = {
 const formStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: '1.25rem',
+  gap: '1.1rem',
 };
 
 const formGridStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-  gap: '1rem',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+  gap: '0.85rem',
 };
 
 const formGroupStyle: React.CSSProperties = {
@@ -226,8 +327,45 @@ const inputStyle: React.CSSProperties = {
   outline: 'none',
 };
 
+const strategySectionStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.4rem',
+  marginTop: '0.2rem',
+};
+
+const chipsContainerStyle: React.CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '0.5rem',
+};
+
+const chipStyle: React.CSSProperties = {
+  padding: '0.35rem 0.65rem',
+  borderRadius: '4px',
+  fontSize: '0.75rem',
+  fontWeight: '600',
+  border: '1px solid #cbd5e1',
+  backgroundColor: '#f1f5f9',
+  color: '#64748b',
+  cursor: 'pointer',
+  transition: 'all 0.15s ease',
+};
+
+const activeChipStyle: React.CSSProperties = {
+  padding: '0.35rem 0.65rem',
+  borderRadius: '4px',
+  fontSize: '0.75rem',
+  fontWeight: '700',
+  border: '1px solid #3b82f6',
+  backgroundColor: 'rgba(59, 130, 246, 0.15)',
+  color: '#2563eb',
+  cursor: 'pointer',
+  transition: 'all 0.15s ease',
+};
+
 const submitBtnStyle: React.CSSProperties = {
-  backgroundColor: '#3b82f6', // Blue-500
+  backgroundColor: '#3b82f6',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',

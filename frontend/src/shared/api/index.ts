@@ -96,7 +96,37 @@ export async function fetchExperiment(id: string): Promise<ExperimentResult> {
 }
 
 export async function startSearch(request: StartSearchRequest): Promise<StartSearchResponse> {
-  return (await apiClient.post<StartSearchResponse>('/search/start', request)).data;
+  // Normalize strategy types (e.g. 'BBands' -> 'Bollinger') and clean up instances
+  const rawInstances = request.instances && request.instances.length > 0
+    ? request.instances
+    : (request.strategies || ['MA']).map((type) => ({ type, params: request.params || {}, weight: 1 }));
+
+  const normalizedInstances = rawInstances.map((inst) => {
+    let type = inst.type.trim();
+    if (type === 'BBands') type = 'Bollinger';
+    const cleanInst: { type: string; params?: Record<string, unknown>; weight?: number } = { type };
+    if (inst.params && Object.keys(inst.params).length > 0) {
+      cleanInst.params = inst.params;
+    }
+    if (typeof inst.weight === 'number' && Number.isFinite(inst.weight)) {
+      cleanInst.weight = inst.weight;
+    }
+    return cleanInst;
+  });
+
+  // Strict Go backend StartSearchRequest payload (pair, timeframe, from, to, capital, instances, policy)
+  // to satisfy DisallowUnknownFields() in Go's JSON decoder
+  const payload = {
+    pair: request.pair.trim().toUpperCase(),
+    timeframe: request.timeframe.trim(),
+    from: Math.floor(request.from),
+    to: Math.floor(request.to),
+    capital: request.capital,
+    instances: normalizedInstances,
+    policy: request.policy === 'weighted' ? 'weighted' : 'majority',
+  };
+
+  return (await apiClient.post<StartSearchResponse>('/search/start', payload)).data;
 }
 
 export async function startSearchLoop(request: StartSearchLoopRequest): Promise<StartSearchLoopResponse> {
