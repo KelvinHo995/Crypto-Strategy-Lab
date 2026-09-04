@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useWebSocketState, useWebSocketSubscription } from '../../../shared/hooks';
 import type { Candle, MarketInfo } from '../../../types/candle';
 import { TradingChart, type SRZone, type ChartMarker } from './TradingChart';
@@ -6,7 +6,6 @@ import { fetchMarketDataDTO, generateNextTick } from '../services/mockMarketData
 import { fetchCandles } from '../../../shared/api';
 import { wsManager } from '../../../shared/ws';
 import { useAppMode } from '../../../shared/auth';
-import { useExperimentStore, formatExperimentTitle } from '../../../shared/stores/useExperimentStore';
 
 interface ChartCardProps {
   id: number;
@@ -38,35 +37,8 @@ export function ChartCard({
   const [dataMode, setDataMode] = useState<'API' | 'MOCK' | 'ERROR'>(mode === 'DEMO' ? 'MOCK' : 'API');
   const [loadError, setLoadError] = useState('');
 
-  // Which pair/timeframe the currently-loaded experiment's trade markers
-  // were actually resolved for — see loadHistory below for why this can't
-  // just be "does symbol/timeframe match"; the candle *range* underneath
-  // can silently change (e.g. hitting reload) while symbol/timeframe stay
-  // the same, leaving stale markers snapped onto whatever the new range's
-  // leftmost candle happens to be.
-  const [markersValidFor, setMarkersValidFor] = useState<{ pair: string; timeframe: string } | null>(null);
-
-  // Bumped exactly once per successful experiment-range load — the sole
-  // trigger for TradingChart to zoom-to-fit. Deliberately NOT tied to
-  // `candles` itself: candles also change on every live WebSocket tick,
-  // and fitting on every tick was overriding any zoom/pan the user did
-  // right after it (chart kept snapping back to "fit all" every second).
-  const [fitNonce, setFitNonce] = useState(0);
-
-  // 1. Fetch initial historical data on mount or when symbol/timeframe changes.
-  // pair/tf are explicit params (not read from symbol/timeframe state) so a
-  // caller can fetch for values it just decided on without waiting for
-  // setSymbol/setTimeframe to actually land first — those are async and
-  // this function's own closure would otherwise use whatever symbol/
-  // timeframe were current when IT was created, not the ones just requested.
-  // isExperimentLoad marks a fetch that's resolving an experiment's own
-  // pair/range (5000-limit, explicit from/to) as opposed to any other call
-  // path (reload button, tab click, mount) that fetches the generic
-  // "recent" window — only the former is what globalMarkers were computed
-  // against, so every other path must invalidate that match instead of
-  // leaving it stale.
-  const loadHistory = useCallback(async (pair: string, tf: string, range?: { from: number; to: number }, limitOverride?: number, isExperimentLoad = false) => {
-    setMarkersValidFor(isExperimentLoad ? { pair, timeframe: tf } : null);
+  // 1. Fetch historical data on mount or when symbol/timeframe changes.
+  const loadHistory = useCallback(async (pair: string, tf: string) => {
     if (mode === 'DEMO') {
       const dto = fetchMarketDataDTO(pair, tf, 200);
       setCandles(dto.candles);
@@ -78,15 +50,10 @@ export function ChartCard({
       setLoadError('');
       return;
     }
-    const to = range?.to ?? Date.now();
-    const from = range?.from ?? to - 366 * 24 * 60 * 60 * 1000;
-    // An experiment-driven range can span months; 500 candles at 4h only
-    // covers ~83 days. The backend allows up to 5000 (server cap), which
-    // covers ~833 days at 4h — comfortable headroom for any real backtest
-    // window. The default recent-view fetch stays at 500; no need for more.
-    const limit = limitOverride ?? (range ? 5000 : 500);
+    const to = Date.now();
+    const from = to - 366 * 24 * 60 * 60 * 1000;
     try {
-      const apiCandles = await fetchCandles(pair, tf, from, to, limit);
+      const apiCandles = await fetchCandles(pair, tf, from, to, 500);
       if (apiCandles.length < 20) throw new Error('insufficient candles');
       const closes = apiCandles.map(c => c.close);
       const ma = closes.map((_, i) => i < 19 ? Number.NaN : closes.slice(i - 19, i + 1).reduce((a,b)=>a+b,0) / 20);
@@ -108,23 +75,8 @@ export function ChartCard({
     }
   }, [mode]);
 
-  // Set right before the experiment-driven effect below calls setSymbol/
-  // setTimeframe, so this effect (which reacts to that same symbol/
-  // timeframe change) skips its own default-range refetch — otherwise it's
-  // a real race: both fetches target the same candles state, and whichever
-  // of "500 recent candles" vs "5000 experiment-range candles" resolves
-  // last silently wins.
-  const suppressNextDefaultLoadRef = useRef(false);
-
   useEffect(() => {
-    if (suppressNextDefaultLoadRef.current) {
-      suppressNextDefaultLoadRef.current = false;
-      return;
-    }
-    void loadHistory(symbol, timeframe);
-    // Only the default (non-experiment-driven) view reacts to symbol/
-    // timeframe changing — the experiment-driven effect below fetches for
-    // itself directly instead of relying on this one.
+    void Promise.resolve().then(() => loadHistory(symbol, timeframe));
   }, [loadHistory, symbol, timeframe]);
 
   function handleRealtimeUpdate(candle: Candle) {
@@ -232,62 +184,13 @@ export function ChartCard({
     return () => clearInterval(interval);
   }, [mode, symbol, timeframe]);
 
-
-
-  const activeExperiment = useExperimentStore((s) => s.activeExperiment);
-  const activeTrades = useExperimentStore((s) => s.activeTrades);
-  const globalMarkers = useExperimentStore((s) => s.activeMarkers);
-  const clearExperiment = useExperimentStore((s) => s.clearExperiment);
-
-  // When an experiment loads onto the chart, its real trade markers are
-  // meaningless unless this card is actually looking at the right pair and
-  // time range — the backend doesn't record which timeframe a backtest used,
-  // so 4h (widest available) gives the best chance a multi-day/month range
-  // fits within the fetch limit. Fetches directly with the resolved
-  // pair/timeframe rather than going through setSymbol/setTimeframe +
-  // waiting for the default loadHistory effect to pick it up — that
-  // two-step handoff raced (the default effect could run first with the
-  // still-stale symbol/timeframe/500-limit before this one's state updates
-  // landed). setSymbol/setTimeframe here are just for the dropdown/tab UI.
-  useEffect(() => {
-    if (!activeExperiment) return;
-    const [fromStr, toStr] = activeExperiment.datasetPeriod.split('-');
-    const from = Number(fromStr);
-    const to = Number(toStr);
-    if (!Number.isFinite(from) || !Number.isFinite(to) || mode === 'DEMO') return;
-    const pair = activeTrades[0]?.pair || symbol;
-    const tf = '4h';
-    void Promise.resolve().then(async () => {
-      await loadHistory(pair, tf, { from, to }, 5000, true);
-      setFitNonce((n) => n + 1);
-      if (pair !== symbol || tf !== timeframe) {
-        suppressNextDefaultLoadRef.current = true;
-        setSymbol(pair);
-        setTimeframe(tf);
-      }
-    });
-    // Only re-run when a *different* experiment is loaded, not on every
-    // render or symbol/timeframe change (those are handled above/by the
-    // existing loadHistory effect).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeExperiment]);
-
   // Get properties for header
   const latestCandle = candles[candles.length - 1];
   const currentPrice = latestCandle ? latestCandle.close : 0;
 
-  // Use global markers from the loaded experiment only if this card's
-  // current view is actually the one they were resolved for — otherwise
-  // fall back to local mock markers (or none, in real API mode).
-  const markersMatchCurrentView =
-    globalMarkers.length > 0 &&
-    markersValidFor?.pair === symbol &&
-    markersValidFor?.timeframe === timeframe;
-  const effectiveMarkers = markersMatchCurrentView ? globalMarkers : markers;
-
   // Find last trade signal — keyed off shape, not text, since dense marker
   // sets drop the text label (see MARKER_TEXT_THRESHOLD) but always keep shape.
-  const lastSignal = [...effectiveMarkers]
+  const lastSignal = [...markers]
     .reverse()
     .find(m => m.shape === 'arrowUp' || m.shape === 'arrowDown');
   const lastSignalLabel = lastSignal?.shape === 'arrowUp' ? 'BUY' : 'SELL';
@@ -322,38 +225,6 @@ export function ChartCard({
 
         {/* Live Info & Control Buttons */}
         <div style={rightHeaderStyle}>
-          {/* Active Strategy Loaded Badge */}
-          {activeExperiment && (
-            <span style={strategyLoadedBadgeStyle} title={`Loaded strategy #${activeExperiment.id} (${activeExperiment.policy})`}>
-              Strategy: {formatExperimentTitle(activeExperiment)}
-              {activeExperiment.tradeCount > 0 && globalMarkers.length === 0 && (
-                <span
-                  style={noMarkersHintStyle}
-                  title="This run reported trades but predates per-trade history tracking — no real markers to show. Re-run it to get real trade markers."
-                >
-                  ⚠ no markers
-                </span>
-              )}
-              {globalMarkers.length > 0 && !markersMatchCurrentView && (
-                <span
-                  style={noMarkersHintStyle}
-                  title={`Markers are for ${markersValidFor?.pair ?? '?'}/${markersValidFor?.timeframe ?? '?'} — switch back to that view to see them.`}
-                >
-                  ⚠ markers hidden (wrong view)
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={clearExperiment}
-                style={clearStrategyBtnStyle}
-                title="Clear loaded strategy and its markers"
-                aria-label="Clear loaded strategy"
-              >
-                ✕
-              </button>
-            </span>
-          )}
-
           {/* Last Signal Badge */}
           {lastSignal && (
             <span style={lastSignalLabel === 'BUY' ? buyBadgeStyle : sellBadgeStyle}>
@@ -390,8 +261,7 @@ export function ChartCard({
             ma20Line={ma20Line}
             bbands={bbands}
             srZones={srZones}
-            markers={effectiveMarkers}
-            fitSignal={fitNonce}
+            markers={markers}
           />
         ) : (
           <div style={loadingStyle}>{loadError || 'Loading historical data...'}</div>
@@ -495,37 +365,6 @@ const getPriceStyle = (trend: 'UP' | 'DOWN' | 'NEUTRAL'): React.CSSProperties =>
     textAlign: 'right',
     transition: 'color 0.15s ease',
   };
-};
-
-const strategyLoadedBadgeStyle: React.CSSProperties = {
-  backgroundColor: 'rgba(37, 99, 235, 0.12)',
-  border: '1px solid #2563eb',
-  color: '#2563eb',
-  fontSize: '0.7rem',
-  fontWeight: '700',
-  padding: '0.15rem 0.45rem',
-  borderRadius: '4px',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.4rem',
-};
-
-const clearStrategyBtnStyle: React.CSSProperties = {
-  backgroundColor: 'transparent',
-  border: 'none',
-  color: '#2563eb',
-  cursor: 'pointer',
-  fontSize: '0.7rem',
-  fontWeight: '700',
-  padding: 0,
-  lineHeight: 1,
-};
-
-const noMarkersHintStyle: React.CSSProperties = {
-  color: '#b45309',
-  fontSize: '0.65rem',
-  fontWeight: '700',
-  cursor: 'help',
 };
 
 const buyBadgeStyle: React.CSSProperties = {

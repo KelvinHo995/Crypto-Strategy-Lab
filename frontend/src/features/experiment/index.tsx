@@ -4,6 +4,7 @@ import { ExperimentLeaderboard } from './components/ExperimentLeaderboard';
 import { ProvenanceModal } from './components/ProvenanceModal';
 import { PerformanceSummaryCard } from './components/PerformanceSummaryCard';
 import { TradeHistoryTable } from './components/TradeHistoryTable';
+import { BacktestChart } from './components/BacktestChart';
 import { MOCK_EXPERIMENTS, generateMockTrades } from './services/mockExperimentData';
 import { fetchExperiment, fetchExperiments, fetchTrades, startSearch } from '../../shared/api';
 import { useWebSocketSubscription } from '../../shared/hooks';
@@ -155,7 +156,7 @@ export function ExperimentDashboard() {
   const handleLoadToChart = async (exp: ExperimentResult) => {
     const trades = await loadTradesFor(exp);
     loadExperimentToChart(exp, trades);
-    showToast(`Loaded #${exp.id} (${formatExperimentTitle(exp)}) onto the chart — open the Market tab to see it.`);
+    showToast(`Loaded #${exp.id} (${formatExperimentTitle(exp)}) — see its trades and chart below.`);
   };
 
   const handleReplicate = (exp: ExperimentResult) => {
@@ -202,11 +203,14 @@ export function ExperimentDashboard() {
         />
       </div>
 
-      {/* 3. Bottom Section: Trade History log */}
+      {/* 3. Bottom Section: Trade Chart + History log */}
       {activeExp && (
         <div style={tradesSectionStyle}>
           {activeTrades.length > 0 ? (
-            <TradeHistoryTable trades={activeTrades} />
+            <>
+              <BacktestChart experiment={activeExp} trades={activeTrades} />
+              <TradeHistoryTable trades={activeTrades} />
+            </>
           ) : activeExp.tradeCount > 0 ? (
             <p style={noTradesStyle}>
               This run reported {activeExp.tradeCount} trade{activeExp.tradeCount === 1 ? '' : 's'}, but predates
@@ -301,6 +305,7 @@ const sectionTitleStyle: React.CSSProperties = {
 const tradesSectionStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
+  gap: '1rem',
 };
 
 const noTradesStyle: React.CSSProperties = {

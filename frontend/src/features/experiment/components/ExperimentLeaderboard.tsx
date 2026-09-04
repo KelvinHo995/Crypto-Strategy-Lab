@@ -169,7 +169,7 @@ export function ExperimentLeaderboard({
                         <button
                           onClick={() => onLoadToChart(exp)}
                           style={{ ...actionBtnStyle, backgroundColor: '#2563eb', color: '#ffffff' }}
-                          title="Load strategy signals onto chart"
+                          title="View this run's trades and chart below"
                         >
                           Load
                         </button>

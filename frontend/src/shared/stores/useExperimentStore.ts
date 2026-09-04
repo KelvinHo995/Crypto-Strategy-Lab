@@ -64,32 +64,21 @@ interface ExperimentStoreState {
   activeTab: WorkspaceTab;
   activeExperiment: ExperimentResult | null;
   activeTrades: Trade[];
-  activeMarkers: ChartMarker[];
   setActiveTab: (tab: WorkspaceTab) => void;
   setActiveExperiment: (exp: ExperimentResult | null) => void;
   setActiveTrades: (trades: Trade[]) => void;
-  setActiveMarkers: (markers: ChartMarker[]) => void;
   loadExperimentToChart: (exp: ExperimentResult, customTrades?: Trade[]) => void;
-  clearExperiment: () => void;
 }
 
 export const useExperimentStore = create<ExperimentStoreState>((set) => ({
   activeTab: 'charts',
   activeExperiment: null,
   activeTrades: [],
-  activeMarkers: [],
   setActiveTab: (tab) => set({ activeTab: tab }),
   setActiveExperiment: (exp) => set({ activeExperiment: exp }),
   setActiveTrades: (trades) => set({ activeTrades: trades }),
-  setActiveMarkers: (markers) => set({ activeMarkers: markers }),
   loadExperimentToChart: (exp, customTrades) => {
     const trades = customTrades ?? generateMockTrades(exp.id, exp.tradeCount || 30);
-    const markers = tradesToMarkers(trades);
-    set({
-      activeExperiment: exp,
-      activeTrades: trades,
-      activeMarkers: markers,
-    });
+    set({ activeExperiment: exp, activeTrades: trades });
   },
-  clearExperiment: () => set({ activeMarkers: [], activeExperiment: null, activeTrades: [] }),
 }));
