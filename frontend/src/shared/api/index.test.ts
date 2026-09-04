@@ -107,4 +107,32 @@ describe('startSearch', () => {
       policy: 'weighted',
     });
   });
+
+  it('includes fee and slippage in the payload when provided', async () => {
+    let capturedBody: unknown = null;
+    const adapter: AxiosAdapter = async config => {
+      capturedBody = JSON.parse(String(config.data));
+      return {
+        data: { searchId: 'search-456', status: 'STARTED' },
+        status: 202,
+        statusText: 'Accepted',
+        headers: new AxiosHeaders(),
+        config,
+      };
+    };
+    apiClient.defaults.adapter = adapter;
+
+    await startSearch({
+      pair: 'btcusdt',
+      timeframe: '1h',
+      from: 1000,
+      to: 2000,
+      capital: 10000,
+      instances: [{ type: 'MA' }],
+      fee: 0.2,
+      slippage: 10,
+    });
+
+    expect(capturedBody).toMatchObject({ fee: 0.2, slippage: 10 });
+  });
 });

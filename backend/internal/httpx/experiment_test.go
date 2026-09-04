@@ -244,6 +244,41 @@ func TestSearchStart_RejectsUnknownFieldsAndTrailingJSON(t *testing.T) {
 	}
 }
 
+func TestSearchStart_RejectsFeeOrSlippageOutOfRange(t *testing.T) {
+	for _, body := range []string{
+		`{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":1000,"capital":1000,"instances":[{"type":"MA"}],"fee":-0.1}`,
+		`{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":1000,"capital":1000,"instances":[{"type":"MA"}],"fee":2.5}`,
+		`{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":1000,"capital":1000,"instances":[{"type":"MA"}],"slippage":-1}`,
+		`{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":1000,"capital":1000,"instances":[{"type":"MA"}],"slippage":201}`,
+	} {
+		srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), newFakeRepo()))
+		resp, err := http.Post(srv.URL+"/search/start", "application/json", bytes.NewBufferString(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		srv.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 for %s", resp.StatusCode, body)
+		}
+	}
+}
+
+func TestSearchStart_AcceptsCustomFeeAndSlippage(t *testing.T) {
+	srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), newFakeRepo()))
+	defer srv.Close()
+
+	body := `{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":1000,"capital":1000,"instances":[{"type":"MA"}],"fee":0.5,"slippage":25}`
+	resp, err := http.Post(srv.URL+"/search/start", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202 (a fee/slippage within range must be accepted, not rejected as unknown)", resp.StatusCode)
+	}
+}
+
 func TestExperimentsEmptyListIsJSONArray(t *testing.T) {
 	srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), newFakeRepo()))
 	defer srv.Close()

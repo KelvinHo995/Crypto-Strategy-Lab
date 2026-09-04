@@ -53,6 +53,8 @@ export interface StartSearchRequest {
   policy?: 'majority' | 'weighted';
   strategies?: string[];
   params?: Record<string, unknown>;
+  fee?: number; // percent, e.g. 0.1 = 0.1%; omit to use the backend default
+  slippage?: number; // bps, e.g. 5 = 5bps; omit to use the backend default
 }
 
 export interface StartSearchResponse {
@@ -69,6 +71,8 @@ export interface StartSearchLoopRequest {
   maxCandidates: number;
   maxDurationSeconds: number;
   noImprovementLimit: number;
+  fee?: number; // percent, e.g. 0.1 = 0.1%; omit to use the backend default
+  slippage?: number; // bps, e.g. 5 = 5bps; omit to use the backend default
 }
 
 export interface StartSearchLoopResponse {

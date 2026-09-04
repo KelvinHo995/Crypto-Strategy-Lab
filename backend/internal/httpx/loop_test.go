@@ -96,6 +96,26 @@ func TestSearchLoop_ValidatesMaxCandidatesRange(t *testing.T) {
 	}
 }
 
+func TestSearchLoop_RejectsFeeOrSlippageOutOfRange(t *testing.T) {
+	for _, body := range []string{
+		`{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":1000,"capital":1000,"maxCandidates":5,"fee":-0.1}`,
+		`{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":1000,"capital":1000,"maxCandidates":5,"fee":2.5}`,
+		`{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":1000,"capital":1000,"maxCandidates":5,"slippage":-1}`,
+		`{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":1000,"capital":1000,"maxCandidates":5,"slippage":201}`,
+	} {
+		srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), newFakeRepo()))
+		resp, err := http.Post(srv.URL+"/search/loop", "application/json", bytes.NewBufferString(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		srv.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 for %s", resp.StatusCode, body)
+		}
+	}
+}
+
 func TestSearchLoop_RealProgressOverWebSocket(t *testing.T) {
 	candles := &fakeCandleRepo{}
 	router := httpx.NewRouterWithContext(context.Background(), newTestRegistry(), newFakeRepo(), httpx.Dependencies{Candles: candles})

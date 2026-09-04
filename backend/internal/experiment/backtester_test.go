@@ -298,6 +298,110 @@ func TestBacktester_OpenPositionAtDatasetEnd_ForceClosed(t *testing.T) {
 	}
 }
 
+func TestBacktester_ShortSellCover_NoFeeNoSlippage(t *testing.T) {
+	cfg := experiment.Config{
+		Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
+		StopLossPct: 0.5, TakeProfitPct: 0.5, FeePct: 0, SlippageBps: 0, Window: 2,
+		AllowShort: true,
+	}
+	candles := []market.Candle{
+		candle(0, 100, 101, 99, 100),
+		candle(1, 100, 101, 99, 100),
+		candle(2, 100, 105, 99, 104), // entry candle: short opened at Open=100
+		candle(3, 90, 91, 89, 90),    // exit candle: covered at Open=90
+	}
+	strat := &scriptedStrategy{signals: []strategy.Signal{strategy.Sell, strategy.Buy}}
+
+	trades := experiment.NewBacktester(cfg).Run(strat, candles)
+
+	if len(trades) != 1 {
+		t.Fatalf("got %d trades, want 1", len(trades))
+	}
+	tr := trades[0]
+	want := experiment.Trade{
+		Pair: "BTCUSDT", EntryTime: 2, Direction: experiment.Short,
+		VolumeUSD: 1000, EntryPrice: 100, StopLoss: 150, TakeProfit: 50,
+		ExitPrice: 90, ExitTime: 3, TransactionCost: 0, Slippage: 0, Profit: 100,
+	}
+	assertTradeEqual(t, tr, want)
+}
+
+func TestBacktester_ShortSell_NoOpWhenAllowShortDisabled(t *testing.T) {
+	cfg := experiment.Config{
+		Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
+		StopLossPct: 0.5, TakeProfitPct: 0.5, FeePct: 0, SlippageBps: 0, Window: 2,
+		// AllowShort intentionally left false (default) — Sell with no position must stay a no-op.
+	}
+	candles := []market.Candle{
+		candle(0, 100, 101, 99, 100),
+		candle(1, 100, 101, 99, 100),
+		candle(2, 100, 101, 99, 100),
+	}
+	strat := &scriptedStrategy{signals: []strategy.Signal{strategy.Sell}}
+
+	trades := experiment.NewBacktester(cfg).Run(strat, candles)
+
+	if len(trades) != 0 {
+		t.Fatalf("got %d trades, want 0 (AllowShort=false must keep Sell-with-no-position a no-op)", len(trades))
+	}
+}
+
+func TestBacktester_ShortStopLossHit(t *testing.T) {
+	cfg := experiment.Config{
+		Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
+		StopLossPct: 0.05, TakeProfitPct: 0.5, FeePct: 0, SlippageBps: 0, Window: 2,
+		AllowShort: true,
+	}
+	candles := []market.Candle{
+		candle(0, 100, 101, 99, 100),
+		candle(1, 100, 101, 99, 100),
+		candle(2, 100, 105, 99, 104),  // short entry at 100 -> SL=105, TP=50
+		candle(3, 102, 110, 101, 108), // High=110 breaches SL=105
+	}
+	strat := &scriptedStrategy{signals: []strategy.Signal{strategy.Sell}}
+
+	trades := experiment.NewBacktester(cfg).Run(strat, candles)
+
+	if len(trades) != 1 {
+		t.Fatalf("got %d trades, want 1", len(trades))
+	}
+	tr := trades[0]
+	if !almostEqual(tr.ExitPrice, 105) {
+		t.Errorf("ExitPrice = %v, want 105 (the short's SL trigger price)", tr.ExitPrice)
+	}
+	if !almostEqual(tr.Profit, -50) {
+		t.Errorf("Profit = %v, want -50 (price rose against the short)", tr.Profit)
+	}
+}
+
+func TestBacktester_ShortTakeProfitHit(t *testing.T) {
+	cfg := experiment.Config{
+		Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
+		StopLossPct: 0.5, TakeProfitPct: 0.05, FeePct: 0, SlippageBps: 0, Window: 2,
+		AllowShort: true,
+	}
+	candles := []market.Candle{
+		candle(0, 100, 101, 99, 100),
+		candle(1, 100, 101, 99, 100),
+		candle(2, 100, 105, 99, 104), // short entry at 100 -> SL=150, TP=95
+		candle(3, 98, 99, 92, 94),    // Low=92 breaches TP=95
+	}
+	strat := &scriptedStrategy{signals: []strategy.Signal{strategy.Sell}}
+
+	trades := experiment.NewBacktester(cfg).Run(strat, candles)
+
+	if len(trades) != 1 {
+		t.Fatalf("got %d trades, want 1", len(trades))
+	}
+	tr := trades[0]
+	if !almostEqual(tr.ExitPrice, 95) {
+		t.Errorf("ExitPrice = %v, want 95 (the short's TP trigger price)", tr.ExitPrice)
+	}
+	if !almostEqual(tr.Profit, 50) {
+		t.Errorf("Profit = %v, want 50 (price fell in the short's favor)", tr.Profit)
+	}
+}
+
 func TestBacktester_WindowExcludesCurrentCandle(t *testing.T) {
 	cfg := experiment.Config{
 		Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,

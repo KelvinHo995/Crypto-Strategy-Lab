@@ -114,9 +114,11 @@ export async function startSearch(request: StartSearchRequest): Promise<StartSea
     return cleanInst;
   });
 
-  // Strict Go backend StartSearchRequest payload (pair, timeframe, from, to, capital, instances, policy)
-  // to satisfy DisallowUnknownFields() in Go's JSON decoder
-  const payload = {
+  // Strict Go backend StartSearchRequest payload (pair, timeframe, from, to,
+  // capital, instances, policy, fee, slippage) to satisfy DisallowUnknownFields()
+  // in Go's JSON decoder — any field not in that list gets the whole request
+  // rejected, so this must stay in sync with httpx.StartSearchRequest.
+  const payload: Record<string, unknown> = {
     pair: request.pair.trim().toUpperCase(),
     timeframe: request.timeframe.trim(),
     from: Math.floor(request.from),
@@ -125,6 +127,8 @@ export async function startSearch(request: StartSearchRequest): Promise<StartSea
     instances: normalizedInstances,
     policy: request.policy === 'weighted' ? 'weighted' : 'majority',
   };
+  if (typeof request.fee === 'number') payload.fee = request.fee;
+  if (typeof request.slippage === 'number') payload.slippage = request.slippage;
 
   return (await apiClient.post<StartSearchResponse>('/search/start', payload)).data;
 }

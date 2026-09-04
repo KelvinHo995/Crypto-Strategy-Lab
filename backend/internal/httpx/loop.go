@@ -23,6 +23,8 @@ type StartLoopRequest struct {
 	MaxCandidates      int     `json:"maxCandidates"`
 	MaxDurationSeconds int     `json:"maxDurationSeconds"`
 	NoImprovementLimit int     `json:"noImprovementLimit"`
+	Fee                float64 `json:"fee"`      // percent, e.g. 0.1 = 0.1%; 0 uses the project default
+	Slippage           float64 `json:"slippage"` // bps, e.g. 5 = 5bps; 0 uses the project default
 }
 
 func (r StartLoopRequest) Validate() error {
@@ -51,7 +53,7 @@ func (r StartLoopRequest) Validate() error {
 	if r.NoImprovementLimit < 0 {
 		return errors.New("noImprovementLimit cannot be negative")
 	}
-	return nil
+	return validateFeeSlippage(r.Fee, r.Slippage)
 }
 
 type StartLoopResponse struct {
@@ -96,12 +98,15 @@ func startLoop(gen strategy.StrategyGenerator, pool *experiment.WorkerPool, repo
 
 		now := time.Now()
 		searchID := experiment.NewJobID(now)
+		feePct, slippageBps := resolveFeeSlippage(req.Fee, req.Slippage)
 		params := experiment.LoopParams{
 			SearchID: searchID, Pair: req.Pair, TimeFrame: req.TimeFrame, From: req.From, To: req.To,
 			StartingCapital: req.Capital, DatasetPeriod: fmt.Sprintf("%d-%d", req.From, req.To),
 			MaxCandidates:      req.MaxCandidates,
 			MaxDuration:        time.Duration(req.MaxDurationSeconds) * time.Second,
 			NoImprovementLimit: req.NoImprovementLimit,
+			FeePct:             feePct,
+			SlippageBps:        slippageBps,
 		}
 		onStopped := func(status, reason string) {
 			if hub != nil {
