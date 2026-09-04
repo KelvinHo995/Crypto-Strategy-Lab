@@ -2,6 +2,8 @@ import axios from 'axios';
 import type { Candle } from '../../types/candle';
 import type {
   ExperimentResult,
+  SignalRequest,
+  SignalResponse,
   StartSearchLoopRequest,
   StartSearchLoopResponse,
   StartSearchRequest,
@@ -85,6 +87,10 @@ export async function fetchMarkets(): Promise<MarketInfo[]> {
 
 export async function fetchStrategies(): Promise<string[]> {
   return (await apiClient.get<string[]>('/strategies')).data;
+}
+
+export async function fetchCurrentSignal(request: SignalRequest): Promise<SignalResponse> {
+  return (await apiClient.post<SignalResponse>('/strategies/signal', request)).data;
 }
 
 export async function fetchExperiments(): Promise<ExperimentResult[]> {

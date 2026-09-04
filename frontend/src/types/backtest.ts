@@ -57,6 +57,18 @@ export interface StartSearchRequest {
   slippage?: number; // bps, e.g. 5 = 5bps; omit to use the backend default
 }
 
+export interface SignalRequest {
+  pair: string;
+  timeframe: string;
+  instances: StrategyInstance[];
+  policy?: 'majority' | 'weighted';
+}
+
+export interface SignalResponse {
+  composite: 'BUY' | 'SELL' | 'HOLD';
+  signals: ('BUY' | 'SELL' | 'HOLD')[]; // aligned with the request's instances order
+}
+
 export interface StartSearchResponse {
   searchId: string;
   status: string;

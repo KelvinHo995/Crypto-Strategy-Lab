@@ -336,9 +336,9 @@ export function CompositeStrategyBuilder({
           )}
         </div>
 
-        {/* Realtime Composite Signal display */}
+        {/* Composite Signal display */}
         <div style={signalAreaStyle}>
-          <span style={signalTitleStyle}>Realtime Composite Signal:</span>
+          <span style={signalTitleStyle}>Composite Signal:</span>
           <div style={signalFlexStyle}>
             <div style={{ ...signalBadgeStyle, ...getCompositeSignalStyle(compositeSignal) }}>
               <span style={signalTextLgStyle}>{compositeSignal}</span>
@@ -346,7 +346,7 @@ export function CompositeStrategyBuilder({
                 <span style={scoreTextStyle}>Score: {compositeScore > 0 ? `+${compositeScore}` : compositeScore}</span>
               )}
             </div>
-            <span style={statusLabelStyle}>● Auto updating from market ticks</span>
+            <span style={statusLabelStyle}>● Computed from each indicator's latest real signal</span>
           </div>
         </div>
       </div>
