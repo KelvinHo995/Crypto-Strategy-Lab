@@ -38,13 +38,28 @@ export function ChartCard({
   const [dataMode, setDataMode] = useState<'API' | 'MOCK' | 'ERROR'>(mode === 'DEMO' ? 'MOCK' : 'API');
   const [loadError, setLoadError] = useState('');
 
+  // Which pair/timeframe the currently-loaded experiment's trade markers
+  // were actually resolved for — see loadHistory below for why this can't
+  // just be "does symbol/timeframe match"; the candle *range* underneath
+  // can silently change (e.g. hitting reload) while symbol/timeframe stay
+  // the same, leaving stale markers snapped onto whatever the new range's
+  // leftmost candle happens to be.
+  const [markersValidFor, setMarkersValidFor] = useState<{ pair: string; timeframe: string } | null>(null);
+
   // 1. Fetch initial historical data on mount or when symbol/timeframe changes.
   // pair/tf are explicit params (not read from symbol/timeframe state) so a
   // caller can fetch for values it just decided on without waiting for
   // setSymbol/setTimeframe to actually land first — those are async and
   // this function's own closure would otherwise use whatever symbol/
   // timeframe were current when IT was created, not the ones just requested.
-  const loadHistory = useCallback(async (pair: string, tf: string, range?: { from: number; to: number }, limitOverride?: number) => {
+  // isExperimentLoad marks a fetch that's resolving an experiment's own
+  // pair/range (5000-limit, explicit from/to) as opposed to any other call
+  // path (reload button, tab click, mount) that fetches the generic
+  // "recent" window — only the former is what globalMarkers were computed
+  // against, so every other path must invalidate that match instead of
+  // leaving it stale.
+  const loadHistory = useCallback(async (pair: string, tf: string, range?: { from: number; to: number }, limitOverride?: number, isExperimentLoad = false) => {
+    setMarkersValidFor(isExperimentLoad ? { pair, timeframe: tf } : null);
     if (mode === 'DEMO') {
       const dto = fetchMarketDataDTO(pair, tf, 200);
       setCandles(dto.candles);
@@ -236,7 +251,7 @@ export function ChartCard({
     const pair = activeTrades[0]?.pair || symbol;
     const tf = '4h';
     void Promise.resolve().then(() => {
-      void loadHistory(pair, tf, { from, to }, 5000);
+      void loadHistory(pair, tf, { from, to }, 5000, true);
       if (pair !== symbol || tf !== timeframe) {
         suppressNextDefaultLoadRef.current = true;
         setSymbol(pair);
@@ -253,8 +268,14 @@ export function ChartCard({
   const latestCandle = candles[candles.length - 1];
   const currentPrice = latestCandle ? latestCandle.close : 0;
 
-  // Use global markers from loaded experiment if available, otherwise fallback to local mock markers
-  const effectiveMarkers = globalMarkers.length > 0 ? globalMarkers : markers;
+  // Use global markers from the loaded experiment only if this card's
+  // current view is actually the one they were resolved for — otherwise
+  // fall back to local mock markers (or none, in real API mode).
+  const markersMatchCurrentView =
+    globalMarkers.length > 0 &&
+    markersValidFor?.pair === symbol &&
+    markersValidFor?.timeframe === timeframe;
+  const effectiveMarkers = markersMatchCurrentView ? globalMarkers : markers;
 
   // Find last trade signal — keyed off shape, not text, since dense marker
   // sets drop the text label (see MARKER_TEXT_THRESHOLD) but always keep shape.
@@ -303,6 +324,14 @@ export function ChartCard({
                   title="This run reported trades but predates per-trade history tracking — no real markers to show. Re-run it to get real trade markers."
                 >
                   ⚠ no markers
+                </span>
+              )}
+              {globalMarkers.length > 0 && !markersMatchCurrentView && (
+                <span
+                  style={noMarkersHintStyle}
+                  title={`Markers are for ${markersValidFor?.pair ?? '?'}/${markersValidFor?.timeframe ?? '?'} — switch back to that view to see them.`}
+                >
+                  ⚠ markers hidden (wrong view)
                 </span>
               )}
               <button
