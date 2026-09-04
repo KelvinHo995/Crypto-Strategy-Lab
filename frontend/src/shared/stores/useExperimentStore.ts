@@ -19,7 +19,14 @@ export function formatExperimentTitle(exp: ExperimentResult): string {
   return exp.candidateId || exp.id;
 }
 
+// Above this many trades, per-marker dollar-amount labels just overlap into
+// unreadable noise — drop the text and rely on color/shape only (the real
+// numbers are already in the trade history table). Below it, labels are
+// genuinely readable and worth keeping.
+const MARKER_TEXT_THRESHOLD = 30;
+
 export function tradesToMarkers(trades: Trade[]): ChartMarker[] {
+  const showText = trades.length <= MARKER_TEXT_THRESHOLD;
   const markers: ChartMarker[] = [];
   for (const trade of trades) {
     if (trade.direction === 'LONG') {
@@ -28,7 +35,7 @@ export function tradesToMarkers(trades: Trade[]): ChartMarker[] {
         position: 'belowBar',
         color: '#10b981',
         shape: 'arrowUp',
-        text: 'BUY',
+        text: showText ? 'BUY' : '',
       });
     } else {
       markers.push({
@@ -36,7 +43,7 @@ export function tradesToMarkers(trades: Trade[]): ChartMarker[] {
         position: 'aboveBar',
         color: '#ef4444',
         shape: 'arrowDown',
-        text: 'SELL',
+        text: showText ? 'SELL' : '',
       });
     }
     if (trade.exitTime) {
@@ -46,7 +53,7 @@ export function tradesToMarkers(trades: Trade[]): ChartMarker[] {
         position: trade.direction === 'LONG' ? 'aboveBar' : 'belowBar',
         color: isWin ? '#10b981' : '#ef4444',
         shape: 'circle',
-        text: isWin ? `WIN +$${Math.round(trade.profit)}` : `LOSS -$${Math.round(Math.abs(trade.profit))}`,
+        text: showText ? (isWin ? `WIN +$${Math.round(trade.profit)}` : `LOSS -$${Math.round(Math.abs(trade.profit))}`) : '',
       });
     }
   }

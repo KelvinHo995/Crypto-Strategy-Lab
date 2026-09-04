@@ -241,10 +241,12 @@ export function ChartCard({
   // Use global markers from loaded experiment if available, otherwise fallback to local mock markers
   const effectiveMarkers = globalMarkers.length > 0 ? globalMarkers : markers;
 
-  // Find last trade signal
+  // Find last trade signal — keyed off shape, not text, since dense marker
+  // sets drop the text label (see MARKER_TEXT_THRESHOLD) but always keep shape.
   const lastSignal = [...effectiveMarkers]
     .reverse()
-    .find(m => m.text.includes('BUY') || m.text.includes('SELL'));
+    .find(m => m.shape === 'arrowUp' || m.shape === 'arrowDown');
+  const lastSignalLabel = lastSignal?.shape === 'arrowUp' ? 'BUY' : 'SELL';
 
   return (
     <div style={cardContainerStyle}>
@@ -302,8 +304,8 @@ export function ChartCard({
 
           {/* Last Signal Badge */}
           {lastSignal && (
-            <span style={lastSignal.text.startsWith('BUY') ? buyBadgeStyle : sellBadgeStyle}>
-              Last: {lastSignal.text}
+            <span style={lastSignalLabel === 'BUY' ? buyBadgeStyle : sellBadgeStyle}>
+              Last: {lastSignalLabel}
             </span>
           )}
 
