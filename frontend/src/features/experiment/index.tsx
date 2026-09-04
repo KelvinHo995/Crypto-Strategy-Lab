@@ -5,16 +5,34 @@ import { ProvenanceModal } from './components/ProvenanceModal';
 import { PerformanceSummaryCard } from './components/PerformanceSummaryCard';
 import { TradeHistoryTable } from './components/TradeHistoryTable';
 import { MOCK_EXPERIMENTS, generateMockTrades } from './services/mockExperimentData';
-import { fetchExperiment, fetchExperiments, startSearch } from '../../shared/api';
+import { fetchExperiment, fetchExperiments, fetchTrades, startSearch } from '../../shared/api';
 import { useWebSocketSubscription } from '../../shared/hooks';
 import type { WSSearchProgressPayload } from '../../types/websocket';
-import type { ExperimentResult } from '../../types/backtest';
+import type { ExperimentResult, Trade } from '../../types/backtest';
 import { useExperimentStore, formatExperimentTitle } from '../../shared/stores/useExperimentStore';
 
 // Matches the worker's own worst-case retry/backoff window (up to 3 attempts,
 // backoff climbing toward 30s each) — a shorter timeout would give up on a
 // backtest that's genuinely still retrying, not stuck.
 const RUN_TIMEOUT_MS = 90_000;
+
+const isMockExperiment = (id: string) => MOCK_EXPERIMENTS.some(m => m.id === id);
+
+// MOCK_EXPERIMENTS are fixture data end to end — generating consistent fake
+// trades for those specific rows is fine, it's already clearly demo data.
+// Anything else is a real experiment, so its trades come from the real
+// per-trade history the worker now persists (empty if this run predates
+// that, or genuinely has none — never backfilled with fake ones).
+async function loadTradesFor(exp: ExperimentResult): Promise<Trade[]> {
+  if (isMockExperiment(exp.id)) {
+    return generateMockTrades(exp.id, exp.tradeCount || 30);
+  }
+  try {
+    return await fetchTrades(exp.id);
+  } catch {
+    return [];
+  }
+}
 
 export function ExperimentDashboard() {
   const [experiments, setExperiments] = useState<ExperimentResult[]>(MOCK_EXPERIMENTS);
@@ -32,7 +50,7 @@ export function ExperimentDashboard() {
 
   useEffect(() => {
     if (activeTrades.length === 0 && activeExp) {
-      setActiveTrades(generateMockTrades(activeExp.id, activeExp.tradeCount || 30));
+      loadTradesFor(activeExp).then(setActiveTrades);
     }
   }, [activeExp, activeTrades.length, setActiveTrades]);
 
@@ -41,7 +59,7 @@ export function ExperimentDashboard() {
     setExperiments(items);
     if (!useExperimentStore.getState().activeExperiment) {
       setActiveExp(items[0]);
-      setActiveTrades(generateMockTrades(items[0].id, items[0].tradeCount || 30));
+      loadTradesFor(items[0]).then(setActiveTrades);
     }
   }, [setActiveExp, setActiveTrades]);
 
@@ -67,7 +85,7 @@ export function ExperimentDashboard() {
     try {
       const result = await fetchExperiment(id);
       setActiveExp(result);
-      setActiveTrades(generateMockTrades(result.id, result.tradeCount || 30));
+      loadTradesFor(result).then(setActiveTrades);
       setExperiments(current => current.some(item => item.id === result.id)
         ? current.map(item => item.id === result.id ? result : item)
         : [result, ...current]);
@@ -126,8 +144,8 @@ export function ExperimentDashboard() {
     setSelectedExpForMeta(exp);
   };
 
-  const handleLoadToChart = (exp: ExperimentResult) => {
-    const trades = generateMockTrades(exp.id, exp.tradeCount || 30);
+  const handleLoadToChart = async (exp: ExperimentResult) => {
+    const trades = await loadTradesFor(exp);
     loadExperimentToChart(exp, trades);
   };
 
@@ -139,7 +157,6 @@ export function ExperimentDashboard() {
 
   return (
     <div style={dashboardContainerStyle}>
-      <div style={{color:'#f59e0b',fontSize:'0.75rem'}}>Metrics/leaderboard ưu tiên API; trade detail dùng demo vì backend MVP chưa lưu từng trade.</div>
       {/* 1. Top Section: Run Simulation & Performance Overview */}
       <div style={topSectionStyle}>
         <div style={configColStyle}>
@@ -176,9 +193,13 @@ export function ExperimentDashboard() {
       </div>
 
       {/* 3. Bottom Section: Trade History log */}
-      {activeTrades.length > 0 && (
+      {activeExp && (
         <div style={tradesSectionStyle}>
-          <TradeHistoryTable trades={activeTrades} />
+          {activeTrades.length > 0 ? (
+            <TradeHistoryTable trades={activeTrades} />
+          ) : (
+            <p style={noTradesStyle}>No trade history recorded for this run.</p>
+          )}
         </div>
       )}
 
@@ -265,4 +286,14 @@ const sectionTitleStyle: React.CSSProperties = {
 const tradesSectionStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
+};
+
+const noTradesStyle: React.CSSProperties = {
+  fontSize: '0.8rem',
+  color: '#64748b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
+  borderRadius: '8px',
+  padding: '1rem',
+  margin: 0,
 };

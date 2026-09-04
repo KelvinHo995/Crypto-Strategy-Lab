@@ -102,6 +102,7 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	protected.HandleFunc("POST /search/loop", startLoop(generator, pool, repo, queue, deps.Candles, hub))
 	protected.HandleFunc("GET /experiments", listExperiments(repo))
 	protected.HandleFunc("GET /experiments/{id}", getExperiment(repo))
+	protected.HandleFunc("GET /experiments/{id}/trades", getExperimentTrades(repo))
 	protected.HandleFunc("GET /strategies", strategyHandler.ListStrategies)
 	protected.HandleFunc("POST /strategies/signal", strategyHandler.CurrentSignal(deps.Candles))
 	protected.HandleFunc("GET /markets", listMarkets)

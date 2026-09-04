@@ -149,6 +149,58 @@ func (p *PostgresRepository) ListBySearch(ctx context.Context, searchID string) 
 	return results, rows.Err()
 }
 
+func (p *PostgresRepository) SaveTrades(ctx context.Context, experimentID string, trades []Trade) error {
+	tx, err := p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin save trades: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM experiment_trades WHERE experiment_id = $1`, experimentID); err != nil {
+		return fmt.Errorf("clear existing trades: %w", err)
+	}
+	for _, t := range trades {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO experiment_trades (
+				experiment_id, pair, entry_time, direction, volume_usd, entry_price,
+				stop_loss, take_profit, exit_price, exit_time, transaction_cost, slippage, profit
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		`, experimentID, t.Pair, t.EntryTime, string(t.Direction), t.VolumeUSD, t.EntryPrice,
+			t.StopLoss, t.TakeProfit, t.ExitPrice, t.ExitTime, t.TransactionCost, t.Slippage, t.Profit); err != nil {
+			return fmt.Errorf("insert trade: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit save trades: %w", err)
+	}
+	return nil
+}
+
+func (p *PostgresRepository) ListTrades(ctx context.Context, experimentID string) ([]Trade, error) {
+	rows, err := p.db.QueryContext(ctx, `
+		SELECT pair, entry_time, direction, volume_usd, entry_price, stop_loss, take_profit,
+			exit_price, exit_time, transaction_cost, slippage, profit
+		FROM experiment_trades WHERE experiment_id = $1 ORDER BY entry_time ASC
+	`, experimentID)
+	if err != nil {
+		return nil, fmt.Errorf("list trades: %w", err)
+	}
+	defer rows.Close()
+
+	var trades []Trade
+	for rows.Next() {
+		var t Trade
+		var direction string
+		if err := rows.Scan(&t.Pair, &t.EntryTime, &direction, &t.VolumeUSD, &t.EntryPrice,
+			&t.StopLoss, &t.TakeProfit, &t.ExitPrice, &t.ExitTime, &t.TransactionCost, &t.Slippage, &t.Profit); err != nil {
+			return nil, fmt.Errorf("scan trade: %w", err)
+		}
+		t.Direction = Direction(direction)
+		trades = append(trades, t)
+	}
+	return trades, rows.Err()
+}
+
 type scanner interface {
 	Scan(dest ...any) error
 }

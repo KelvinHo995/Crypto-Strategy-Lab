@@ -8,6 +8,7 @@ import type {
   StartSearchLoopResponse,
   StartSearchRequest,
   StartSearchResponse,
+  Trade,
 } from '../../types/backtest';
 import type { SentimentObservation } from '../../types/news';
 import type { MarketInfo } from '../../types/candle';
@@ -99,6 +100,10 @@ export async function fetchExperiments(): Promise<ExperimentResult[]> {
 
 export async function fetchExperiment(id: string): Promise<ExperimentResult> {
   return (await apiClient.get<ExperimentResult>(`/experiments/${id}`)).data;
+}
+
+export async function fetchTrades(id: string): Promise<Trade[]> {
+  return (await apiClient.get<Trade[]>(`/experiments/${id}/trades`)).data;
 }
 
 export async function startSearch(request: StartSearchRequest): Promise<StartSearchResponse> {

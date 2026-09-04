@@ -180,6 +180,13 @@ func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
 		p.retry(ctx, job.ID, err)
 		return
 	}
+	// Best-effort: the aggregate Result above is what the leaderboard and
+	// evaluation depend on and already succeeded, so a trade-history save
+	// failure is logged, not retried — it would otherwise trigger a full
+	// backtest re-run just to persist trade rows that don't affect scoring.
+	if err := p.repo.SaveTrades(ctx, job.ID, trades); err != nil {
+		log.Printf("experiment worker: save trades for %s: %v", job.ID, err)
+	}
 	p.notify(result)
 	p.ack(ctx, job.ID)
 }

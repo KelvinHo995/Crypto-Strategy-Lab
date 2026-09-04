@@ -83,7 +83,7 @@ export function TradeHistoryTable({
                         {trade.direction}
                       </span>
                     </td>
-                    <td style={tdRightStyle}>${trade.volumeUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                    <td style={tdRightStyle}>${trade.volumeUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                     <td style={tdRightStyle}>${trade.entryPrice.toLocaleString()}</td>
                     <td style={tdRightStyle}>${trade.exitPrice.toLocaleString()}</td>
                     <td style={isWin ? tdProfitStyle : tdLossStyle}>

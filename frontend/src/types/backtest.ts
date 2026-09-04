@@ -2,7 +2,7 @@ export interface Trade {
   pair: string;
   entryTime: number; // Unix timestamp in milliseconds
   direction: 'LONG' | 'SHORT';
-  volumeUSD: number;
+  volumeUsd: number;
   entryPrice: number;
   stopLoss: number;
   takeProfit: number;

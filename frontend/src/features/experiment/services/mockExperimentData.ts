@@ -201,7 +201,7 @@ export function generateMockTrades(experimentId: string, count: number = 30): Tr
       pair: 'BTCUSDT',
       entryTime: time,
       direction,
-      volumeUSD: positionSizeUSD,
+      volumeUsd: positionSizeUSD,
       entryPrice: Number(entryPrice.toFixed(2)),
       stopLoss: Number(stopLoss.toFixed(2)),
       takeProfit: Number(takeProfit.toFixed(2)),

@@ -230,3 +230,22 @@ func getExperiment(repo experiment.Repository) http.HandlerFunc {
 		json.NewEncoder(w).Encode(result)
 	}
 }
+
+// getExperimentTrades returns the real trade-by-trade history for one
+// completed backtest. Empty (not an error) for experiments that predate
+// trade persistence, or that never completed.
+func getExperimentTrades(repo experiment.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		trades, err := repo.ListTrades(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if trades == nil {
+			trades = []experiment.Trade{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(trades)
+	}
+}

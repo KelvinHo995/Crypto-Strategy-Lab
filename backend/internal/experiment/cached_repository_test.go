@@ -29,6 +29,12 @@ func (r *countingExperimentRepository) List(context.Context) ([]experiment.Resul
 func (r *countingExperimentRepository) ListBySearch(context.Context, string) ([]experiment.Result, error) {
 	return nil, nil
 }
+func (r *countingExperimentRepository) SaveTrades(context.Context, string, []experiment.Trade) error {
+	return nil
+}
+func (r *countingExperimentRepository) ListTrades(context.Context, string) ([]experiment.Trade, error) {
+	return nil, nil
+}
 
 func TestCachedExperimentRepositoryCoalescesAndInvalidates(t *testing.T) {
 	next := &countingExperimentRepository{}

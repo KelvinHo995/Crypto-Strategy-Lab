@@ -10,10 +10,11 @@ import (
 type memRepo struct {
 	mu      sync.Mutex
 	results map[string]experiment.Result
+	trades  map[string][]experiment.Trade
 }
 
 func newMemRepo(seed ...experiment.Result) *memRepo {
-	r := &memRepo{results: make(map[string]experiment.Result)}
+	r := &memRepo{results: make(map[string]experiment.Result), trades: make(map[string][]experiment.Trade)}
 	for _, s := range seed {
 		r.results[s.ID] = s
 	}
@@ -54,4 +55,17 @@ func (r *memRepo) ListBySearch(_ context.Context, searchID string) ([]experiment
 		}
 	}
 	return out, nil
+}
+
+func (r *memRepo) SaveTrades(_ context.Context, experimentID string, trades []experiment.Trade) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.trades[experimentID] = trades
+	return nil
+}
+
+func (r *memRepo) ListTrades(_ context.Context, experimentID string) ([]experiment.Trade, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.trades[experimentID], nil
 }
