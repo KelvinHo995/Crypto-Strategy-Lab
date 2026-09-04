@@ -82,7 +82,6 @@ export const useExperimentStore = create<ExperimentStoreState>((set) => ({
       activeExperiment: exp,
       activeTrades: trades,
       activeMarkers: markers,
-      activeTab: 'charts',
     });
   },
   clearExperiment: () => set({ activeMarkers: [], activeExperiment: null, activeTrades: [] }),

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWebSocketState, useWebSocketSubscription } from '../../../shared/hooks';
 import type { Candle, MarketInfo } from '../../../types/candle';
 import { TradingChart, type SRZone, type ChartMarker } from './TradingChart';
@@ -39,7 +39,7 @@ export function ChartCard({
   const [loadError, setLoadError] = useState('');
 
   // 1. Fetch initial historical data on mount or when symbol/timeframe changes
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (range?: { from: number; to: number }) => {
     if (mode === 'DEMO') {
       const dto = fetchMarketDataDTO(symbol, timeframe, 200);
       setCandles(dto.candles);
@@ -51,8 +51,8 @@ export function ChartCard({
       setLoadError('');
       return;
     }
-    const to = Date.now();
-    const from = to - 366 * 24 * 60 * 60 * 1000;
+    const to = range?.to ?? Date.now();
+    const from = range?.from ?? to - 366 * 24 * 60 * 60 * 1000;
     try {
       const apiCandles = await fetchCandles(symbol, timeframe, from, to, 500);
       if (apiCandles.length < 20) throw new Error('insufficient candles');
@@ -76,8 +76,15 @@ export function ChartCard({
     }
   }, [mode, symbol, timeframe]);
 
+  // Set by the "experiment loaded" effect below when it needs this card to
+  // jump to a specific historical range instead of the default recent
+  // window — consumed (and cleared) the next time loadHistory actually runs.
+  const pendingRangeRef = useRef<{ from: number; to: number } | null>(null);
+
   useEffect(() => {
-    void Promise.resolve().then(loadHistory);
+    const range = pendingRangeRef.current;
+    pendingRangeRef.current = null;
+    void loadHistory(range ?? undefined);
   }, [loadHistory]);
 
   function handleRealtimeUpdate(candle: Candle) {
@@ -188,7 +195,39 @@ export function ChartCard({
 
 
   const activeExperiment = useExperimentStore((s) => s.activeExperiment);
+  const activeTrades = useExperimentStore((s) => s.activeTrades);
   const globalMarkers = useExperimentStore((s) => s.activeMarkers);
+  const clearExperiment = useExperimentStore((s) => s.clearExperiment);
+
+  // When an experiment loads onto the chart, its real trade markers are
+  // meaningless unless this card is actually looking at the right pair and
+  // time range — the backend doesn't record which timeframe a backtest used,
+  // so 4h (widest available) gives the best chance a multi-day/month range
+  // fits within the 500-candle fetch limit. Switches this specific
+  // ChartCard instance only, not every open chart.
+  useEffect(() => {
+    if (!activeExperiment) return;
+    const [fromStr, toStr] = activeExperiment.datasetPeriod.split('-');
+    const from = Number(fromStr);
+    const to = Number(toStr);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || mode === 'DEMO') return;
+    void Promise.resolve().then(() => {
+      const pair = activeTrades[0]?.pair;
+      const symbolChanging = Boolean(pair) && pair !== symbol;
+      const timeframeChanging = timeframe !== '4h';
+      if (symbolChanging || timeframeChanging) {
+        pendingRangeRef.current = { from, to };
+        if (symbolChanging) setSymbol(pair!);
+        if (timeframeChanging) setTimeframe('4h');
+      } else {
+        void loadHistory({ from, to });
+      }
+    });
+    // Only re-run when a *different* experiment is loaded, not on every
+    // render or symbol/timeframe change (those are handled above/by the
+    // existing loadHistory effect).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeExperiment]);
 
   // Get properties for header
   const latestCandle = candles[candles.length - 1];
@@ -236,6 +275,15 @@ export function ChartCard({
           {activeExperiment && (
             <span style={strategyLoadedBadgeStyle} title={`Loaded strategy #${activeExperiment.id} (${activeExperiment.policy})`}>
               Strategy: {formatExperimentTitle(activeExperiment)}
+              <button
+                type="button"
+                onClick={clearExperiment}
+                style={clearStrategyBtnStyle}
+                title="Clear loaded strategy and its markers"
+                aria-label="Clear loaded strategy"
+              >
+                ✕
+              </button>
             </span>
           )}
 
@@ -258,7 +306,7 @@ export function ChartCard({
           </div>
 
           {/* Maximize and reload action button */}
-          <button onClick={loadHistory} style={actionBtnStyle} title="Reload historical data">
+          <button onClick={() => loadHistory()} style={actionBtnStyle} title="Reload historical data">
             ↻
           </button>
           <button onClick={() => onToggleMaximize(id)} style={actionBtnStyle}>
@@ -389,6 +437,20 @@ const strategyLoadedBadgeStyle: React.CSSProperties = {
   fontWeight: '700',
   padding: '0.15rem 0.45rem',
   borderRadius: '4px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.4rem',
+};
+
+const clearStrategyBtnStyle: React.CSSProperties = {
+  backgroundColor: 'transparent',
+  border: 'none',
+  color: '#2563eb',
+  cursor: 'pointer',
+  fontSize: '0.7rem',
+  fontWeight: '700',
+  padding: 0,
+  lineHeight: 1,
 };
 
 const buyBadgeStyle: React.CSSProperties = {

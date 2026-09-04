@@ -147,6 +147,7 @@ export function ExperimentDashboard() {
   const handleLoadToChart = async (exp: ExperimentResult) => {
     const trades = await loadTradesFor(exp);
     loadExperimentToChart(exp, trades);
+    alert(`Loaded #${exp.id} (${formatExperimentTitle(exp)}) onto the chart — open the Market tab to see it.`);
   };
 
   const handleReplicate = (exp: ExperimentResult) => {
