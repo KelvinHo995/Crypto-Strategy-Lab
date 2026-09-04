@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorBoundary } from '../../shared/components';
-import { NewsCrawlerHeader } from './components/NewsCrawlerHeader';
+import { NewsCrawlerHeader, type AssetFilter, type NewsSourceTab } from './components/NewsCrawlerHeader';
 import { NewsInputList } from './components/NewsInputList';
+import { ExtractionPipelinePanel } from './components/ExtractionPipelinePanel';
 import { SentimentAnalyticsPanel } from './components/SentimentAnalyticsPanel';
+import { SourceConfigModal } from './components/SourceConfigModal';
 import { MOCK_NEWS_FEED } from './services/mockNewsData';
 import type { NewsItem, SentimentObservation } from '../../types/news';
 import { fetchSentimentObservations } from '../../shared/api';
@@ -29,24 +31,82 @@ function toNewsItem(observation: SentimentObservation): NewsItem {
 export function NewsCrawlerDashboard() {
   const [newsFeed, setNewsFeed] = useState<NewsItem[]>(MOCK_NEWS_FEED);
   const [observations, setObservations] = useState<SentimentObservation[]>([]);
+  const [activeSource, setActiveSource] = useState<NewsSourceTab>('RSS Feeds');
+  const [activeAsset, setActiveAsset] = useState<AssetFilter>('ALL');
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(60000); // 1m default
+  const [selectedNews, setSelectedNews] = useState<NewsItem | null>(() => MOCK_NEWS_FEED[0] ?? null);
+  const [isSourceModalOpen, setIsSourceModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState<'DEMO' | 'LIVE' | 'ERROR'>('DEMO');
-  const [analysisMessage, setAnalysisMessage] = useState('Showing local sample articles — waiting on the live ingestion pipeline.');
+  const [analysisMessage, setAnalysisMessage] = useState('Showing local sample articles — waiting on live ingestion pipeline.');
 
-  useEffect(() => {
-    // Real, already-ingested articles (via the RSS ingestion pipeline) — if
-    // there are none yet, the demo fixtures stay so the page isn't empty.
-    // A failed fetch is not shown as an error here either: this is a
-    // background load, not something the user triggered.
-    fetchSentimentObservations()
-      .then((real) => {
-        setObservations(real);
-        if (real.length === 0) return;
-        setNewsFeed(real.map(toNewsItem));
-        setAnalysisStatus('LIVE');
-        setAnalysisMessage(`Showing ${real.length} real analyzed article(s) from the last 24h.`);
-      })
-      .catch(() => undefined);
+  const applyObservations = useCallback((real: SentimentObservation[]) => {
+    setObservations(real);
+    if (real.length > 0) {
+      const liveItems = real.map(toNewsItem);
+      setNewsFeed(liveItems);
+      setSelectedNews((prev) => (prev && liveItems.some((i) => i.id === prev.id) ? prev : liveItems[0]));
+      setAnalysisStatus('LIVE');
+      setAnalysisMessage(`Showing ${real.length} real analyzed article(s) from live pipeline.`);
+    }
   }, []);
+
+  const handleManualRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const real = await fetchSentimentObservations();
+      applyObservations(real);
+    } catch {
+      // Fallback gracefully
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [applyObservations]);
+
+  // Initial load
+  useEffect(() => {
+    fetchSentimentObservations().then(applyObservations).catch(() => undefined);
+  }, [applyObservations]);
+
+  // Auto-refresh timer
+  useEffect(() => {
+    if (autoRefreshInterval <= 0) return;
+    const timer = setInterval(() => {
+      fetchSentimentObservations().then(applyObservations).catch(() => undefined);
+    }, autoRefreshInterval);
+    return () => clearInterval(timer);
+  }, [autoRefreshInterval, applyObservations]);
+
+  // Filtered news items
+  const filteredNews = useMemo(() => {
+    return newsFeed.filter((item) => {
+      // 1. Asset Filter
+      if (activeAsset !== 'ALL') {
+        const text = `${item.title} ${item.content}`.toUpperCase();
+        if (activeAsset === 'BTC' && !text.includes('BTC') && !text.includes('BITCOIN')) return false;
+        if (activeAsset === 'ETH' && !text.includes('ETH') && !text.includes('ETHEREUM')) return false;
+        if (activeAsset === 'SOL' && !text.includes('SOL') && !text.includes('SOLANA')) return false;
+        if (activeAsset === 'BNB' && !text.includes('BNB') && !text.includes('BINANCE')) return false;
+        if (activeAsset === 'XRP' && !text.includes('XRP') && !text.includes('RIPPLE')) return false;
+      }
+
+      // 2. Source Tab Filter
+      if (activeSource === 'Website Scraper') {
+        const isScraper = item.source.toLowerCase().includes('binance') || item.source.toLowerCase().includes('scraper');
+        // If not labeled scraper, allow standard sample to demonstrate functionality
+        if (!isScraper && !item.source.toLowerCase().includes('coindesk')) return false;
+      } else if (activeSource === 'Raw HTML Import') {
+        const isRaw = item.source.toLowerCase().includes('raw') || item.source.toLowerCase().includes('import');
+        if (!isRaw && !item.source.toLowerCase().includes('the block')) return false;
+      }
+
+      return true;
+    });
+  }, [newsFeed, activeAsset, activeSource]);
+
+  const handleSelectNews = (item: NewsItem) => {
+    setSelectedNews(item);
+  };
 
   return (
     <ErrorBoundary
@@ -59,21 +119,48 @@ export function NewsCrawlerDashboard() {
       }
     >
       <div style={dashboardContainerStyle}>
+        {/* Status Pill */}
         <div style={analysisStatus === 'LIVE' ? liveStatusStyle : analysisStatus === 'ERROR' ? errorStatusStyle : demoStatusStyle}>
           <strong>{analysisStatus}</strong> {analysisMessage}
         </div>
-        {/* Top Controls Bar */}
-        <NewsCrawlerHeader />
 
-        {/* 2-Column Layout: real feed + real sentiment breakdown */}
+        {/* Top Controls Bar */}
+        <NewsCrawlerHeader
+          activeSource={activeSource}
+          onSelectSource={setActiveSource}
+          activeAsset={activeAsset}
+          onSelectAsset={setActiveAsset}
+          autoRefreshInterval={autoRefreshInterval}
+          onSelectAutoRefresh={setAutoRefreshInterval}
+          onOpenSourceModal={() => setIsSourceModalOpen(true)}
+          onManualRefresh={handleManualRefresh}
+          isRefreshing={isRefreshing}
+        />
+
+        {/* 3-Column Layout: Feed + Pipeline Detail + Sentiment Breakdown & Action */}
         <div style={gridStyle}>
-          <div style={columnStyle}>
-            <NewsInputList news={newsFeed} />
+          <div style={leftColStyle}>
+            <NewsInputList
+              news={filteredNews}
+              selectedNewsId={selectedNews?.id}
+              onSelectNews={handleSelectNews}
+            />
           </div>
-          <div style={columnStyle}>
+
+          <div style={midColStyle}>
+            <ExtractionPipelinePanel selectedNews={selectedNews} />
+          </div>
+
+          <div style={rightColStyle}>
             <SentimentAnalyticsPanel observations={observations} />
           </div>
         </div>
+
+        {/* Source Configuration Modal */}
+        <SourceConfigModal
+          isOpen={isSourceModalOpen}
+          onClose={() => setIsSourceModalOpen(false)}
+        />
       </div>
     </ErrorBoundary>
   );
@@ -85,12 +172,12 @@ export function NewsCrawlerDashboard() {
 const dashboardContainerStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: '1.25rem',
+  gap: '1rem',
   width: '100%',
   boxSizing: 'border-box',
 };
 
-const statusBaseStyle: React.CSSProperties = { fontSize: '0.75rem', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid' };
+const statusBaseStyle: React.CSSProperties = { fontSize: '0.75rem', padding: '0.6rem 0.8rem', borderRadius: '6px', border: '1px solid' };
 const demoStatusStyle: React.CSSProperties = { ...statusBaseStyle, color: '#92400e', background: '#fffbeb', borderColor: '#fde68a' };
 const liveStatusStyle: React.CSSProperties = { ...statusBaseStyle, color: '#047857', background: '#ecfdf5', borderColor: '#a7f3d0' };
 const errorStatusStyle: React.CSSProperties = { ...statusBaseStyle, color: '#b91c1c', background: '#fef2f2', borderColor: '#fecaca' };
@@ -99,11 +186,23 @@ const gridStyle: React.CSSProperties = {
   display: 'flex',
   gap: '1rem',
   alignItems: 'stretch',
-  flexWrap: 'wrap', // Responsive wrapping on smaller screens
+  flexWrap: 'wrap',
 };
 
-const columnStyle: React.CSSProperties = {
-  flex: '1 1 320px', // Min-width 320px for columns, expands equally
+const leftColStyle: React.CSSProperties = {
+  flex: '1 1 320px',
+  display: 'flex',
+  flexDirection: 'column',
+};
+
+const midColStyle: React.CSSProperties = {
+  flex: '1.4 1 380px',
+  display: 'flex',
+  flexDirection: 'column',
+};
+
+const rightColStyle: React.CSSProperties = {
+  flex: '1 1 280px',
   display: 'flex',
   flexDirection: 'column',
 };

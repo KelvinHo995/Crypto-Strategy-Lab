@@ -80,6 +80,13 @@ export const AVAILABLE_STRATEGIES_META: StrategyInfo[] = [
       smcLookback: { type: 'number', default: 10, description: 'Swing high/low lookback window' },
     },
   },
+  {
+    name: 'Sentiment',
+    description: 'News Sentiment Filter - Uses live LLM news sentiment observations as an entry/trend filter.',
+    parameters: {
+      sentimentThreshold: { type: 'number', default: 0.7, description: 'Minimum sentiment confidence score (0.0 to 1.0)' },
+    },
+  },
 ];
 
 // 2. Default instantiated single strategies (Active indicators in the workspace)
@@ -124,6 +131,14 @@ export const DEFAULT_SINGLE_STRATEGIES: SingleStrategyInstance[] = [
     params: { srWindow: 20, srTolerance: 0.005 },
     currentSignal: 'HOLD',
   },
+  {
+    id: 'sentiment-1',
+    name: 'News Sentiment (FinBERT)',
+    type: 'Sentiment',
+    description: 'Live news sentiment filter (min score 0.7)',
+    params: { sentimentThreshold: 0.7 },
+    currentSignal: 'BUY',
+  },
 ];
 
 // 3. Combination Presets
@@ -144,6 +159,12 @@ export const COMPOSITE_PRESETS: CompositePreset[] = [
     name: 'Triple Confirm (MA + RSI + S/R)',
     strategies: ['ma-20', 'rsi-14', 'sr-3'],
     weights: { 'ma-20': 0.3, 'rsi-14': 0.4, 'sr-3': 0.3 },
+    policy: 'weighted',
+  },
+  {
+    name: 'Sentiment + Momentum (RSI + News)',
+    strategies: ['rsi-14', 'sentiment-1'],
+    weights: { 'rsi-14': 0.5, 'sentiment-1': 0.5 },
     policy: 'weighted',
   },
 ];

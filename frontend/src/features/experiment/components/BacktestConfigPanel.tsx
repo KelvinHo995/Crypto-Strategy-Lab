@@ -3,6 +3,8 @@ import { fetchMarkets } from '../../../shared/api';
 import { useAppMode } from '../../../shared/auth';
 import { DEFAULT_MARKETS } from '../../market/services/marketCatalog';
 import type { MarketInfo } from '../../../types/candle';
+import type { StrategyInstance } from '../../../types/backtest';
+import { useExperimentStore } from '../../../shared/stores/useExperimentStore';
 
 interface BacktestConfigPanelProps {
   onRunBacktest: (config: {
@@ -13,6 +15,8 @@ interface BacktestConfigPanelProps {
     capital: number;
     fee: number;
     slippage: number;
+    instances: StrategyInstance[];
+    policy?: 'majority' | 'weighted';
   }) => void;
   isLoading: boolean;
 }
@@ -22,11 +26,47 @@ function dateInputValue(offsetDays = 0): string {
   return date.toISOString().slice(0, 10);
 }
 
+const QUICK_STRATEGIES: Record<string, { label: string; instances: StrategyInstance[]; policy: 'majority' | 'weighted' }> = {
+  MA: {
+    label: 'MA Crossover (20/50)',
+    instances: [{ type: 'MA', params: { maShortWindow: 20, maLongWindow: 50 }, weight: 1 }],
+    policy: 'majority',
+  },
+  RSI: {
+    label: 'RSI Oscillator (14, 70/30)',
+    instances: [{ type: 'RSI', params: { rsiPeriod: 14, rsiOverbought: 70, rsiOversold: 30 }, weight: 1 }],
+    policy: 'majority',
+  },
+  Bollinger: {
+    label: 'Bollinger Bands (20, 2.0)',
+    instances: [{ type: 'Bollinger', params: { bollingerPeriod: 20, bollingerStdDev: 2 }, weight: 1 }],
+    policy: 'majority',
+  },
+  SR: {
+    label: 'Support / Resistance Pivot (20)',
+    instances: [{ type: 'SR', params: { srWindow: 20, srTolerance: 0.005 }, weight: 1 }],
+    policy: 'majority',
+  },
+  SMC: {
+    label: 'Smart Money Concepts (SMC 10)',
+    instances: [{ type: 'SMC', params: { smcLookback: 10 }, weight: 1 }],
+    policy: 'majority',
+  },
+  Sentiment: {
+    label: 'News Sentiment Filter (FinBERT 0.7)',
+    instances: [{ type: 'Sentiment', params: { sentimentThreshold: 0.7 }, weight: 1 }],
+    policy: 'majority',
+  },
+};
+
 export function BacktestConfigPanel({
   onRunBacktest,
   isLoading,
 }: BacktestConfigPanelProps) {
   const mode = useAppMode();
+  const builderInstances = useExperimentStore((state) => state.builderInstances);
+  const builderPolicy = useExperimentStore((state) => state.builderPolicy);
+
   const [markets, setMarkets] = useState<MarketInfo[]>(DEFAULT_MARKETS);
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [timeframe, setTimeframe] = useState('5m');
@@ -35,14 +75,30 @@ export function BacktestConfigPanel({
   const [capital, setCapital] = useState(10000);
   const [fee, setFee] = useState(0.1); // 0.1% standard exchange fee
   const [slippage, setSlippage] = useState(5); // 5 bps standard slippage
+  const [selectedStrategyKey, setSelectedStrategyKey] = useState<string>('builder');
 
   useEffect(() => {
     if (mode !== 'LIVE') return;
     fetchMarkets().then(setMarkets).catch(() => setMarkets(DEFAULT_MARKETS));
   }, [mode]);
 
+  const builderSummary = builderInstances.map((i) => i.type).join(' + ') || 'Composite Strategy';
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    let instances: StrategyInstance[];
+    let policy: 'majority' | 'weighted' = 'majority';
+
+    if (selectedStrategyKey === 'builder') {
+      instances = builderInstances.length > 0 ? builderInstances : [{ type: 'MA', params: { maShortWindow: 20, maLongWindow: 50 }, weight: 1 }];
+      policy = builderPolicy;
+    } else if (QUICK_STRATEGIES[selectedStrategyKey]) {
+      instances = QUICK_STRATEGIES[selectedStrategyKey].instances;
+      policy = QUICK_STRATEGIES[selectedStrategyKey].policy;
+    } else {
+      instances = [{ type: 'MA', params: { maShortWindow: 20, maLongWindow: 50 }, weight: 1 }];
+    }
+
     onRunBacktest({
       symbol,
       timeframe,
@@ -51,6 +107,8 @@ export function BacktestConfigPanel({
       capital,
       fee,
       slippage,
+      instances,
+      policy,
     });
   };
 
@@ -59,6 +117,26 @@ export function BacktestConfigPanel({
       <h3 style={titleStyle}>Run Simulation</h3>
       <form onSubmit={handleSubmit} style={formStyle}>
         <div style={formGridStyle}>
+          {/* Strategy / Preset Selector */}
+          <div style={{ ...formGroupStyle, gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Strategy Configuration</label>
+            <select
+              value={selectedStrategyKey}
+              onChange={(e) => setSelectedStrategyKey(e.target.value)}
+              style={{ ...selectStyle, fontWeight: '600' }}
+              disabled={isLoading}
+            >
+              <option value="builder">★ Tổ hợp từ Strategy Builder ({builderSummary})</option>
+              <optgroup label="Single Indicator Strategies">
+                {Object.entries(QUICK_STRATEGIES).map(([key, item]) => (
+                  <option key={key} value={key}>
+                    {item.label}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
+
           {/* Pair selector */}
           <div style={formGroupStyle}>
             <label style={labelStyle}>Trading Pair</label>

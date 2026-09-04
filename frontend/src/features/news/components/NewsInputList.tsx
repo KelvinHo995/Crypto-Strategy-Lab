@@ -3,10 +3,17 @@ import type { NewsItem } from '../../../types/news';
 
 interface NewsInputListProps {
   news: NewsItem[];
+  selectedNewsId?: string;
+  onSelectNews?: (item: NewsItem) => void;
 }
 
-export function NewsInputList({ news }: NewsInputListProps) {
+export function NewsInputList({
+  news,
+  selectedNewsId,
+  onSelectNews,
+}: NewsInputListProps) {
   const [now] = useState(() => Date.now());
+
   const getFormattedTime = (timestamp: number): string => {
     const diffMins = Math.floor((now - timestamp) / (60 * 1000));
     if (diffMins < 1) return 'Just now';
@@ -23,91 +30,122 @@ export function NewsInputList({ news }: NewsInputListProps) {
       case 'NEGATIVE':
         return { color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: '#ef4444' };
       default:
-        return { color: '#94a3b8', backgroundColor: 'rgba(148, 163, 184, 0.1)', borderColor: '#475569' };
+        return { color: '#94a3b8', backgroundColor: 'rgba(148, 163, 184, 0.1)', borderColor: '#cbd5e1' };
     }
   };
 
-  const getAssetBadgeStyle = (title: string): React.CSSProperties => {
-    let bgColor = 'rgba(245, 158, 11, 0.15)';
-    let color = '#f59e0b';
-
-    if (title.toUpperCase().includes('ETH') || title.toUpperCase().includes('ETHEREUM')) {
-      bgColor = 'rgba(99, 102, 241, 0.15)';
-      color = '#6366f1';
-    } else if (title.toUpperCase().includes('SOL') || title.toUpperCase().includes('SOLANA')) {
-      bgColor = 'rgba(6, 182, 212, 0.15)';
-      color = '#2563eb';
-    } else if (title.toUpperCase().includes('BNB')) {
-      bgColor = 'rgba(234, 179, 8, 0.15)';
-      color = '#eab308';
+  const detectCoinTag = (title: string, content = ''): { tag: string; color: string; bg: string } => {
+    const text = (title + ' ' + content).toUpperCase();
+    if (text.includes('ETH') || text.includes('ETHEREUM')) {
+      return { tag: 'ETH', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.15)' };
     }
-
-    return {
-      fontSize: '0.6rem',
-      fontWeight: '700',
-      backgroundColor: bgColor,
-      color,
-      padding: '0.1rem 0.3rem',
-      borderRadius: '4px',
-      marginRight: '0.5rem',
-      display: 'inline-block',
-      verticalAlign: 'middle',
-    };
+    if (text.includes('SOL') || text.includes('SOLANA')) {
+      return { tag: 'SOL', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.15)' };
+    }
+    if (text.includes('BNB') || text.includes('BINANCE')) {
+      return { tag: 'BNB', color: '#eab308', bg: 'rgba(234, 179, 8, 0.15)' };
+    }
+    if (text.includes('XRP') || text.includes('RIPPLE')) {
+      return { tag: 'XRP', color: '#0ea5e9', bg: 'rgba(14, 165, 233, 0.15)' };
+    }
+    if (text.includes('ADA') || text.includes('CARDANO')) {
+      return { tag: 'ADA', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)' };
+    }
+    if (text.includes('AVAX') || text.includes('AVALANCHE')) {
+      return { tag: 'AVAX', color: '#e11d48', bg: 'rgba(225, 29, 72, 0.15)' };
+    }
+    if (text.includes('DOGE') || text.includes('DOGECOIN')) {
+      return { tag: 'DOGE', color: '#d97706', bg: 'rgba(217, 119, 6, 0.15)' };
+    }
+    return { tag: 'BTC', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)' };
   };
 
   return (
     <div style={panelContainerStyle}>
       {/* Header */}
       <div style={headerStyle}>
-        <h4 style={titleStyle}>Input Feed News</h4>
+        <div>
+          <h4 style={titleStyle}>Input Feed News</h4>
+          <span style={{ fontSize: '0.68rem', color: '#64748b' }}>
+            {news.length} article{news.length === 1 ? '' : 's'} in view
+          </span>
+        </div>
         <span style={timeStyle}>Updated: {new Date().toTimeString().split(' ')[0]}</span>
       </div>
 
       {/* News List */}
       <div style={listStyle}>
-        {news.map((item) => (
-          <div key={item.id} style={cardStyle}>
-            {/* Publisher & Time */}
-            <div style={metaRowStyle}>
-              <span style={sourceStyle}>{item.source}</span>
-              <span style={dateStyle}>{getFormattedTime(item.publishedAt)}</span>
-            </div>
-
-            {/* Title */}
-            <h5 style={newsTitleStyle}>
-              <span style={getAssetBadgeStyle(item.title)}>
-                {item.title.toUpperCase().includes('ETH') ? 'ETH' : item.title.toUpperCase().includes('SOL') ? 'SOL' : 'BTC'}
-              </span>
-              {item.url ? (
-                <a href={item.url} target="_blank" rel="noopener noreferrer" style={titleLinkStyle}>
-                  {item.title}
-                </a>
-              ) : (
-                item.title
-              )}
-            </h5>
-
-            {/* Summary */}
-            <p style={summaryStyle}>{item.content}</p>
-
-            {/* Sentiment DTO Analytics Badge */}
-            {item.sentiment && (
-              <div style={sentimentRowStyle}>
-                <div style={{display:'flex',gap:'0.35rem',alignItems:'center'}}>
-                  <span style={{ ...sourceBadgeStyle, ...(item.analysisSource === 'LIVE' ? liveSourceStyle : demoSourceStyle) }}>
-                    {item.analysisSource === 'LIVE' ? 'LIVE' : 'DEMO'}
-                  </span>
-                  <span style={{ ...badgeStyle, ...getSentimentStyle(item.sentiment.sentiment) }}>
-                    {item.sentiment.sentiment} ({(item.sentiment.score * 100).toFixed(0)}%)
-                  </span>
-                </div>
-                <span style={modelMetaStyle} title="MLOps Traceability Model Information">
-                  {item.sentiment.model.name} ({item.sentiment.model.version})
-                </span>
-              </div>
-            )}
+        {news.length === 0 ? (
+          <div style={emptyStyle}>
+            No articles match the selected source or asset filter.
           </div>
-        ))}
+        ) : (
+          news.map((item) => {
+            const isSelected = selectedNewsId === item.id;
+            const coin = detectCoinTag(item.title, item.content);
+
+            return (
+              <div
+                key={item.id}
+                onClick={() => onSelectNews?.(item)}
+                style={isSelected ? selectedCardStyle : cardStyle}
+              >
+                {/* Publisher & Time */}
+                <div style={metaRowStyle}>
+                  <span style={sourceStyle}>{item.source}</span>
+                  <span style={dateStyle}>{getFormattedTime(item.publishedAt)}</span>
+                </div>
+
+                {/* Title */}
+                <h5 style={newsTitleStyle}>
+                  <span
+                    style={{
+                      fontSize: '0.62rem',
+                      fontWeight: '700',
+                      backgroundColor: coin.bg,
+                      color: coin.color,
+                      padding: '0.1rem 0.35rem',
+                      borderRadius: '4px',
+                      marginRight: '0.45rem',
+                      display: 'inline-block',
+                      verticalAlign: 'middle',
+                    }}
+                  >
+                    {coin.tag}
+                  </span>
+                  {item.title}
+                </h5>
+
+                {/* Summary / Excerpt */}
+                {item.content && (
+                  <p style={summaryStyle}>{item.content}</p>
+                )}
+
+                {/* Sentiment DTO Analytics Badge */}
+                {item.sentiment && (
+                  <div style={sentimentRowStyle}>
+                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                      <span
+                        style={{
+                          ...sourceBadgeStyle,
+                          ...(item.analysisSource === 'LIVE' ? liveSourceStyle : demoSourceStyle),
+                        }}
+                      >
+                        {item.analysisSource === 'LIVE' ? 'LIVE' : 'DEMO'}
+                      </span>
+                      <span style={{ ...badgeStyle, ...getSentimentStyle(item.sentiment.sentiment) }}>
+                        {item.sentiment.sentiment} ({(item.sentiment.score * 100).toFixed(0)}%)
+                      </span>
+                    </div>
+                    <span style={modelMetaStyle} title="MLOps Traceability Model Information">
+                      {item.sentiment.model.name} ({item.sentiment.model.version})
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -133,13 +171,13 @@ const headerStyle: React.CSSProperties = {
   alignItems: 'center',
   borderBottom: '1px solid #e2e8f0',
   paddingBottom: '0.5rem',
-  marginBottom: '1rem',
+  marginBottom: '0.85rem',
 };
 
 const titleStyle: React.CSSProperties = {
   fontSize: '0.85rem',
   fontWeight: '700',
-  color: '#cbd5e1',
+  color: '#0f172a',
   margin: 0,
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
@@ -161,10 +199,29 @@ const listStyle: React.CSSProperties = {
 };
 
 const cardStyle: React.CSSProperties = {
-  backgroundColor: '#e2e8f0',
-  border: '1px solid #cbd5e1',
+  backgroundColor: '#f8fafc',
+  border: '1px solid #e2e8f0',
   borderRadius: '6px',
   padding: '0.75rem',
+  cursor: 'pointer',
+  transition: 'all 0.15s ease',
+};
+
+const selectedCardStyle: React.CSSProperties = {
+  backgroundColor: 'rgba(59, 130, 246, 0.05)',
+  border: '1.5px solid #2563eb',
+  borderRadius: '6px',
+  padding: '0.75rem',
+  cursor: 'pointer',
+  boxShadow: '0 0 0 2px rgba(37, 99, 235, 0.1)',
+  transition: 'all 0.15s ease',
+};
+
+const emptyStyle: React.CSSProperties = {
+  padding: '2rem 1rem',
+  textAlign: 'center',
+  fontSize: '0.8rem',
+  color: '#64748b',
 };
 
 const metaRowStyle: React.CSSProperties = {
@@ -175,7 +232,7 @@ const metaRowStyle: React.CSSProperties = {
 };
 
 const sourceStyle: React.CSSProperties = {
-  color: '#3b82f6',
+  color: '#2563eb',
   fontWeight: '700',
 };
 
@@ -184,26 +241,31 @@ const dateStyle: React.CSSProperties = {
 };
 
 const newsTitleStyle: React.CSSProperties = {
-  fontSize: '0.85rem',
+  fontSize: '0.82rem',
   fontWeight: '700',
   color: '#0f172a',
-  margin: '0 0 0.4rem 0',
+  margin: '0 0 0.35rem 0',
   lineHeight: '1.3',
 };
 
 const summaryStyle: React.CSSProperties = {
-  fontSize: '0.75rem',
-  color: '#94a3b8',
-  margin: '0 0 0.6rem 0',
+  fontSize: '0.73rem',
+  color: '#64748b',
+  margin: '0 0 0.5rem 0',
   lineHeight: '1.4',
+  display: '-webkit-box',
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: 'vertical',
+  overflow: 'hidden',
 };
 
 const sentimentRowStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  borderTop: '1px dashed #cbd5e1',
-  paddingTop: '0.5rem',
+  borderTop: '1px dashed #e2e8f0',
+  paddingTop: '0.45rem',
+  marginTop: '0.2rem',
 };
 
 const badgeStyle: React.CSSProperties = {
@@ -214,7 +276,13 @@ const badgeStyle: React.CSSProperties = {
   border: '1px solid transparent',
 };
 
-const sourceBadgeStyle: React.CSSProperties = { fontSize: '0.58rem', fontWeight: 800, padding: '0.1rem 0.3rem', borderRadius: '4px' };
+const sourceBadgeStyle: React.CSSProperties = {
+  fontSize: '0.58rem',
+  fontWeight: 800,
+  padding: '0.1rem 0.3rem',
+  borderRadius: '4px',
+};
+
 const liveSourceStyle: React.CSSProperties = { color: '#047857', background: '#d1fae5' };
 const demoSourceStyle: React.CSSProperties = { color: '#92400e', background: '#fef3c7' };
 
@@ -222,9 +290,4 @@ const modelMetaStyle: React.CSSProperties = {
   fontSize: '0.65rem',
   color: '#64748b',
   fontFamily: 'monospace',
-};
-
-const titleLinkStyle: React.CSSProperties = {
-  color: 'inherit',
-  textDecoration: 'none',
 };

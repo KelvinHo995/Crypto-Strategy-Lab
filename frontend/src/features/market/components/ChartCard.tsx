@@ -57,10 +57,41 @@ export function ChartCard({
       const apiCandles = await fetchCandles(symbol, timeframe, from, to, 500);
       if (apiCandles.length < 20) throw new Error('insufficient candles');
       const closes = apiCandles.map(c => c.close);
-      const ma = closes.map((_, i) => i < 19 ? Number.NaN : closes.slice(i - 19, i + 1).reduce((a,b)=>a+b,0) / 20);
+      const period = 20;
+      const multiplier = 2;
+      const ma: number[] = [];
+      const upper: number[] = [];
+      const basis: number[] = [];
+      const lower: number[] = [];
+
+      for (let i = 0; i < closes.length; i++) {
+        if (i < period - 1) {
+          ma.push(Number.NaN);
+          upper.push(Number.NaN);
+          basis.push(Number.NaN);
+          lower.push(Number.NaN);
+          continue;
+        }
+        let sum = 0;
+        for (let j = 0; j < period; j++) {
+          sum += closes[i - j];
+        }
+        const avg = sum / period;
+        ma.push(avg);
+        basis.push(avg);
+
+        let varianceSum = 0;
+        for (let j = 0; j < period; j++) {
+          varianceSum += Math.pow(closes[i - j] - avg, 2);
+        }
+        const stdDev = Math.sqrt(varianceSum / period);
+        upper.push(avg + multiplier * stdDev);
+        lower.push(avg - multiplier * stdDev);
+      }
+
       setCandles(apiCandles);
       setMa20Line(ma);
-      setBbands(undefined);
+      setBbands({ upper, basis, lower });
       setSrZones([]);
       setMarkers([]);
       setDataMode('API');
