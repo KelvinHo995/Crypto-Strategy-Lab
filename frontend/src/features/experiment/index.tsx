@@ -5,10 +5,11 @@ import { ProvenanceModal } from './components/ProvenanceModal';
 import { PerformanceSummaryCard } from './components/PerformanceSummaryCard';
 import { TradeHistoryTable } from './components/TradeHistoryTable';
 import { MOCK_EXPERIMENTS, generateMockTrades } from './services/mockExperimentData';
-import type { ExperimentResult, Trade } from '../../types/backtest';
 import { fetchExperiment, fetchExperiments, startSearch } from '../../shared/api';
 import { useWebSocketSubscription } from '../../shared/hooks';
 import type { WSSearchProgressPayload } from '../../types/websocket';
+import type { ExperimentResult } from '../../types/backtest';
+import { useExperimentStore, formatExperimentTitle } from '../../shared/stores/useExperimentStore';
 
 // Matches the worker's own worst-case retry/backoff window (up to 3 attempts,
 // backoff climbing toward 30s each) — a shorter timeout would give up on a
@@ -18,20 +19,31 @@ const RUN_TIMEOUT_MS = 90_000;
 export function ExperimentDashboard() {
   const [experiments, setExperiments] = useState<ExperimentResult[]>(MOCK_EXPERIMENTS);
   const [selectedExpForMeta, setSelectedExpForMeta] = useState<ExperimentResult | null>(null);
-  const [activeExp, setActiveExp] = useState<ExperimentResult | null>(MOCK_EXPERIMENTS[0]); // Default load first
-  const [activeTrades, setActiveTrades] = useState<Trade[]>(
-    MOCK_EXPERIMENTS[0] ? generateMockTrades(MOCK_EXPERIMENTS[0].id, MOCK_EXPERIMENTS[0].tradeCount) : []
-  );
-  
+
+  const activeExp = useExperimentStore((state) => state.activeExperiment) ?? MOCK_EXPERIMENTS[0];
+  const activeTrades = useExperimentStore((state) => state.activeTrades);
+  const setActiveExp = useExperimentStore((state) => state.setActiveExperiment);
+  const setActiveTrades = useExperimentStore((state) => state.setActiveTrades);
+  const loadExperimentToChart = useExperimentStore((state) => state.loadExperimentToChart);
+
   const [isLoading, setIsLoading] = useState(false);
   const activeSearchId = useRef<string | null>(null);
   const runTimeout = useRef<number | null>(null);
 
+  useEffect(() => {
+    if (activeTrades.length === 0 && activeExp) {
+      setActiveTrades(generateMockTrades(activeExp.id, activeExp.tradeCount || 30));
+    }
+  }, [activeExp, activeTrades.length, setActiveTrades]);
+
   const applyExperiments = useCallback((items: ExperimentResult[]) => {
     if (items.length === 0) return;
     setExperiments(items);
-    setActiveExp(current => current ? items.find(item => item.id === current.id) ?? items[0] : items[0]);
-  }, []);
+    if (!useExperimentStore.getState().activeExperiment) {
+      setActiveExp(items[0]);
+      setActiveTrades(generateMockTrades(items[0].id, items[0].tradeCount || 30));
+    }
+  }, [setActiveExp, setActiveTrades]);
 
   useEffect(() => {
     fetchExperiments().then(applyExperiments).catch(() => undefined);
@@ -55,14 +67,14 @@ export function ExperimentDashboard() {
     try {
       const result = await fetchExperiment(id);
       setActiveExp(result);
-      setActiveTrades(generateMockTrades(result.id, result.tradeCount));
+      setActiveTrades(generateMockTrades(result.id, result.tradeCount || 30));
       setExperiments(current => current.some(item => item.id === result.id)
         ? current.map(item => item.id === result.id ? result : item)
         : [result, ...current]);
     } catch {
       alert('Backtest đã hoàn tất nhưng không tải được kết quả — kiểm tra leaderboard.');
     }
-  }, []);
+  }, [setActiveExp, setActiveTrades]);
 
   const handleProgress = useCallback((progress: WSSearchProgressPayload) => {
     if (!activeSearchId.current || progress.searchId !== activeSearchId.current) return;
@@ -82,7 +94,6 @@ export function ExperimentDashboard() {
     fromDate: string;
     toDate: string;
     capital: number;
-    fee: number;
   }) => {
     setIsLoading(true);
     try {
@@ -112,27 +123,14 @@ export function ExperimentDashboard() {
   };
 
   const handleLoadToChart = (exp: ExperimentResult) => {
-    setActiveExp(exp);
-    setActiveTrades(generateMockTrades(exp.id, exp.tradeCount));
-    alert(`Loaded Strategy parameters from #${exp.id} to Chart Canvas and Performance Summary.`);
+    const trades = generateMockTrades(exp.id, exp.tradeCount || 30);
+    loadExperimentToChart(exp, trades);
   };
 
   const handleReplicate = (exp: ExperimentResult) => {
     setSelectedExpForMeta(null);
-    alert(`Replicated Strategy combination [${exp.instances.map(i => i.type).join(' + ')}] into Builder state!`);
+    alert(`Replicated Strategy combination [${formatExperimentTitle(exp)}] into Builder state!`);
     // In production, this would sync with a global strategy builder state/store
-  };
-
-  const handleHoverTrade = (trade: Trade | null) => {
-    if (trade) {
-      console.log(`Hovering Trade: Exit Price: $${trade.exitPrice}, Profit: $${trade.profit}`);
-      // This hook is wired up to dispatch highlighting coordinates to the active chart series in production
-    }
-  };
-
-  const handleClickTrade = (trade: Trade) => {
-    console.log(`Clicked Trade: Entry Price: $${trade.entryPrice}, Exit Price: $${trade.exitPrice}`);
-    // Zoom/Scroll the active chart timeframe to this trade's entryTime
   };
 
   return (
@@ -148,7 +146,7 @@ export function ExperimentDashboard() {
           <div style={summaryColStyle}>
             <div style={summaryHeaderStyle}>
               <h4>Active Simulation Summary: <span style={activeIdStyle}>{activeExp.id}</span></h4>
-              <span style={activeStrategiesStyle}>{activeExp.instances.map(i => i.type).join(' + ')}</span>
+              <span style={activeStrategiesStyle}>{formatExperimentTitle(activeExp)}</span>
             </div>
             <PerformanceSummaryCard
               profit={activeExp.totalProfit}
@@ -176,11 +174,7 @@ export function ExperimentDashboard() {
       {/* 3. Bottom Section: Trade History log */}
       {activeTrades.length > 0 && (
         <div style={tradesSectionStyle}>
-          <TradeHistoryTable
-            trades={activeTrades}
-            onHoverTrade={handleHoverTrade}
-            onClickTrade={handleClickTrade}
-          />
+          <TradeHistoryTable trades={activeTrades} />
         </div>
       )}
 

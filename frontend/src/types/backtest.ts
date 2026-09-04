@@ -51,6 +51,8 @@ export interface StartSearchRequest {
   capital: number;
   instances: StrategyInstance[];
   policy?: 'majority' | 'weighted';
+  strategies?: string[];
+  params?: Record<string, unknown>;
 }
 
 export interface StartSearchResponse {

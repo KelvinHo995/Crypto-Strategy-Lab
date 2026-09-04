@@ -11,7 +11,6 @@ interface BacktestConfigPanelProps {
     fromDate: string;
     toDate: string;
     capital: number;
-    fee: number;
   }) => void;
   isLoading: boolean;
 }
@@ -32,7 +31,6 @@ export function BacktestConfigPanel({
   const [fromDate, setFromDate] = useState(() => dateInputValue(-90));
   const [toDate, setToDate] = useState(() => dateInputValue());
   const [capital, setCapital] = useState(10000);
-  const [fee, setFee] = useState(0.1); // 0.1% standard exchange fee
 
   useEffect(() => {
     if (mode !== 'LIVE') return;
@@ -47,7 +45,6 @@ export function BacktestConfigPanel({
       fromDate,
       toDate,
       capital,
-      fee,
     });
   };
 
@@ -126,21 +123,6 @@ export function BacktestConfigPanel({
             />
           </div>
 
-          {/* Trading fee */}
-          <div style={formGroupStyle}>
-            <label style={labelStyle}>Maker/Taker Fee (%)</label>
-            <input
-              type="number"
-              value={fee}
-              min="0"
-              max="2"
-              step="0.01"
-              onChange={(e) => setFee(parseFloat(e.target.value))}
-              style={inputStyle}
-              disabled={isLoading}
-              required
-            />
-          </div>
         </div>
 
         {/* Submit button */}

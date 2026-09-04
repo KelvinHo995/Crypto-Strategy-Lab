@@ -6,6 +6,7 @@ import { fetchMarketDataDTO, generateNextTick } from '../services/mockMarketData
 import { fetchCandles } from '../../../shared/api';
 import { wsManager } from '../../../shared/ws';
 import { useAppMode } from '../../../shared/auth';
+import { useExperimentStore, formatExperimentTitle } from '../../../shared/stores/useExperimentStore';
 
 interface ChartCardProps {
   id: number;
@@ -186,14 +187,20 @@ export function ChartCard({
 
 
 
+  const activeExperiment = useExperimentStore((s) => s.activeExperiment);
+  const globalMarkers = useExperimentStore((s) => s.activeMarkers);
+
   // Get properties for header
   const latestCandle = candles[candles.length - 1];
   const currentPrice = latestCandle ? latestCandle.close : 0;
-  
+
+  // Use global markers from loaded experiment if available, otherwise fallback to local mock markers
+  const effectiveMarkers = globalMarkers.length > 0 ? globalMarkers : markers;
+
   // Find last trade signal
-  const lastSignal = [...markers]
+  const lastSignal = [...effectiveMarkers]
     .reverse()
-    .find(m => m.text === 'BUY' || m.text === 'SELL');
+    .find(m => m.text.includes('BUY') || m.text.includes('SELL'));
 
   return (
     <div style={cardContainerStyle}>
@@ -225,9 +232,16 @@ export function ChartCard({
 
         {/* Live Info & Control Buttons */}
         <div style={rightHeaderStyle}>
+          {/* Active Strategy Loaded Badge */}
+          {activeExperiment && (
+            <span style={strategyLoadedBadgeStyle} title={`Loaded strategy #${activeExperiment.id} (${activeExperiment.policy})`}>
+              Strategy: {formatExperimentTitle(activeExperiment)}
+            </span>
+          )}
+
           {/* Last Signal Badge */}
           {lastSignal && (
-            <span style={lastSignal.text === 'BUY' ? buyBadgeStyle : sellBadgeStyle}>
+            <span style={lastSignal.text.startsWith('BUY') ? buyBadgeStyle : sellBadgeStyle}>
               Last: {lastSignal.text}
             </span>
           )}
@@ -261,7 +275,7 @@ export function ChartCard({
             ma20Line={ma20Line}
             bbands={bbands}
             srZones={srZones}
-            markers={markers}
+            markers={effectiveMarkers}
           />
         ) : (
           <div style={loadingStyle}>{loadError || 'Loading historical data...'}</div>
@@ -365,6 +379,16 @@ const getPriceStyle = (trend: 'UP' | 'DOWN' | 'NEUTRAL'): React.CSSProperties =>
     textAlign: 'right',
     transition: 'color 0.15s ease',
   };
+};
+
+const strategyLoadedBadgeStyle: React.CSSProperties = {
+  backgroundColor: 'rgba(37, 99, 235, 0.12)',
+  border: '1px solid #2563eb',
+  color: '#2563eb',
+  fontSize: '0.7rem',
+  fontWeight: '700',
+  padding: '0.15rem 0.45rem',
+  borderRadius: '4px',
 };
 
 const buyBadgeStyle: React.CSSProperties = {
