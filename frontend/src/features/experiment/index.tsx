@@ -45,8 +45,16 @@ export function ExperimentDashboard() {
   const loadExperimentToChart = useExperimentStore((state) => state.loadExperimentToChart);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimeout = useRef<number | null>(null);
   const activeSearchId = useRef<string | null>(null);
   const runTimeout = useRef<number | null>(null);
+
+  const showToast = useCallback((message: string) => {
+    if (toastTimeout.current !== null) window.clearTimeout(toastTimeout.current);
+    setToast(message);
+    toastTimeout.current = window.setTimeout(() => setToast(null), 4000);
+  }, []);
 
   useEffect(() => {
     if (activeTrades.length === 0 && activeExp) {
@@ -147,17 +155,18 @@ export function ExperimentDashboard() {
   const handleLoadToChart = async (exp: ExperimentResult) => {
     const trades = await loadTradesFor(exp);
     loadExperimentToChart(exp, trades);
-    alert(`Loaded #${exp.id} (${formatExperimentTitle(exp)}) onto the chart — open the Market tab to see it.`);
+    showToast(`Loaded #${exp.id} (${formatExperimentTitle(exp)}) onto the chart — open the Market tab to see it.`);
   };
 
   const handleReplicate = (exp: ExperimentResult) => {
     setSelectedExpForMeta(null);
-    alert(`Replicated Strategy combination [${formatExperimentTitle(exp)}] into Builder state!`);
+    showToast(`Replicated strategy combination [${formatExperimentTitle(exp)}] into Builder state.`);
     // In production, this would sync with a global strategy builder state/store
   };
 
   return (
     <div style={dashboardContainerStyle}>
+      {toast && <div style={toastStyle}>{toast}</div>}
       {/* 1. Top Section: Run Simulation & Performance Overview */}
       <div style={topSectionStyle}>
         <div style={configColStyle}>
@@ -198,8 +207,13 @@ export function ExperimentDashboard() {
         <div style={tradesSectionStyle}>
           {activeTrades.length > 0 ? (
             <TradeHistoryTable trades={activeTrades} />
+          ) : activeExp.tradeCount > 0 ? (
+            <p style={noTradesStyle}>
+              This run reported {activeExp.tradeCount} trade{activeExp.tradeCount === 1 ? '' : 's'}, but predates
+              per-trade history tracking — only the aggregate metrics above were kept. Re-run it to get real trade detail.
+            </p>
           ) : (
-            <p style={noTradesStyle}>No trade history recorded for this run.</p>
+            <p style={noTradesStyle}>This strategy never traded during the backtest window.</p>
           )}
         </div>
       )}
@@ -297,4 +311,19 @@ const noTradesStyle: React.CSSProperties = {
   borderRadius: '8px',
   padding: '1rem',
   margin: 0,
+};
+
+const toastStyle: React.CSSProperties = {
+  position: 'fixed',
+  bottom: '1.5rem',
+  right: '1.5rem',
+  maxWidth: '360px',
+  fontSize: '0.8rem',
+  color: '#047857',
+  backgroundColor: '#ecfdf5',
+  border: '1px solid #a7f3d0',
+  borderRadius: '8px',
+  padding: '0.65rem 0.9rem',
+  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)',
+  zIndex: 1000,
 };

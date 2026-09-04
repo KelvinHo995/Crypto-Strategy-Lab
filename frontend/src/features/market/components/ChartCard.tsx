@@ -275,6 +275,14 @@ export function ChartCard({
           {activeExperiment && (
             <span style={strategyLoadedBadgeStyle} title={`Loaded strategy #${activeExperiment.id} (${activeExperiment.policy})`}>
               Strategy: {formatExperimentTitle(activeExperiment)}
+              {activeExperiment.tradeCount > 0 && globalMarkers.length === 0 && (
+                <span
+                  style={noMarkersHintStyle}
+                  title="This run reported trades but predates per-trade history tracking — no real markers to show. Re-run it to get real trade markers."
+                >
+                  ⚠ no markers
+                </span>
+              )}
               <button
                 type="button"
                 onClick={clearExperiment}
@@ -451,6 +459,13 @@ const clearStrategyBtnStyle: React.CSSProperties = {
   fontWeight: '700',
   padding: 0,
   lineHeight: 1,
+};
+
+const noMarkersHintStyle: React.CSSProperties = {
+  color: '#b45309',
+  fontSize: '0.65rem',
+  fontWeight: '700',
+  cursor: 'help',
 };
 
 const buyBadgeStyle: React.CSSProperties = {
