@@ -51,6 +51,15 @@ func (r *CachedRepository) ListBySearch(ctx context.Context, searchID string) ([
 	return r.next.ListBySearch(ctx, searchID)
 }
 
+// Trade reads/writes aren't cached either — same reasoning as ListBySearch.
+func (r *CachedRepository) SaveTrades(ctx context.Context, experimentID string, trades []Trade) error {
+	return r.next.SaveTrades(ctx, experimentID, trades)
+}
+
+func (r *CachedRepository) ListTrades(ctx context.Context, experimentID string) ([]Trade, error) {
+	return r.next.ListTrades(ctx, experimentID)
+}
+
 func (r *CachedRepository) List(ctx context.Context) ([]Result, error) {
 	r.mu.Lock()
 	generation := r.generation

@@ -11,7 +11,8 @@ import (
 )
 
 type recordingRepo struct {
-	saves chan experiment.Result
+	saves      chan experiment.Result
+	tradeSaves chan []experiment.Trade
 }
 
 type holdStrategy struct{}
@@ -20,7 +21,7 @@ func (holdStrategy) Name() string                            { return "Hold" }
 func (holdStrategy) Analyze([]market.Candle) strategy.Signal { return strategy.Hold }
 
 func newRecordingRepo() *recordingRepo {
-	return &recordingRepo{saves: make(chan experiment.Result, 10)}
+	return &recordingRepo{saves: make(chan experiment.Result, 10), tradeSaves: make(chan []experiment.Trade, 10)}
 }
 
 func (r *recordingRepo) Save(_ context.Context, res experiment.Result) error {
@@ -32,6 +33,13 @@ func (r *recordingRepo) Get(context.Context, string) (experiment.Result, error) 
 }
 func (r *recordingRepo) List(context.Context) ([]experiment.Result, error) { return nil, nil }
 func (r *recordingRepo) ListBySearch(context.Context, string) ([]experiment.Result, error) {
+	return nil, nil
+}
+func (r *recordingRepo) SaveTrades(_ context.Context, _ string, trades []experiment.Trade) error {
+	r.tradeSaves <- trades
+	return nil
+}
+func (r *recordingRepo) ListTrades(context.Context, string) ([]experiment.Trade, error) {
 	return nil, nil
 }
 
@@ -328,5 +336,61 @@ func TestWorkerPoolRun_SizesWindowFromResolvedStrategyNotJobConfig(t *testing.T)
 	}
 	if last.TradeCount == 0 {
 		t.Fatal("MA produced zero trades — worker trusted job.Config.Window instead of sizing it from the resolved strategy's MinLookback()")
+	}
+}
+
+func TestWorkerPoolRun_PersistsTradesForCompletedBacktest(t *testing.T) {
+	registry := strategy.NewRegistry()
+	registry.RegisterFactory("MA", strategy.MAFactory)
+	repo := newRecordingRepo()
+	queue := experiment.NewInMemoryQueue(1)
+	pool := experiment.NewWorkerPool(queue, registry, repo, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool.Start(ctx)
+
+	candles := make([]market.Candle, 80)
+	for i := range candles {
+		price := 100.0
+		if i >= 60 {
+			price = 100.0 + float64(i-59)*5
+		}
+		candles[i] = market.Candle{Symbol: "BTCUSDT", OpenTime: int64(i), Open: price, High: price + 1, Low: price - 1, Close: price, Volume: 1}
+	}
+
+	job := experiment.BacktestJob{
+		ID:        "job-trade-persistence",
+		Candidate: strategy.CandidateStrategy{ID: "cand-ma-default", Instances: []strategy.StrategyInstance{{Type: "MA"}}, Policy: "majority"},
+		Candles:   candles,
+		Config: experiment.Config{
+			Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
+			StopLossPct: 0.02, TakeProfitPct: 0.04, FeePct: 0.001, SlippageBps: 5,
+		},
+		EnqueuedAt: time.Now().UnixMilli(),
+	}
+	if err := queue.Enqueue(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+
+	var last experiment.Result
+	for i := 0; i < 2; i++ {
+		select {
+		case last = <-repo.saves:
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for worker to save a result")
+		}
+	}
+	if last.Status != "COMPLETED" || last.TradeCount == 0 {
+		t.Fatalf("result = %+v, want a COMPLETED result with trades", last)
+	}
+
+	select {
+	case trades := <-repo.tradeSaves:
+		if len(trades) != last.TradeCount {
+			t.Fatalf("SaveTrades got %d trades, want %d (matching Result.TradeCount)", len(trades), last.TradeCount)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the worker to call SaveTrades")
 	}
 }

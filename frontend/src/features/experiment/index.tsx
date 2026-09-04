@@ -4,17 +4,36 @@ import { ExperimentLeaderboard } from './components/ExperimentLeaderboard';
 import { ProvenanceModal } from './components/ProvenanceModal';
 import { PerformanceSummaryCard } from './components/PerformanceSummaryCard';
 import { TradeHistoryTable } from './components/TradeHistoryTable';
+import { BacktestChart } from './components/BacktestChart';
 import { MOCK_EXPERIMENTS, generateMockTrades } from './services/mockExperimentData';
-import { fetchExperiment, fetchExperiments, startSearch } from '../../shared/api';
+import { fetchExperiment, fetchExperiments, fetchTrades, startSearch } from '../../shared/api';
 import { useWebSocketSubscription } from '../../shared/hooks';
 import type { WSSearchProgressPayload } from '../../types/websocket';
-import type { ExperimentResult } from '../../types/backtest';
+import type { ExperimentResult, Trade } from '../../types/backtest';
 import { useExperimentStore, formatExperimentTitle } from '../../shared/stores/useExperimentStore';
 
 // Matches the worker's own worst-case retry/backoff window (up to 3 attempts,
 // backoff climbing toward 30s each) — a shorter timeout would give up on a
 // backtest that's genuinely still retrying, not stuck.
 const RUN_TIMEOUT_MS = 90_000;
+
+const isMockExperiment = (id: string) => MOCK_EXPERIMENTS.some(m => m.id === id);
+
+// MOCK_EXPERIMENTS are fixture data end to end — generating consistent fake
+// trades for those specific rows is fine, it's already clearly demo data.
+// Anything else is a real experiment, so its trades come from the real
+// per-trade history the worker now persists (empty if this run predates
+// that, or genuinely has none — never backfilled with fake ones).
+async function loadTradesFor(exp: ExperimentResult): Promise<Trade[]> {
+  if (isMockExperiment(exp.id)) {
+    return generateMockTrades(exp.id, exp.tradeCount || 30);
+  }
+  try {
+    return await fetchTrades(exp.id);
+  } catch {
+    return [];
+  }
+}
 
 export function ExperimentDashboard() {
   const [experiments, setExperiments] = useState<ExperimentResult[]>(MOCK_EXPERIMENTS);
@@ -27,21 +46,39 @@ export function ExperimentDashboard() {
   const loadExperimentToChart = useExperimentStore((state) => state.loadExperimentToChart);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimeout = useRef<number | null>(null);
   const activeSearchId = useRef<string | null>(null);
   const runTimeout = useRef<number | null>(null);
 
+  // Which single trade the chart below highlights — per spec (Trade Detail),
+  // clicking a row highlights just that trade's own entry/exit, not every
+  // trade in the run at once. Defaults to the first trade so the chart isn't
+  // blank before the user clicks anything.
+  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
+
+  const showToast = useCallback((message: string) => {
+    if (toastTimeout.current !== null) window.clearTimeout(toastTimeout.current);
+    setToast(message);
+    toastTimeout.current = window.setTimeout(() => setToast(null), 4000);
+  }, []);
+
   useEffect(() => {
     if (activeTrades.length === 0 && activeExp) {
-      setActiveTrades(generateMockTrades(activeExp.id, activeExp.tradeCount || 30));
+      loadTradesFor(activeExp).then(setActiveTrades);
     }
   }, [activeExp, activeTrades.length, setActiveTrades]);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => setSelectedTrade(activeTrades[0] ?? null));
+  }, [activeTrades]);
 
   const applyExperiments = useCallback((items: ExperimentResult[]) => {
     if (items.length === 0) return;
     setExperiments(items);
     if (!useExperimentStore.getState().activeExperiment) {
       setActiveExp(items[0]);
-      setActiveTrades(generateMockTrades(items[0].id, items[0].tradeCount || 30));
+      loadTradesFor(items[0]).then(setActiveTrades);
     }
   }, [setActiveExp, setActiveTrades]);
 
@@ -67,7 +104,7 @@ export function ExperimentDashboard() {
     try {
       const result = await fetchExperiment(id);
       setActiveExp(result);
-      setActiveTrades(generateMockTrades(result.id, result.tradeCount || 30));
+      loadTradesFor(result).then(setActiveTrades);
       setExperiments(current => current.some(item => item.id === result.id)
         ? current.map(item => item.id === result.id ? result : item)
         : [result, ...current]);
@@ -126,20 +163,21 @@ export function ExperimentDashboard() {
     setSelectedExpForMeta(exp);
   };
 
-  const handleLoadToChart = (exp: ExperimentResult) => {
-    const trades = generateMockTrades(exp.id, exp.tradeCount || 30);
+  const handleLoadToChart = async (exp: ExperimentResult) => {
+    const trades = await loadTradesFor(exp);
     loadExperimentToChart(exp, trades);
+    showToast(`Loaded #${exp.id} (${formatExperimentTitle(exp)}) — see its trades and chart below.`);
   };
 
   const handleReplicate = (exp: ExperimentResult) => {
     setSelectedExpForMeta(null);
-    alert(`Replicated Strategy combination [${formatExperimentTitle(exp)}] into Builder state!`);
+    showToast(`Replicated strategy combination [${formatExperimentTitle(exp)}] into Builder state.`);
     // In production, this would sync with a global strategy builder state/store
   };
 
   return (
     <div style={dashboardContainerStyle}>
-      <div style={{color:'#f59e0b',fontSize:'0.75rem'}}>Metrics/leaderboard ưu tiên API; trade detail dùng demo vì backend MVP chưa lưu từng trade.</div>
+      {toast && <div style={toastStyle}>{toast}</div>}
       {/* 1. Top Section: Run Simulation & Performance Overview */}
       <div style={topSectionStyle}>
         <div style={configColStyle}>
@@ -175,10 +213,26 @@ export function ExperimentDashboard() {
         />
       </div>
 
-      {/* 3. Bottom Section: Trade History log */}
-      {activeTrades.length > 0 && (
+      {/* 3. Bottom Section: Trade Chart + History log */}
+      {activeExp && (
         <div style={tradesSectionStyle}>
-          <TradeHistoryTable trades={activeTrades} />
+          {activeTrades.length > 0 ? (
+            <>
+              <BacktestChart experiment={activeExp} trades={activeTrades} highlightedTrade={selectedTrade} />
+              <TradeHistoryTable
+                trades={activeTrades}
+                selectedTrade={selectedTrade}
+                onClickTrade={setSelectedTrade}
+              />
+            </>
+          ) : activeExp.tradeCount > 0 ? (
+            <p style={noTradesStyle}>
+              This run reported {activeExp.tradeCount} trade{activeExp.tradeCount === 1 ? '' : 's'}, but predates
+              per-trade history tracking — only the aggregate metrics above were kept. Re-run it to get real trade detail.
+            </p>
+          ) : (
+            <p style={noTradesStyle}>This strategy never traded during the backtest window.</p>
+          )}
         </div>
       )}
 
@@ -265,4 +319,30 @@ const sectionTitleStyle: React.CSSProperties = {
 const tradesSectionStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
+  gap: '1rem',
+};
+
+const noTradesStyle: React.CSSProperties = {
+  fontSize: '0.8rem',
+  color: '#64748b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
+  borderRadius: '8px',
+  padding: '1rem',
+  margin: 0,
+};
+
+const toastStyle: React.CSSProperties = {
+  position: 'fixed',
+  bottom: '1.5rem',
+  right: '1.5rem',
+  maxWidth: '360px',
+  fontSize: '0.8rem',
+  color: '#047857',
+  backgroundColor: '#ecfdf5',
+  border: '1px solid #a7f3d0',
+  borderRadius: '8px',
+  padding: '0.65rem 0.9rem',
+  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)',
+  zIndex: 1000,
 };

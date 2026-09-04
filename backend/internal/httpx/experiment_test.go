@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,6 +21,7 @@ import (
 type fakeRepo struct {
 	mu      sync.Mutex
 	results map[string]experiment.Result
+	trades  map[string][]experiment.Trade
 }
 
 type fakeCandleRepo struct {
@@ -37,7 +40,7 @@ func (f *fakeCandleRepo) Range(_ context.Context, symbol, timeframe string, from
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{results: make(map[string]experiment.Result)}
+	return &fakeRepo{results: make(map[string]experiment.Result), trades: make(map[string][]experiment.Trade)}
 }
 
 func (f *fakeRepo) Save(_ context.Context, r experiment.Result) error {
@@ -77,6 +80,19 @@ func (f *fakeRepo) ListBySearch(_ context.Context, searchID string) ([]experimen
 		}
 	}
 	return out, nil
+}
+
+func (f *fakeRepo) SaveTrades(_ context.Context, experimentID string, trades []experiment.Trade) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.trades[experimentID] = trades
+	return nil
+}
+
+func (f *fakeRepo) ListTrades(_ context.Context, experimentID string) ([]experiment.Trade, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.trades[experimentID], nil
 }
 
 func newTestRegistry() *strategy.Registry {
@@ -308,5 +324,49 @@ func TestGetExperiment_NotFound(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestGetExperimentTrades_ReturnsRealTrades(t *testing.T) {
+	repo := newFakeRepo()
+	repo.trades["exp-1"] = []experiment.Trade{
+		{Pair: "BTCUSDT", EntryTime: 1, Direction: experiment.Long, VolumeUSD: 1000, EntryPrice: 100, ExitPrice: 110, ExitTime: 2, Profit: 100},
+	}
+	srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), repo))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/experiments/exp-1/trades")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var trades []experiment.Trade
+	if err := json.NewDecoder(resp.Body).Decode(&trades); err != nil {
+		t.Fatal(err)
+	}
+	if len(trades) != 1 || trades[0].Profit != 100 {
+		t.Fatalf("trades = %+v, want the one seeded trade", trades)
+	}
+}
+
+func TestGetExperimentTrades_EmptyArrayNotNullForUnknownExperiment(t *testing.T) {
+	repo := newFakeRepo()
+	srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), repo))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/experiments/does-not-exist/trades")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (no trades yet is not an error)", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if strings.TrimSpace(string(body)) != "[]" {
+		t.Fatalf("body = %q, want an empty JSON array, not null", body)
 	}
 }

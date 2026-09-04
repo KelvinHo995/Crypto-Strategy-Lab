@@ -40,6 +40,7 @@ interface TradingChartProps {
   };
   srZones?: SRZone[]; // Support & Resistance price levels
   markers?: ChartMarker[]; // BUY/SELL markers
+  fitSignal?: number; // bump to trigger a one-off zoom-to-fit (see effect below)
 }
 
 export function TradingChart({
@@ -48,6 +49,7 @@ export function TradingChart({
   bbands,
   srZones,
   markers,
+  fitSignal,
 }: TradingChartProps) {
   const [isDark, setIsDark] = useState(() => document.documentElement.dataset.theme === 'dark');
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -296,12 +298,30 @@ export function TradingChart({
     // 5. Draw Signals & Trades Markers
     if (markersPluginRef.current) {
       if (markers) {
+        // A marker's time rarely lands exactly on a loaded candle's openTime
+        // (e.g. a trade computed against 1h candles, displayed on a 4h
+        // chart) — snap to the nearest actual candle instead of requiring an
+        // exact match, or lightweight-charts silently clips/misplaces it.
+        const candleTimes = candleData.map((c) => c.time as number);
+        const snapToNearestCandle = (timeSecs: number): UTCTimestamp => {
+          if (candleTimes.length === 0) return timeSecs as UTCTimestamp;
+          let lo = 0, hi = candleTimes.length - 1;
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (candleTimes[mid] < timeSecs) lo = mid + 1;
+            else hi = mid;
+          }
+          if (lo > 0 && Math.abs(candleTimes[lo - 1] - timeSecs) <= Math.abs(candleTimes[lo] - timeSecs)) {
+            lo -= 1;
+          }
+          return candleTimes[lo] as UTCTimestamp;
+        };
+
         const formattedMarkers = markers
           .map((m) => {
-            // Align marker time with the closest candle openTime
-            const timeSecs = Math.floor(m.time / 1000) as UTCTimestamp;
+            const timeSecs = Math.floor(m.time / 1000);
             return {
-              time: timeSecs,
+              time: snapToNearestCandle(timeSecs),
               position: m.position,
               color: m.color,
               shape: m.shape,
@@ -317,6 +337,17 @@ export function TradingChart({
       }
     }
   }, [candles, ma20Line, bbands, srZones, markers, isDark]);
+
+  // Zoom-to-fit is intentionally its own effect, keyed only on fitSignal —
+  // NOT on candles, which also changes on every live WebSocket tick. Tying
+  // it to candles meant the chart re-fit (and threw away any manual
+  // zoom/pan) on every single tick while a strategy was loaded. The parent
+  // bumps fitSignal exactly once, after an experiment's own candle range
+  // has actually finished loading.
+  useEffect(() => {
+    if (!chartRef.current) return;
+    chartRef.current.timeScale().fitContent();
+  }, [fitSignal]);
 
   return (
     <div className="trading-chart" style={{ position: 'relative', width: '100%', height: '100%' }}>
