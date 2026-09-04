@@ -8,7 +8,7 @@ import { MOCK_EXPERIMENTS, generateMockTrades } from './services/mockExperimentD
 import { fetchExperiment, fetchExperiments, startSearch } from '../../shared/api';
 import { useWebSocketSubscription } from '../../shared/hooks';
 import type { WSSearchProgressPayload } from '../../types/websocket';
-import type { ExperimentResult } from '../../types/backtest';
+import type { ExperimentResult, StrategyInstance } from '../../types/backtest';
 import { useExperimentStore, formatExperimentTitle } from '../../shared/stores/useExperimentStore';
 
 // Matches the worker's own worst-case retry/backoff window (up to 3 attempts,
@@ -24,7 +24,8 @@ export function ExperimentDashboard() {
   const activeTrades = useExperimentStore((state) => state.activeTrades);
   const setActiveExp = useExperimentStore((state) => state.setActiveExperiment);
   const setActiveTrades = useExperimentStore((state) => state.setActiveTrades);
-  const loadExperimentToChart = useExperimentStore((state) => state.loadExperimentToChart);
+  const loadToChart = useExperimentStore((state) => state.loadToChart);
+  const replicateToBuilder = useExperimentStore((state) => state.replicateToBuilder);
 
   const [isLoading, setIsLoading] = useState(false);
   const activeSearchId = useRef<string | null>(null);
@@ -96,6 +97,8 @@ export function ExperimentDashboard() {
     capital: number;
     fee: number;
     slippage: number;
+    instances: StrategyInstance[];
+    policy?: 'majority' | 'weighted';
   }) => {
     setIsLoading(true);
     try {
@@ -107,7 +110,8 @@ export function ExperimentDashboard() {
         capital: config.capital,
         fee: config.fee,
         slippage: config.slippage,
-        instances: [{ type: 'MA' }],
+        instances: config.instances,
+        policy: config.policy ?? 'majority',
       });
       activeSearchId.current = started.searchId;
       runTimeout.current = window.setTimeout(() => {
@@ -128,13 +132,13 @@ export function ExperimentDashboard() {
 
   const handleLoadToChart = (exp: ExperimentResult) => {
     const trades = generateMockTrades(exp.id, exp.tradeCount || 30);
-    loadExperimentToChart(exp, trades);
+    loadToChart(exp, trades);
   };
 
   const handleReplicate = (exp: ExperimentResult) => {
     setSelectedExpForMeta(null);
-    alert(`Replicated Strategy combination [${formatExperimentTitle(exp)}] into Builder state!`);
-    // In production, this would sync with a global strategy builder state/store
+    const policy = exp.policy === 'weighted' ? 'weighted' : 'majority';
+    replicateToBuilder(exp.instances, policy);
   };
 
   return (
