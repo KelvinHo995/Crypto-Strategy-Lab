@@ -53,8 +53,13 @@ export function ChartCard({
     }
     const to = range?.to ?? Date.now();
     const from = range?.from ?? to - 366 * 24 * 60 * 60 * 1000;
+    // An experiment-driven range can span months; 500 candles at 4h only
+    // covers ~83 days. The backend allows up to 5000 (server cap), which
+    // covers ~833 days at 4h — comfortable headroom for any real backtest
+    // window. The default recent-view fetch stays at 500; no need for more.
+    const limit = range ? 5000 : 500;
     try {
-      const apiCandles = await fetchCandles(symbol, timeframe, from, to, 500);
+      const apiCandles = await fetchCandles(symbol, timeframe, from, to, limit);
       if (apiCandles.length < 20) throw new Error('insufficient candles');
       const closes = apiCandles.map(c => c.close);
       const ma = closes.map((_, i) => i < 19 ? Number.NaN : closes.slice(i - 19, i + 1).reduce((a,b)=>a+b,0) / 20);

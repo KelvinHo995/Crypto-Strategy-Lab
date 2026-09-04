@@ -296,12 +296,30 @@ export function TradingChart({
     // 5. Draw Signals & Trades Markers
     if (markersPluginRef.current) {
       if (markers) {
+        // A marker's time rarely lands exactly on a loaded candle's openTime
+        // (e.g. a trade computed against 1h candles, displayed on a 4h
+        // chart) — snap to the nearest actual candle instead of requiring an
+        // exact match, or lightweight-charts silently clips/misplaces it.
+        const candleTimes = candleData.map((c) => c.time as number);
+        const snapToNearestCandle = (timeSecs: number): UTCTimestamp => {
+          if (candleTimes.length === 0) return timeSecs as UTCTimestamp;
+          let lo = 0, hi = candleTimes.length - 1;
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (candleTimes[mid] < timeSecs) lo = mid + 1;
+            else hi = mid;
+          }
+          if (lo > 0 && Math.abs(candleTimes[lo - 1] - timeSecs) <= Math.abs(candleTimes[lo] - timeSecs)) {
+            lo -= 1;
+          }
+          return candleTimes[lo] as UTCTimestamp;
+        };
+
         const formattedMarkers = markers
           .map((m) => {
-            // Align marker time with the closest candle openTime
-            const timeSecs = Math.floor(m.time / 1000) as UTCTimestamp;
+            const timeSecs = Math.floor(m.time / 1000);
             return {
-              time: timeSecs,
+              time: snapToNearestCandle(timeSecs),
               position: m.position,
               color: m.color,
               shape: m.shape,
@@ -312,6 +330,14 @@ export function TradingChart({
           .sort((a, b) => a.time - b.time);
 
         markersPluginRef.current.setMarkers(formattedMarkers);
+        // Real trade markers only matter if they're actually visible —
+        // zoom out to the full loaded range so they're not scrolled off
+        // to the left of the default "most recent" viewport. Deliberately
+        // scoped to only this case (markers present); normal live viewing
+        // keeps its default recent-candles view.
+        if (formattedMarkers.length > 0) {
+          chart.timeScale().fitContent();
+        }
       } else {
         markersPluginRef.current.setMarkers([]);
       }
