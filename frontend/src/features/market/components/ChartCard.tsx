@@ -46,6 +46,13 @@ export function ChartCard({
   // leftmost candle happens to be.
   const [markersValidFor, setMarkersValidFor] = useState<{ pair: string; timeframe: string } | null>(null);
 
+  // Bumped exactly once per successful experiment-range load — the sole
+  // trigger for TradingChart to zoom-to-fit. Deliberately NOT tied to
+  // `candles` itself: candles also change on every live WebSocket tick,
+  // and fitting on every tick was overriding any zoom/pan the user did
+  // right after it (chart kept snapping back to "fit all" every second).
+  const [fitNonce, setFitNonce] = useState(0);
+
   // 1. Fetch initial historical data on mount or when symbol/timeframe changes.
   // pair/tf are explicit params (not read from symbol/timeframe state) so a
   // caller can fetch for values it just decided on without waiting for
@@ -250,8 +257,9 @@ export function ChartCard({
     if (!Number.isFinite(from) || !Number.isFinite(to) || mode === 'DEMO') return;
     const pair = activeTrades[0]?.pair || symbol;
     const tf = '4h';
-    void Promise.resolve().then(() => {
-      void loadHistory(pair, tf, { from, to }, 5000, true);
+    void Promise.resolve().then(async () => {
+      await loadHistory(pair, tf, { from, to }, 5000, true);
+      setFitNonce((n) => n + 1);
       if (pair !== symbol || tf !== timeframe) {
         suppressNextDefaultLoadRef.current = true;
         setSymbol(pair);
@@ -383,6 +391,7 @@ export function ChartCard({
             bbands={bbands}
             srZones={srZones}
             markers={effectiveMarkers}
+            fitSignal={fitNonce}
           />
         ) : (
           <div style={loadingStyle}>{loadError || 'Loading historical data...'}</div>

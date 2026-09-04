@@ -40,6 +40,7 @@ interface TradingChartProps {
   };
   srZones?: SRZone[]; // Support & Resistance price levels
   markers?: ChartMarker[]; // BUY/SELL markers
+  fitSignal?: number; // bump to trigger a one-off zoom-to-fit (see effect below)
 }
 
 export function TradingChart({
@@ -48,6 +49,7 @@ export function TradingChart({
   bbands,
   srZones,
   markers,
+  fitSignal,
 }: TradingChartProps) {
   const [isDark, setIsDark] = useState(() => document.documentElement.dataset.theme === 'dark');
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -330,19 +332,22 @@ export function TradingChart({
           .sort((a, b) => a.time - b.time);
 
         markersPluginRef.current.setMarkers(formattedMarkers);
-        // Real trade markers only matter if they're actually visible —
-        // zoom out to the full loaded range so they're not scrolled off
-        // to the left of the default "most recent" viewport. Deliberately
-        // scoped to only this case (markers present); normal live viewing
-        // keeps its default recent-candles view.
-        if (formattedMarkers.length > 0) {
-          chart.timeScale().fitContent();
-        }
       } else {
         markersPluginRef.current.setMarkers([]);
       }
     }
   }, [candles, ma20Line, bbands, srZones, markers, isDark]);
+
+  // Zoom-to-fit is intentionally its own effect, keyed only on fitSignal —
+  // NOT on candles, which also changes on every live WebSocket tick. Tying
+  // it to candles meant the chart re-fit (and threw away any manual
+  // zoom/pan) on every single tick while a strategy was loaded. The parent
+  // bumps fitSignal exactly once, after an experiment's own candle range
+  // has actually finished loading.
+  useEffect(() => {
+    if (!chartRef.current) return;
+    chartRef.current.timeScale().fitContent();
+  }, [fitSignal]);
 
   return (
     <div className="trading-chart" style={{ position: 'relative', width: '100%', height: '100%' }}>
