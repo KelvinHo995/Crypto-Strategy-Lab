@@ -25,35 +25,33 @@ export function formatExperimentTitle(exp: ExperimentResult): string {
 // genuinely readable and worth keeping.
 const MARKER_TEXT_THRESHOLD = 30;
 
+// Both entry and exit render as arrows — matches spec's own "ENTRY ↑ ...
+// EXIT ↓" example. A closing action is the opposite direction of the
+// opening one (closing a long is a sell, closing a short is a buy-to-
+// cover), so the exit arrow always points the other way from the entry
+// arrow for that same trade. Exit is colored by win/loss (not by
+// direction) since that's the more useful thing to see at a glance once
+// the trade is closed.
 export function tradesToMarkers(trades: Trade[]): ChartMarker[] {
   const showText = trades.length <= MARKER_TEXT_THRESHOLD;
   const markers: ChartMarker[] = [];
   for (const trade of trades) {
-    if (trade.direction === 'LONG') {
-      markers.push({
-        time: trade.entryTime,
-        position: 'belowBar',
-        color: '#10b981',
-        shape: 'arrowUp',
-        text: showText ? 'BUY' : '',
-      });
-    } else {
-      markers.push({
-        time: trade.entryTime,
-        position: 'aboveBar',
-        color: '#ef4444',
-        shape: 'arrowDown',
-        text: showText ? 'SELL' : '',
-      });
-    }
+    const isLong = trade.direction === 'LONG';
+    markers.push({
+      time: trade.entryTime,
+      position: isLong ? 'belowBar' : 'aboveBar',
+      color: isLong ? '#10b981' : '#ef4444',
+      shape: isLong ? 'arrowUp' : 'arrowDown',
+      text: showText ? 'ENTRY' : '',
+    });
     if (trade.exitTime) {
       const isWin = trade.profit >= 0;
       markers.push({
         time: trade.exitTime,
-        position: trade.direction === 'LONG' ? 'aboveBar' : 'belowBar',
+        position: isLong ? 'aboveBar' : 'belowBar',
         color: isWin ? '#10b981' : '#ef4444',
-        shape: 'circle',
-        text: showText ? (isWin ? `WIN +$${Math.round(trade.profit)}` : `LOSS -$${Math.round(Math.abs(trade.profit))}`) : '',
+        shape: isLong ? 'arrowDown' : 'arrowUp',
+        text: showText ? (isWin ? `EXIT +$${Math.round(trade.profit)}` : `EXIT -$${Math.round(Math.abs(trade.profit))}`) : '',
       });
     }
   }
