@@ -22,6 +22,8 @@ type StartSearchRequest struct {
 	Capital   float64                     `json:"capital"`
 	Instances []strategy.StrategyInstance `json:"instances"`
 	Policy    string                      `json:"policy"`
+	Fee       float64                     `json:"fee"`      // percent, e.g. 0.1 = 0.1%; 0 uses the project default
+	Slippage  float64                     `json:"slippage"` // bps, e.g. 5 = 5bps; 0 uses the project default
 }
 
 func (r StartSearchRequest) Validate() error {
@@ -53,6 +55,36 @@ func (r StartSearchRequest) Validate() error {
 	}
 	if r.Policy != "" && r.Policy != "majority" && r.Policy != "weighted" {
 		return errors.New("policy must be majority or weighted")
+	}
+	return validateFeeSlippage(r.Fee, r.Slippage)
+}
+
+const (
+	defaultFeePct      = 0.001 // 0.1%
+	defaultSlippageBps = 5
+)
+
+// resolveFeeSlippage converts a request's percent-fee/bps-slippage into the
+// backtester's internal units, defaulting to the project's baseline cost
+// assumptions when the caller omits them (0 means "not set", not "free").
+func resolveFeeSlippage(feePercent, slippageBps float64) (feePct, resolvedSlippageBps float64) {
+	feePct = defaultFeePct
+	if feePercent != 0 {
+		feePct = feePercent / 100
+	}
+	resolvedSlippageBps = defaultSlippageBps
+	if slippageBps != 0 {
+		resolvedSlippageBps = slippageBps
+	}
+	return feePct, resolvedSlippageBps
+}
+
+func validateFeeSlippage(feePercent, slippageBps float64) error {
+	if feePercent < 0 || feePercent > 2 {
+		return errors.New("fee must be between 0 and 2 percent")
+	}
+	if slippageBps < 0 || slippageBps > 200 {
+		return errors.New("slippage must be between 0 and 200 bps")
 	}
 	return nil
 }
@@ -112,13 +144,14 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 				return
 			}
 		}
+		feePct, slippageBps := resolveFeeSlippage(req.Fee, req.Slippage)
 		job := experiment.BacktestJob{
 			ID: id, SearchID: id, SearchTotal: 1, Candidate: candidate,
 			Pair: req.Pair, Timeframe: req.TimeFrame, From: req.From, To: req.To,
 			Candles: candles,
 			Config: experiment.Config{Pair: req.Pair, StartingCapital: req.Capital,
 				PositionSizePct: 1, StopLossPct: 0.02, TakeProfitPct: 0.04,
-				FeePct: 0.001, SlippageBps: 5}, // Window is sized per-candidate by the worker (see worker.go)
+				FeePct: feePct, SlippageBps: slippageBps, AllowShort: true}, // Window is sized per-candidate by the worker (see worker.go)
 			DatasetPeriod:    fmt.Sprintf("%d-%d", req.From, req.To),
 			StrategyVersions: versions, EnqueuedAt: now.UnixMilli(),
 		}

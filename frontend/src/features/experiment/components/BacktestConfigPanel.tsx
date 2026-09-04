@@ -12,6 +12,7 @@ interface BacktestConfigPanelProps {
     toDate: string;
     capital: number;
     fee: number;
+    slippage: number;
   }) => void;
   isLoading: boolean;
 }
@@ -33,6 +34,7 @@ export function BacktestConfigPanel({
   const [toDate, setToDate] = useState(() => dateInputValue());
   const [capital, setCapital] = useState(10000);
   const [fee, setFee] = useState(0.1); // 0.1% standard exchange fee
+  const [slippage, setSlippage] = useState(5); // 5 bps standard slippage
 
   useEffect(() => {
     if (mode !== 'LIVE') return;
@@ -48,6 +50,7 @@ export function BacktestConfigPanel({
       toDate,
       capital,
       fee,
+      slippage,
     });
   };
 
@@ -135,7 +138,23 @@ export function BacktestConfigPanel({
               min="0"
               max="2"
               step="0.01"
-              onChange={(e) => setFee(parseFloat(e.target.value))}
+              onChange={(e) => setFee(parseFloat(e.target.value) || 0)}
+              style={inputStyle}
+              disabled={isLoading}
+              required
+            />
+          </div>
+
+          {/* Slippage */}
+          <div style={formGroupStyle}>
+            <label style={labelStyle}>Slippage (bps)</label>
+            <input
+              type="number"
+              value={slippage}
+              min="0"
+              max="200"
+              step="1"
+              onChange={(e) => setSlippage(parseFloat(e.target.value) || 0)}
               style={inputStyle}
               disabled={isLoading}
               required
