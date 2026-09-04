@@ -175,17 +175,20 @@ func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
 	result.TradeCount, result.WinRate = metrics.TradeCount, metrics.WinRate
 	result.Wins, result.Losses = metrics.Wins, metrics.Losses
 	result.TotalProfit, result.Status = metrics.TotalProfit, "COMPLETED"
+	// Trades are saved before the result flips to COMPLETED — the RUNNING
+	// save earlier already created the experiments row SaveTrades' foreign
+	// key needs, and this ordering guarantees no client can observe
+	// COMPLETED and fetch trades before they exist. Best-effort: a save
+	// failure here is logged, not retried, since it doesn't affect the
+	// aggregate result about to be saved and retrying would trigger a full
+	// backtest re-run just to persist trade rows that don't affect scoring.
+	if err := p.repo.SaveTrades(ctx, job.ID, trades); err != nil {
+		log.Printf("experiment worker: save trades for %s: %v", job.ID, err)
+	}
 	if err := p.repo.Save(ctx, result); err != nil {
 		log.Printf("experiment worker: save COMPLETED for %s: %v", job.ID, err)
 		p.retry(ctx, job.ID, err)
 		return
-	}
-	// Best-effort: the aggregate Result above is what the leaderboard and
-	// evaluation depend on and already succeeded, so a trade-history save
-	// failure is logged, not retried — it would otherwise trigger a full
-	// backtest re-run just to persist trade rows that don't affect scoring.
-	if err := p.repo.SaveTrades(ctx, job.ID, trades); err != nil {
-		log.Printf("experiment worker: save trades for %s: %v", job.ID, err)
 	}
 	p.notify(result)
 	p.ack(ctx, job.ID)
