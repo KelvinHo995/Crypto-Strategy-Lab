@@ -83,6 +83,7 @@ export function ExperimentDashboard() {
     toDate: string;
     capital: number;
     fee: number;
+    slippage: number;
   }) => {
     setIsLoading(true);
     try {
@@ -92,6 +93,8 @@ export function ExperimentDashboard() {
         from: new Date(config.fromDate).getTime(),
         to: new Date(config.toDate).getTime(),
         capital: config.capital,
+        fee: config.fee,
+        slippage: config.slippage,
         instances: [{ type: 'MA' }],
       });
       activeSearchId.current = started.searchId;

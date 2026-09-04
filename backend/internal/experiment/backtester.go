@@ -14,6 +14,7 @@ type Config struct {
 	FeePct          float64 // e.g. 0.001 = 10bps
 	SlippageBps     float64 // e.g. 5 = 5bps
 	Window          int
+	AllowShort      bool // opt-in: a Sell signal with no open position opens a short instead of being ignored
 }
 
 type Backtester struct{ cfg Config }
@@ -53,12 +54,19 @@ func (b *Backtester) Run(strat Strategy, candles []market.Candle) []Trade {
 
 		switch {
 		case signal == strategy.Buy && pos == nil:
-			pos = b.open(c, i, capital)
-		case signal == strategy.Sell && pos != nil:
+			pos = b.open(c, i, capital, Long)
+		case signal == strategy.Buy && pos != nil && pos.direction == Short:
 			t := b.settle(pos, c.OpenTime, c.Open)
 			trades = append(trades, t)
 			capital += t.Profit
 			pos = nil
+		case signal == strategy.Sell && pos != nil && pos.direction == Long:
+			t := b.settle(pos, c.OpenTime, c.Open)
+			trades = append(trades, t)
+			capital += t.Profit
+			pos = nil
+		case signal == strategy.Sell && pos == nil && b.cfg.AllowShort:
+			pos = b.open(c, i, capital, Short)
 		}
 	}
 
@@ -79,6 +87,7 @@ func (c Config) valid() bool {
 type openPosition struct {
 	entryIndex int
 	entryTime  int64
+	direction  Direction
 	entryPrice float64
 	idealEntry float64
 	stopLoss   float64
@@ -87,31 +96,46 @@ type openPosition struct {
 	entryFee   float64
 }
 
-func (b *Backtester) open(c market.Candle, i int, capital float64) *openPosition {
+func (b *Backtester) open(c market.Candle, i int, capital float64, direction Direction) *openPosition {
 	ideal := c.Open
-	fill := applySlippage(ideal, true, b.cfg.SlippageBps)
+	// Opening a long buys at entry; opening a short sells at entry — each gets
+	// the fill on the unfavorable side of applySlippage, same as the exit fill below.
+	fill := applySlippage(ideal, direction == Long, b.cfg.SlippageBps)
 	volumeUSD := capital * b.cfg.PositionSizePct
+	stopLoss, takeProfit := fill*(1-b.cfg.StopLossPct), fill*(1+b.cfg.TakeProfitPct)
+	if direction == Short {
+		// Inverted: a short loses money as price rises, profits as it falls.
+		stopLoss, takeProfit = fill*(1+b.cfg.StopLossPct), fill*(1-b.cfg.TakeProfitPct)
+	}
 	return &openPosition{
-		entryIndex: i, entryTime: c.OpenTime,
+		entryIndex: i, entryTime: c.OpenTime, direction: direction,
 		entryPrice: fill, idealEntry: ideal,
-		stopLoss:   fill * (1 - b.cfg.StopLossPct),
-		takeProfit: fill * (1 + b.cfg.TakeProfitPct),
+		stopLoss:   stopLoss,
+		takeProfit: takeProfit,
 		volumeUSD:  volumeUSD,
 		entryFee:   volumeUSD * b.cfg.FeePct,
 	}
 }
 
 func (b *Backtester) settle(pos *openPosition, exitTime int64, idealExit float64) Trade {
-	fill := applySlippage(idealExit, false, b.cfg.SlippageBps)
+	// Closing a long sells; covering a short buys back.
+	fill := applySlippage(idealExit, pos.direction == Short, b.cfg.SlippageBps)
 	qty := pos.volumeUSD / pos.entryPrice
 	exitValue := qty * fill
 	exitFee := exitValue * b.cfg.FeePct
 	fees := pos.entryFee + exitFee
-	slippageCost := (pos.entryPrice-pos.idealEntry)*qty + (qty*idealExit - exitValue)
-	profit := exitValue - pos.volumeUSD - fees
+
+	var slippageCost, profit float64
+	if pos.direction == Long {
+		slippageCost = (pos.entryPrice-pos.idealEntry)*qty + (qty*idealExit - exitValue)
+		profit = exitValue - pos.volumeUSD - fees
+	} else {
+		slippageCost = (pos.idealEntry-pos.entryPrice)*qty + (exitValue - qty*idealExit)
+		profit = pos.volumeUSD - exitValue - fees
+	}
 
 	return Trade{
-		Pair: b.cfg.Pair, EntryTime: pos.entryTime, Direction: Long,
+		Pair: b.cfg.Pair, EntryTime: pos.entryTime, Direction: pos.direction,
 		VolumeUSD: pos.volumeUSD, EntryPrice: pos.entryPrice,
 		StopLoss: pos.stopLoss, TakeProfit: pos.takeProfit,
 		ExitPrice: fill, ExitTime: exitTime,
@@ -120,6 +144,20 @@ func (b *Backtester) settle(pos *openPosition, exitTime int64, idealExit float64
 }
 
 func checkStopTarget(pos *openPosition, c market.Candle) (exitPrice float64, hit bool) {
+	if pos.direction == Short {
+		switch {
+		case c.Open >= pos.stopLoss: // gap above SL: cannot fill at the better trigger price
+			return c.Open, true
+		case c.Open <= pos.takeProfit: // gap below TP: fill at the available open
+			return c.Open, true
+		case c.High >= pos.stopLoss: // SL wins if both hit same candle
+			return pos.stopLoss, true
+		case c.Low <= pos.takeProfit:
+			return pos.takeProfit, true
+		default:
+			return 0, false
+		}
+	}
 	switch {
 	case c.Open <= pos.stopLoss: // gap below SL: cannot fill at the better trigger price
 		return c.Open, true

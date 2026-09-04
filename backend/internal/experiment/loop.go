@@ -30,6 +30,8 @@ type LoopParams struct {
 	MaxCandidates      int
 	MaxDuration        time.Duration
 	NoImprovementLimit int
+	FeePct             float64 // e.g. 0.001 = 10bps; defaulted by the caller if unset
+	SlippageBps        float64 // e.g. 5 = 5bps; defaulted by the caller if unset
 }
 
 // RunSearchLoop generates candidates one at a time via gen, enqueueing each
@@ -121,7 +123,7 @@ generate:
 			Config: Config{
 				Pair: params.Pair, StartingCapital: params.StartingCapital,
 				PositionSizePct: 1, StopLossPct: 0.02, TakeProfitPct: 0.04,
-				FeePct: 0.001, SlippageBps: 5, // Window is sized per-candidate by the worker (see worker.go)
+				FeePct: params.FeePct, SlippageBps: params.SlippageBps, AllowShort: true, // Window is sized per-candidate by the worker (see worker.go)
 			},
 			DatasetPeriod: params.DatasetPeriod, StrategyVersions: versions,
 			EnqueuedAt: now.UnixMilli(),

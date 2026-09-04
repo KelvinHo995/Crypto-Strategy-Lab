@@ -2,7 +2,10 @@ package experiment
 
 type Direction string
 
-const Long Direction = "LONG"
+const (
+	Long  Direction = "LONG"
+	Short Direction = "SHORT"
+)
 
 type Trade struct {
 	Pair            string    `json:"pair"`
