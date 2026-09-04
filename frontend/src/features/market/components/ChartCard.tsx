@@ -38,10 +38,15 @@ export function ChartCard({
   const [dataMode, setDataMode] = useState<'API' | 'MOCK' | 'ERROR'>(mode === 'DEMO' ? 'MOCK' : 'API');
   const [loadError, setLoadError] = useState('');
 
-  // 1. Fetch initial historical data on mount or when symbol/timeframe changes
-  const loadHistory = useCallback(async (range?: { from: number; to: number }) => {
+  // 1. Fetch initial historical data on mount or when symbol/timeframe changes.
+  // pair/tf are explicit params (not read from symbol/timeframe state) so a
+  // caller can fetch for values it just decided on without waiting for
+  // setSymbol/setTimeframe to actually land first — those are async and
+  // this function's own closure would otherwise use whatever symbol/
+  // timeframe were current when IT was created, not the ones just requested.
+  const loadHistory = useCallback(async (pair: string, tf: string, range?: { from: number; to: number }, limitOverride?: number) => {
     if (mode === 'DEMO') {
-      const dto = fetchMarketDataDTO(symbol, timeframe, 200);
+      const dto = fetchMarketDataDTO(pair, tf, 200);
       setCandles(dto.candles);
       setMa20Line(dto.ma20Line);
       setBbands(dto.bbands);
@@ -57,9 +62,9 @@ export function ChartCard({
     // covers ~83 days. The backend allows up to 5000 (server cap), which
     // covers ~833 days at 4h — comfortable headroom for any real backtest
     // window. The default recent-view fetch stays at 500; no need for more.
-    const limit = range ? 5000 : 500;
+    const limit = limitOverride ?? (range ? 5000 : 500);
     try {
-      const apiCandles = await fetchCandles(symbol, timeframe, from, to, limit);
+      const apiCandles = await fetchCandles(pair, tf, from, to, limit);
       if (apiCandles.length < 20) throw new Error('insufficient candles');
       const closes = apiCandles.map(c => c.close);
       const ma = closes.map((_, i) => i < 19 ? Number.NaN : closes.slice(i - 19, i + 1).reduce((a,b)=>a+b,0) / 20);
@@ -77,20 +82,28 @@ export function ChartCard({
       setSrZones([]);
       setMarkers([]);
       setDataMode('ERROR');
-      setLoadError(`Không có historical data cho ${symbol}/${timeframe}: ${String(error)}`);
+      setLoadError(`Không có historical data cho ${pair}/${tf}: ${String(error)}`);
     }
-  }, [mode, symbol, timeframe]);
+  }, [mode]);
 
-  // Set by the "experiment loaded" effect below when it needs this card to
-  // jump to a specific historical range instead of the default recent
-  // window — consumed (and cleared) the next time loadHistory actually runs.
-  const pendingRangeRef = useRef<{ from: number; to: number } | null>(null);
+  // Set right before the experiment-driven effect below calls setSymbol/
+  // setTimeframe, so this effect (which reacts to that same symbol/
+  // timeframe change) skips its own default-range refetch — otherwise it's
+  // a real race: both fetches target the same candles state, and whichever
+  // of "500 recent candles" vs "5000 experiment-range candles" resolves
+  // last silently wins.
+  const suppressNextDefaultLoadRef = useRef(false);
 
   useEffect(() => {
-    const range = pendingRangeRef.current;
-    pendingRangeRef.current = null;
-    void loadHistory(range ?? undefined);
-  }, [loadHistory]);
+    if (suppressNextDefaultLoadRef.current) {
+      suppressNextDefaultLoadRef.current = false;
+      return;
+    }
+    void loadHistory(symbol, timeframe);
+    // Only the default (non-experiment-driven) view reacts to symbol/
+    // timeframe changing — the experiment-driven effect below fetches for
+    // itself directly instead of relying on this one.
+  }, [loadHistory, symbol, timeframe]);
 
   function handleRealtimeUpdate(candle: Candle) {
     setCandles((prev) => {
@@ -208,24 +221,26 @@ export function ChartCard({
   // meaningless unless this card is actually looking at the right pair and
   // time range — the backend doesn't record which timeframe a backtest used,
   // so 4h (widest available) gives the best chance a multi-day/month range
-  // fits within the 500-candle fetch limit. Switches this specific
-  // ChartCard instance only, not every open chart.
+  // fits within the fetch limit. Fetches directly with the resolved
+  // pair/timeframe rather than going through setSymbol/setTimeframe +
+  // waiting for the default loadHistory effect to pick it up — that
+  // two-step handoff raced (the default effect could run first with the
+  // still-stale symbol/timeframe/500-limit before this one's state updates
+  // landed). setSymbol/setTimeframe here are just for the dropdown/tab UI.
   useEffect(() => {
     if (!activeExperiment) return;
     const [fromStr, toStr] = activeExperiment.datasetPeriod.split('-');
     const from = Number(fromStr);
     const to = Number(toStr);
     if (!Number.isFinite(from) || !Number.isFinite(to) || mode === 'DEMO') return;
+    const pair = activeTrades[0]?.pair || symbol;
+    const tf = '4h';
     void Promise.resolve().then(() => {
-      const pair = activeTrades[0]?.pair;
-      const symbolChanging = Boolean(pair) && pair !== symbol;
-      const timeframeChanging = timeframe !== '4h';
-      if (symbolChanging || timeframeChanging) {
-        pendingRangeRef.current = { from, to };
-        if (symbolChanging) setSymbol(pair!);
-        if (timeframeChanging) setTimeframe('4h');
-      } else {
-        void loadHistory({ from, to });
+      void loadHistory(pair, tf, { from, to }, 5000);
+      if (pair !== symbol || tf !== timeframe) {
+        suppressNextDefaultLoadRef.current = true;
+        setSymbol(pair);
+        setTimeframe(tf);
       }
     });
     // Only re-run when a *different* experiment is loaded, not on every
@@ -321,7 +336,7 @@ export function ChartCard({
           </div>
 
           {/* Maximize and reload action button */}
-          <button onClick={() => loadHistory()} style={actionBtnStyle} title="Reload historical data">
+          <button onClick={() => loadHistory(symbol, timeframe)} style={actionBtnStyle} title="Reload historical data">
             ↻
           </button>
           <button onClick={() => onToggleMaximize(id)} style={actionBtnStyle}>
