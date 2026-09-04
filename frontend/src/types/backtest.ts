@@ -51,8 +51,22 @@ export interface StartSearchRequest {
   capital: number;
   instances: StrategyInstance[];
   policy?: 'majority' | 'weighted';
+  strategies?: string[];
+  params?: Record<string, unknown>;
   fee?: number; // percent, e.g. 0.1 = 0.1%; omit to use the backend default
   slippage?: number; // bps, e.g. 5 = 5bps; omit to use the backend default
+}
+
+export interface SignalRequest {
+  pair: string;
+  timeframe: string;
+  instances: StrategyInstance[];
+  policy?: 'majority' | 'weighted';
+}
+
+export interface SignalResponse {
+  composite: 'BUY' | 'SELL' | 'HOLD';
+  signals: ('BUY' | 'SELL' | 'HOLD')[]; // aligned with the request's instances order
 }
 
 export interface StartSearchResponse {

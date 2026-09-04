@@ -10,7 +10,7 @@ import {
   type SingleStrategyInstance,
   type DiscoveryStats,
 } from './services/mockStrategyData';
-import { ApiError, fetchMarkets, fetchStrategies, startSearch, startSearchLoop } from '../../shared/api';
+import { ApiError, fetchCurrentSignal, fetchMarkets, fetchStrategies, startSearch, startSearchLoop } from '../../shared/api';
 import { useWebSocketSubscription } from '../../shared/hooks';
 import type { WSSearchProgressPayload } from '../../types/websocket';
 import type { ExperimentResult, StrategyInstance } from '../../types/backtest';
@@ -37,6 +37,33 @@ export function StrategyDiscoveryPage() {
     }).catch(() => undefined);
     fetchMarkets().then(setMarkets).catch(() => setMarkets(DEFAULT_MARKETS));
   }, [mode]);
+
+  const instancesRef = useRef(instances);
+  useEffect(() => {
+    instancesRef.current = instances;
+  });
+
+  // Real per-instance signals computed by the backend against the latest
+  // real candles — replaces the old static/random currentSignal. Keyed off
+  // .length (not the array itself) since this effect's own setInstances
+  // call would otherwise retrigger itself; instances are only ever
+  // appended, never edited in place, so a length change is exactly when a
+  // refetch is actually needed.
+  useEffect(() => {
+    if (mode !== 'LIVE') return;
+    const snapshot = instancesRef.current;
+    if (snapshot.length === 0) return;
+    fetchCurrentSignal({
+      pair: symbol,
+      timeframe: '1h',
+      policy: 'majority',
+      instances: snapshot.map(inst => ({ type: inst.type, params: inst.params })),
+    }).then(res => {
+      setInstances(prev => prev.map((inst, i) =>
+        snapshot[i]?.id === inst.id && res.signals[i] ? { ...inst, currentSignal: res.signals[i] } : inst
+      ));
+    }).catch(() => undefined);
+  }, [mode, symbol, instances.length]);
 
   const handleProgress = useCallback((progress: WSSearchProgressPayload) => {
     setStats(current => applyProgress(current, progress, activeSearchId.current));

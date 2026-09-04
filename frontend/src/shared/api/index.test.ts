@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { AxiosError, AxiosHeaders, type AxiosAdapter } from 'axios';
-import { apiClient, startSearchLoop } from '.';
+import { apiClient, startSearch, startSearchLoop } from '.';
 import type { StartSearchLoopRequest } from '../../types/backtest';
 
 const request: StartSearchLoopRequest = {
@@ -60,5 +60,79 @@ describe('startSearchLoop', () => {
       status: 422,
       message: 'insufficient historical candles; run backfill first',
     });
+  });
+});
+
+describe('startSearch', () => {
+  it('normalizes instances and only posts valid StartSearchRequest fields to /search/start', async () => {
+    let capturedBody: unknown = null;
+    const adapter: AxiosAdapter = async config => {
+      expect(config.method).toBe('post');
+      expect(config.url).toBe('/search/start');
+      capturedBody = JSON.parse(String(config.data));
+      return {
+        data: { searchId: 'search-123', status: 'STARTED' },
+        status: 202,
+        statusText: 'Accepted',
+        headers: new AxiosHeaders(),
+        config,
+      };
+    };
+    apiClient.defaults.adapter = adapter;
+
+    const res = await startSearch({
+      pair: 'btcusdt',
+      timeframe: '1h',
+      from: 1000,
+      to: 2000,
+      capital: 10000,
+      instances: [
+        { type: 'MA', params: { period: 20 }, weight: 0.5 },
+        { type: 'BBands', params: {}, weight: 0.5 }, // Should be normalized to Bollinger
+      ],
+      policy: 'weighted',
+    });
+
+    expect(res).toEqual({ searchId: 'search-123', status: 'STARTED' });
+    expect(capturedBody).toEqual({
+      pair: 'BTCUSDT',
+      timeframe: '1h',
+      from: 1000,
+      to: 2000,
+      capital: 10000,
+      instances: [
+        { type: 'MA', params: { period: 20 }, weight: 0.5 },
+        { type: 'Bollinger', weight: 0.5 },
+      ],
+      policy: 'weighted',
+    });
+  });
+
+  it('includes fee and slippage in the payload when provided', async () => {
+    let capturedBody: unknown = null;
+    const adapter: AxiosAdapter = async config => {
+      capturedBody = JSON.parse(String(config.data));
+      return {
+        data: { searchId: 'search-456', status: 'STARTED' },
+        status: 202,
+        statusText: 'Accepted',
+        headers: new AxiosHeaders(),
+        config,
+      };
+    };
+    apiClient.defaults.adapter = adapter;
+
+    await startSearch({
+      pair: 'btcusdt',
+      timeframe: '1h',
+      from: 1000,
+      to: 2000,
+      capital: 10000,
+      instances: [{ type: 'MA' }],
+      fee: 0.2,
+      slippage: 10,
+    });
+
+    expect(capturedBody).toMatchObject({ fee: 0.2, slippage: 10 });
   });
 });

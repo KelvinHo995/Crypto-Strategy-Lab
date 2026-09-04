@@ -59,31 +59,30 @@ export function SingleStrategyList({
       .map(([k, v]) => `${k.replace(selectedType.toLowerCase(), '')}: ${v}`)
       .join(', ');
 
-    // Mock initial signal randomly
-    const signals: ('BUY' | 'SELL' | 'HOLD')[] = ['BUY', 'SELL', 'HOLD'];
-    const currentSignal = signals[Math.floor(Math.random() * signals.length)];
-
+    // Placeholder until the parent page's real signal fetch (against live
+    // market data) resolves and corrects this — never a guess.
     const newInstance: SingleStrategyInstance = {
       id: instanceId,
       name,
       type: selectedType,
       description,
       params: paramValues,
-      currentSignal,
+      currentSignal: 'HOLD',
     };
 
     onCreateInstance(newInstance);
     setIsModalOpen(false);
   };
 
-  const getSignalStyle = (sig: 'BUY' | 'SELL' | 'HOLD') => {
+  const getSignalStyle = (sig: 'BUY' | 'SELL' | 'HOLD'): React.CSSProperties => {
+    const base: React.CSSProperties = { fontWeight: 'bold', flexShrink: 0, whiteSpace: 'nowrap' };
     switch (sig) {
       case 'BUY':
-        return { color: '#10b981', fontWeight: 'bold' }; // Green
+        return { ...base, color: '#10b981' }; // Green
       case 'SELL':
-        return { color: '#ef4444', fontWeight: 'bold' }; // Red
+        return { ...base, color: '#ef4444' }; // Red
       default:
-        return { color: '#64748b', fontWeight: 'bold' }; // Grey
+        return { ...base, color: '#64748b' }; // Grey
     }
   };
 
@@ -109,9 +108,9 @@ export function SingleStrategyList({
         {instances.map((instance) => (
           <div key={instance.id} style={cardStyle}>
             <div style={cardTopStyle}>
-              <div>
+              <div style={nameRowStyle}>
                 <span style={typeBadgeStyle}>{instance.type}</span>
-                <h4 style={instanceNameStyle}>{instance.name}</h4>
+                <span style={instanceNameStyle}>{instance.name}</span>
               </div>
               <span style={getSignalStyle(instance.currentSignal)}>
                 {getSignalSymbol(instance.currentSignal)}
@@ -267,7 +266,16 @@ const cardTopStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'flex-start',
+  gap: '0.5rem',
   marginBottom: '0.25rem',
+};
+
+const nameRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  flexWrap: 'wrap',
+  gap: '0.4rem',
+  minWidth: 0,
 };
 
 const typeBadgeStyle: React.CSSProperties = {
@@ -276,16 +284,14 @@ const typeBadgeStyle: React.CSSProperties = {
   color: '#94a3b8',
   padding: '0.1rem 0.3rem',
   borderRadius: '4px',
-  marginRight: '0.5rem',
   fontWeight: '700',
+  flexShrink: 0,
 };
 
 const instanceNameStyle: React.CSSProperties = {
   fontSize: '0.85rem',
   fontWeight: '600',
   color: '#0f172a',
-  margin: '0.25rem 0 0 0',
-  display: 'inline-block',
 };
 
 const descStyle: React.CSSProperties = {
