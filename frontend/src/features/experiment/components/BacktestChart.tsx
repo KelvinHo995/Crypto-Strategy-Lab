@@ -31,12 +31,14 @@ export function BacktestChart({ experiment, trades, highlightedTrade }: Backtest
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
 
   // Per spec (Trade Detail): clicking one trade highlights just its own
-  // ENTRY/EXIT, not every trade in the run at once — with 100+ trades in a
-  // single backtest, drawing all of them together turns into an unreadable
-  // wall of arrows and dots.
+  // ENTRY/EXIT by default — with 100+ trades in a single backtest, drawing
+  // all of them together turns into an unreadable wall of arrows and dots.
+  // "Show all" is an explicit opt-in for whoever still wants the full
+  // picture, not the default.
+  const [showAll, setShowAll] = useState(false);
   const markers = useMemo(
-    () => tradesToMarkers(highlightedTrade ? [highlightedTrade] : []),
-    [highlightedTrade]
+    () => tradesToMarkers(showAll ? trades : highlightedTrade ? [highlightedTrade] : []),
+    [showAll, trades, highlightedTrade]
   );
   const pair = trades[0]?.pair;
 
@@ -103,15 +105,49 @@ export function BacktestChart({ experiment, trades, highlightedTrade }: Backtest
   }
 
   return (
-    <div style={chartBodyStyle}>
-      {status === 'loading' ? (
-        <div style={messageStyle}>Loading chart...</div>
-      ) : (
-        <TradingChart candles={candles} ma20Line={ma20Line} markers={markers} fitSignal={fitNonce} />
-      )}
+    <div>
+      <div style={toolbarStyle}>
+        <span style={toolbarLabelStyle}>
+          {showAll ? `Showing all ${trades.length} trades` : 'Showing selected trade only'}
+        </span>
+        <button type="button" onClick={() => setShowAll((v) => !v)} style={toggleBtnStyle}>
+          {showAll ? 'Show selected only' : 'Show all trades'}
+        </button>
+      </div>
+      <div style={chartBodyStyle}>
+        {status === 'loading' ? (
+          <div style={messageStyle}>Loading chart...</div>
+        ) : (
+          <TradingChart candles={candles} ma20Line={ma20Line} markers={markers} fitSignal={fitNonce} />
+        )}
+      </div>
     </div>
   );
 }
+
+const toolbarStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginBottom: '0.5rem',
+};
+
+const toolbarLabelStyle: React.CSSProperties = {
+  fontSize: '0.75rem',
+  color: '#64748b',
+};
+
+const toggleBtnStyle: React.CSSProperties = {
+  backgroundColor: '#ffffff',
+  color: '#2563eb',
+  border: '1px solid #2563eb',
+  borderRadius: '4px',
+  padding: '0.3rem 0.65rem',
+  fontSize: '0.75rem',
+  fontWeight: '600',
+  cursor: 'pointer',
+  outline: 'none',
+};
 
 const chartBodyStyle: React.CSSProperties = {
   position: 'relative',
