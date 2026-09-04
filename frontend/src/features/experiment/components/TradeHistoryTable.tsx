@@ -3,12 +3,14 @@ import type { Trade } from '../../../types/backtest';
 
 interface TradeHistoryTableProps {
   trades: Trade[];
+  selectedTrade?: Trade | null;
   onHoverTrade?: (trade: Trade | null) => void;
   onClickTrade?: (trade: Trade) => void;
 }
 
 export function TradeHistoryTable({
   trades,
+  selectedTrade,
   onHoverTrade,
   onClickTrade,
 }: TradeHistoryTableProps) {
@@ -41,7 +43,7 @@ export function TradeHistoryTable({
 
   return (
     <div style={containerStyle}>
-      <h3 style={titleStyle}>Simulated Execution Log</h3>
+      <h3 style={titleStyle}>Simulated Execution Log — click a row to highlight it on the chart</h3>
       
       {/* Table grid */}
       <div style={tableWrapperStyle}>
@@ -68,11 +70,12 @@ export function TradeHistoryTable({
                 });
 
                 const isWin = trade.profit > 0;
+                const isSelected = selectedTrade === trade;
 
                 return (
                   <tr
                     key={idx}
-                    style={trStyle}
+                    style={isSelected ? trSelectedStyle : trStyle}
                     onMouseEnter={() => onHoverTrade && onHoverTrade(trade)}
                     onMouseLeave={() => onHoverTrade && onHoverTrade(null)}
                     onClick={() => onClickTrade && onClickTrade(trade)}
@@ -169,7 +172,12 @@ const tableStyle: React.CSSProperties = {
 const trStyle: React.CSSProperties = {
   borderBottom: '1px solid #e2e8f0',
   transition: 'background-color 0.15s ease',
-  cursor: 'crosshair',
+  cursor: 'pointer',
+};
+
+const trSelectedStyle: React.CSSProperties = {
+  ...trStyle,
+  backgroundColor: 'rgba(37, 99, 235, 0.08)',
 };
 
 const thLeftStyle: React.CSSProperties = {

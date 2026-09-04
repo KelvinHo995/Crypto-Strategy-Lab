@@ -10,6 +10,7 @@ import type { ExperimentResult, Trade } from '../../../types/backtest';
 interface BacktestChartProps {
   experiment: ExperimentResult;
   trades: Trade[];
+  highlightedTrade: Trade | null;
 }
 
 // A dedicated, static chart for one backtest's own candles + trade markers —
@@ -22,14 +23,21 @@ interface BacktestChartProps {
 // markers across the wrong window. This chart has none of that: it fetches
 // once for exactly this experiment's own pair/period, never re-fetches on
 // its own, and isn't shared with anything else.
-export function BacktestChart({ experiment, trades }: BacktestChartProps) {
+export function BacktestChart({ experiment, trades, highlightedTrade }: BacktestChartProps) {
   const mode = useAppMode();
   const [candles, setCandles] = useState<Candle[]>([]);
   const [ma20Line, setMa20Line] = useState<number[]>([]);
   const [fitNonce, setFitNonce] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
 
-  const markers = useMemo(() => tradesToMarkers(trades), [trades]);
+  // Per spec (Trade Detail): clicking one trade highlights just its own
+  // ENTRY/EXIT, not every trade in the run at once — with 100+ trades in a
+  // single backtest, drawing all of them together turns into an unreadable
+  // wall of arrows and dots.
+  const markers = useMemo(
+    () => tradesToMarkers(highlightedTrade ? [highlightedTrade] : []),
+    [highlightedTrade]
+  );
   const pair = trades[0]?.pair;
 
   useEffect(() => {

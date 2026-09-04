@@ -51,6 +51,12 @@ export function ExperimentDashboard() {
   const activeSearchId = useRef<string | null>(null);
   const runTimeout = useRef<number | null>(null);
 
+  // Which single trade the chart below highlights — per spec (Trade Detail),
+  // clicking a row highlights just that trade's own entry/exit, not every
+  // trade in the run at once. Defaults to the first trade so the chart isn't
+  // blank before the user clicks anything.
+  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
+
   const showToast = useCallback((message: string) => {
     if (toastTimeout.current !== null) window.clearTimeout(toastTimeout.current);
     setToast(message);
@@ -62,6 +68,10 @@ export function ExperimentDashboard() {
       loadTradesFor(activeExp).then(setActiveTrades);
     }
   }, [activeExp, activeTrades.length, setActiveTrades]);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => setSelectedTrade(activeTrades[0] ?? null));
+  }, [activeTrades]);
 
   const applyExperiments = useCallback((items: ExperimentResult[]) => {
     if (items.length === 0) return;
@@ -208,8 +218,12 @@ export function ExperimentDashboard() {
         <div style={tradesSectionStyle}>
           {activeTrades.length > 0 ? (
             <>
-              <BacktestChart experiment={activeExp} trades={activeTrades} />
-              <TradeHistoryTable trades={activeTrades} />
+              <BacktestChart experiment={activeExp} trades={activeTrades} highlightedTrade={selectedTrade} />
+              <TradeHistoryTable
+                trades={activeTrades}
+                selectedTrade={selectedTrade}
+                onClickTrade={setSelectedTrade}
+              />
             </>
           ) : activeExp.tradeCount > 0 ? (
             <p style={noTradesStyle}>
