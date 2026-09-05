@@ -250,6 +250,7 @@ func resultFromJob(job BacktestJob, status string) Result {
 		searchTotal = 1
 	}
 	return Result{ID: job.ID, SearchID: searchID, SearchTotal: searchTotal, CandidateID: job.Candidate.ID,
+		Pair: job.Pair, Timeframe: job.Timeframe,
 		Instances: cloneInstances(job.Candidate.Instances), Policy: job.Candidate.Policy,
 		StrategyVersions: cloneStringMap(job.StrategyVersions), DatasetPeriod: job.DatasetPeriod,
 		Status: status, CreatedAt: job.EnqueuedAt}

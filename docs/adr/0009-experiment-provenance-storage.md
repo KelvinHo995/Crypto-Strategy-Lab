@@ -25,6 +25,8 @@ provenance inline, at write time, in the same row as the result itself:
 type Result struct {
     ID               string
     CandidateID      string                   // exact CandidateStrategy spec used
+    Pair             string                   // market symbol, e.g. BTCUSDT
+    Timeframe        string                   // candle interval actually used
     StrategyVersions map[string]string        // strategy implementation versions
     SentimentModels  []SentimentModelIdentity // model outputs actually consumed
     DatasetPeriod    string                   // exact historical window backtested
@@ -34,6 +36,11 @@ type Result struct {
     CreatedAt        int64
 }
 ```
+
+`Pair`, `Timeframe`, and `DatasetPeriod` form the market dataset identity.
+`DatasetPeriod` is only the historical `from-to` range and therefore cannot
+identify a symbol or interval by itself. Legacy rows keep empty pair/timeframe
+values so missing provenance is visible instead of being replaced by a guess.
 
 `StrategyVersions["Sentiment"]` identifies the Go strategy implementation;
 it is not used as a proxy for the Python model. During a backtest, each

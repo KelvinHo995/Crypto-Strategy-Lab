@@ -22,6 +22,8 @@ type Result struct {
 	SearchID         string                            `json:"searchId"`
 	SearchTotal      int                               `json:"searchTotal"`
 	CandidateID      string                            `json:"candidateId"`
+	Pair             string                            `json:"pair,omitempty"`
+	Timeframe        string                            `json:"timeframe,omitempty"`
 	Instances        []strategy.StrategyInstance       `json:"instances"`
 	Policy           string                            `json:"policy"`
 	StrategyVersions map[string]string                 `json:"strategyVersions"`

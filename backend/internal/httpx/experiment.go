@@ -156,6 +156,7 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 			StrategyVersions: versions, EnqueuedAt: now.UnixMilli(),
 		}
 		pending := experiment.Result{ID: id, SearchID: id, SearchTotal: 1, CandidateID: candidate.ID,
+			Pair: req.Pair, Timeframe: req.TimeFrame,
 			Instances: candidate.Instances, Policy: candidate.Policy,
 			StrategyVersions: versions, DatasetPeriod: job.DatasetPeriod,
 			Status: "PENDING", CreatedAt: now.UnixMilli()}

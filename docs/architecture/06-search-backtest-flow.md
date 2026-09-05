@@ -31,7 +31,8 @@ Evaluator
      │    "did the strategy trade correctly" vs "was the outcome good" are
      │    different questions with different failure modes
      ▼
-experiment.Result  { SearchID, SearchTotal, CandidateID,
+experiment.Result  { SearchID, SearchTotal, CandidateID, Pair, Timeframe,
+                      DatasetPeriod,
                       StrategyVersions (provenance), Return,
                       MDD, TradeCount, Status, CreatedAt }
      ▼
@@ -206,3 +207,8 @@ Built-in strategies currently use the explicit implementation release label
 strategy collects identities from the observations selected during the
 backtest, and the worker persists the unique, deterministically sorted list.
 Mixed model versions are retained rather than collapsed.
+
+Market provenance is stored in the same snapshot: `Pair` identifies the
+symbol, `Timeframe` the candle interval, and `DatasetPeriod` the exact
+historical range. The backtest chart uses these persisted values when loading
+candles; it does not infer the pair from trades or assume `4h`.

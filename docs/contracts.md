@@ -25,6 +25,12 @@ is normalized server-side to sum to 1. Returns HTTP 202
 snapshot. Every persisted result also carries `searchId` and `searchTotal`;
 the one-candidate flow uses the result ID and `1`.
 
+Each new result also exposes `pair`, `timeframe`, and `datasetPeriod` (the
+requested Unix-millisecond `from-to` range). Together these identify the exact
+market candle dataset used by the backtest. Rows created before this provenance
+was introduced omit `pair`/`timeframe` rather than claiming an unverified value.
+Completed trade details remain available at `GET /experiments/{id}/trades`.
+
 Completed results that consumed `SentimentStrategy` observations also expose
 `sentimentModels:[{name,version}]`. The list contains every distinct persisted
 model identity actually used during that backtest, sorted deterministically;

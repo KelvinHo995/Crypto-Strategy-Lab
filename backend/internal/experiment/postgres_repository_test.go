@@ -32,28 +32,30 @@ type capturedResultRow struct {
 }
 
 func (r capturedResultRow) Scan(dest ...any) error {
-	if len(dest) != 19 || len(r.args) != 19 {
-		return fmt.Errorf("destinations=%d args=%d, want 19", len(dest), len(r.args))
+	if len(dest) != 21 || len(r.args) != 21 {
+		return fmt.Errorf("destinations=%d args=%d, want 21", len(dest), len(r.args))
 	}
 	*(dest[0].(*string)) = r.args[0].(string)
 	*(dest[1].(*string)) = r.args[1].(string)
 	*(dest[2].(*int)) = r.args[2].(int)
 	*(dest[3].(*string)) = r.args[3].(string)
-	*(dest[4].(*[]byte)) = []byte(r.args[4].(string))
+	*(dest[4].(*string)) = r.args[4].(string)
 	*(dest[5].(*string)) = r.args[5].(string)
 	*(dest[6].(*[]byte)) = []byte(r.args[6].(string))
-	*(dest[7].(*[]byte)) = []byte(r.args[7].(string))
-	*(dest[8].(*string)) = r.args[8].(string)
-	*(dest[9].(*float64)) = r.args[9].(float64)
-	*(dest[10].(*float64)) = r.args[10].(float64)
-	*(dest[11].(*int)) = r.args[11].(int)
+	*(dest[7].(*string)) = r.args[7].(string)
+	*(dest[8].(*[]byte)) = []byte(r.args[8].(string))
+	*(dest[9].(*[]byte)) = []byte(r.args[9].(string))
+	*(dest[10].(*string)) = r.args[10].(string)
+	*(dest[11].(*float64)) = r.args[11].(float64)
 	*(dest[12].(*float64)) = r.args[12].(float64)
 	*(dest[13].(*int)) = r.args[13].(int)
-	*(dest[14].(*int)) = r.args[14].(int)
-	*(dest[15].(*float64)) = r.args[15].(float64)
-	*(dest[16].(*string)) = r.args[16].(string)
-	*(dest[17].(*int64)) = r.args[17].(int64)
-	*(dest[18].(*int64)) = r.args[18].(int64)
+	*(dest[14].(*float64)) = r.args[14].(float64)
+	*(dest[15].(*int)) = r.args[15].(int)
+	*(dest[16].(*int)) = r.args[16].(int)
+	*(dest[17].(*float64)) = r.args[17].(float64)
+	*(dest[18].(*string)) = r.args[18].(string)
+	*(dest[19].(*int64)) = r.args[19].(int64)
+	*(dest[20].(*int64)) = r.args[20].(int64)
 	return nil
 }
 
@@ -86,6 +88,8 @@ func TestSentimentModelProvenanceSurvivesRepositoryRoundTrip(t *testing.T) {
 	want := Result{
 		ID: "experiment-sentiment", SearchID: "search-1", SearchTotal: 1,
 		CandidateID: "candidate-1",
+		Pair:        "BTCUSDT",
+		Timeframe:   "1h",
 		Instances:   []strategy.StrategyInstance{{Type: "Sentiment"}},
 		Policy:      "majority",
 		StrategyVersions: map[string]string{
@@ -113,5 +117,49 @@ func TestSentimentModelProvenanceSurvivesRepositoryRoundTrip(t *testing.T) {
 	}
 	if got.StrategyVersions["Sentiment"] != strategy.SentimentStrategyVersion || got.Instances[0].Type != "Sentiment" {
 		t.Fatalf("strategy provenance did not survive: %+v", got)
+	}
+	if got.Pair != want.Pair || got.Timeframe != want.Timeframe || got.DatasetPeriod != want.DatasetPeriod {
+		t.Fatalf("market provenance=%s/%s/%s, want %s/%s/%s", got.Pair, got.Timeframe, got.DatasetPeriod, want.Pair, want.Timeframe, want.DatasetPeriod)
+	}
+}
+
+func TestMarketContextRoundTripKeepsTimeframesDistinct(t *testing.T) {
+	for _, timeframe := range []string{"1h", "15m"} {
+		t.Run(timeframe, func(t *testing.T) {
+			execer := &capturingResultExecer{}
+			want := Result{
+				ID: "experiment-" + timeframe, CandidateID: "candidate", Pair: "BTCUSDT", Timeframe: timeframe,
+				Instances: []strategy.StrategyInstance{}, StrategyVersions: map[string]string{}, DatasetPeriod: "1-2",
+				Status: "COMPLETED", CreatedAt: 100,
+			}
+			if err := saveResult(context.Background(), execer, want); err != nil {
+				t.Fatal(err)
+			}
+			got, err := scanResult(capturedResultRow{args: execer.args})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Pair != "BTCUSDT" || got.Timeframe != timeframe {
+				t.Fatalf("market context=%s/%s, want BTCUSDT/%s", got.Pair, got.Timeframe, timeframe)
+			}
+		})
+	}
+}
+
+func TestMissingLegacyMarketContextRemainsUnknown(t *testing.T) {
+	execer := &capturingResultExecer{}
+	want := Result{
+		ID: "legacy-experiment", CandidateID: "candidate", Instances: []strategy.StrategyInstance{},
+		StrategyVersions: map[string]string{}, DatasetPeriod: "1-2", Status: "COMPLETED", CreatedAt: 100,
+	}
+	if err := saveResult(context.Background(), execer, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := scanResult(capturedResultRow{args: execer.args})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Pair != "" || got.Timeframe != "" {
+		t.Fatalf("legacy market context=%q/%q, want unknown empty values", got.Pair, got.Timeframe)
 	}
 }
