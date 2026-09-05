@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/strategy"
 )
 
 type resultListLoad struct {
@@ -112,6 +114,7 @@ func cloneResults(source []Result) []Result {
 	for index, result := range source {
 		result.Instances = cloneInstances(result.Instances)
 		result.StrategyVersions = cloneStringMap(result.StrategyVersions)
+		result.SentimentModels = append([]strategy.SentimentModelIdentity(nil), result.SentimentModels...)
 		results[index] = result
 	}
 	return results

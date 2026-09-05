@@ -109,10 +109,12 @@ func (p *WorkerPool) Wait() { p.wg.Wait() }
 // with no recover() above it, so an unrecovered panic here would crash the
 // whole server process, not just fail this one job.
 func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
+	var resolvedStrategy strategy.Strategy
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("experiment worker: panic on job %s: %v", job.ID, r)
 			result := resultFromJob(job, "FAILED")
+			result.SentimentModels = sentimentModelsFrom(resolvedStrategy)
 			if err := p.repo.Save(ctx, result); err != nil {
 				log.Printf("experiment worker: save FAILED after panic for %s: %v", job.ID, err)
 				p.retry(ctx, job.ID, err)
@@ -163,6 +165,7 @@ func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
 		p.ack(ctx, job.ID)
 		return
 	}
+	resolvedStrategy = combined
 	config := job.Config
 	if la, ok := combined.(strategy.LookbackAware); ok {
 		config.Window = la.MinLookback()
@@ -170,6 +173,7 @@ func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
 		config.Window = 1
 	}
 	trades := NewBacktester(config).Run(combined, candles)
+	result.SentimentModels = sentimentModelsFrom(combined)
 	metrics := (Evaluator{StartingCapital: job.Config.StartingCapital}).Evaluate(trades)
 	result.Return, result.MDD = metrics.Return, metrics.MDD
 	result.TradeCount, result.WinRate = metrics.TradeCount, metrics.WinRate
@@ -192,6 +196,13 @@ func (p *WorkerPool) run(ctx context.Context, job BacktestJob) {
 	}
 	p.notify(result)
 	p.ack(ctx, job.ID)
+}
+
+func sentimentModelsFrom(resolved strategy.Strategy) []strategy.SentimentModelIdentity {
+	if provider, ok := resolved.(strategy.SentimentModelProvider); ok {
+		return provider.SentimentModels()
+	}
+	return nil
 }
 
 func (p *WorkerPool) ack(ctx context.Context, id string) {
@@ -270,7 +281,13 @@ func cloneInstances(src []strategy.StrategyInstance) []strategy.StrategyInstance
 func DefaultStrategyVersions(instances []strategy.StrategyInstance) map[string]string {
 	versions := make(map[string]string, len(instances))
 	for _, inst := range instances {
-		versions[inst.Type] = "v1"
+		version := "v1"
+		if inst.Type == "Sentiment" {
+			// This is the Go strategy implementation version. Runtime model
+			// identities are captured separately after the backtest.
+			version = strategy.SentimentStrategyVersion
+		}
+		versions[inst.Type] = version
 	}
 	return versions
 }

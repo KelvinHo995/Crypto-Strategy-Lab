@@ -24,17 +24,24 @@ provenance inline, at write time, in the same row as the result itself:
 ```go
 type Result struct {
     ID               string
-    CandidateID      string            // exact CandidateStrategy spec used
-    StrategyVersions map[string]string // {"MA": "v1", "RSI": "v2", ...}
-    DatasetPeriod    string            // exact historical window backtested
-    // sentiment model version, if SentimentStrategy was included, lives
-    // inside StrategyVersions too — e.g. {"SentimentStrategy": "FinBERT-v3"}
+    CandidateID      string                   // exact CandidateStrategy spec used
+    StrategyVersions map[string]string        // strategy implementation versions
+    SentimentModels  []SentimentModelIdentity // model outputs actually consumed
+    DatasetPeriod    string                   // exact historical window backtested
     Return, MDD      float64
     TradeCount       int
     Status           string
     CreatedAt        int64
 }
 ```
+
+`StrategyVersions["Sentiment"]` identifies the Go strategy implementation;
+it is not used as a proxy for the Python model. During a backtest, each
+runtime-built `SentimentStrategy` records the model name/version attached to
+successful persisted observation lookups. The worker stores the unique list
+in deterministic name/version order. Multiple identities are retained when a
+historical range spans a model change; an empty list means no sentiment model
+output was consumed (for example, fallback after missing/stale data).
 
 This is plain CRUD — provenance is captured once, at the moment the result
 is written, not reconstructed later by correlating logs or replaying events
@@ -67,6 +74,8 @@ used for this).
   exactly produced this?" needs zero joins or replay, just reading the row.
 - **Positive:** directly satisfies spec ch.36 and the deck's Reproducibility
   rubric question with a one-line query.
+- **Positive:** model provenance comes from the stored sentiment observations,
+  not a version guessed before the backtest starts.
 - **Cost / open risk:** every strategy needs an explicit version identifier
   that a developer manually bumps when its logic changes — there is
   currently no automatic detection or enforcement that a strategy's version

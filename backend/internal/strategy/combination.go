@@ -105,6 +105,16 @@ func (cs *CombinedStrategy) MinLookback() int {
 	return max
 }
 
+func (cs *CombinedStrategy) SentimentModels() []SentimentModelIdentity {
+	var models []SentimentModelIdentity
+	for _, child := range cs.Strategies {
+		if provider, ok := child.(SentimentModelProvider); ok {
+			models = append(models, provider.SentimentModels()...)
+		}
+	}
+	return normalizeSentimentModels(models)
+}
+
 func resolveCombinationPolicy(policyName string, weights []float64) CombinationPolicy {
 	if policyName == "weighted" {
 		return WeightedPolicy{Weights: normalizeWeights(weights)}
