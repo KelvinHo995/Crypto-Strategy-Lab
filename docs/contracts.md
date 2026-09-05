@@ -25,6 +25,13 @@ is normalized server-side to sum to 1. Returns HTTP 202
 snapshot. Every persisted result also carries `searchId` and `searchTotal`;
 the one-candidate flow uses the result ID and `1`.
 
+Completed results that consumed `SentimentStrategy` observations also expose
+`sentimentModels:[{name,version}]`. The list contains every distinct persisted
+model identity actually used during that backtest, sorted deterministically;
+it is empty/omitted for non-sentiment runs or when sentiment fell back without
+consuming a model output. `strategyVersions.Sentiment` remains the version of
+the Go strategy implementation, not the Python model.
+
 `POST /search/loop` accepts:
 
 ```json

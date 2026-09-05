@@ -20,6 +20,16 @@ type holdStrategy struct{}
 func (holdStrategy) Name() string                            { return "Hold" }
 func (holdStrategy) Analyze([]market.Candle) strategy.Signal { return strategy.Hold }
 
+type runtimeModelSentimentClient struct{}
+
+func (runtimeModelSentimentClient) FetchSentiment(context.Context, int64) (float64, error) {
+	return 0, nil
+}
+
+func (runtimeModelSentimentClient) FetchSentimentWithModel(context.Context, int64) (float64, string, string, error) {
+	return 0.9, "crypto-lexicon", "runtime-release", nil
+}
+
 func newRecordingRepo() *recordingRepo {
 	return &recordingRepo{saves: make(chan experiment.Result, 10), tradeSaves: make(chan []experiment.Trade, 10)}
 }
@@ -134,6 +144,68 @@ func TestWorkerPoolRun_ObserverPanicDoesNotStopWorker(t *testing.T) {
 		case <-deadline:
 			t.Fatalf("worker stopped after observer panic; completed jobs: %v", completed)
 		}
+	}
+}
+
+func TestWorkerPoolRun_RecordsActualSentimentModelProvenance(t *testing.T) {
+	registry := strategy.NewRegistry()
+	client := runtimeModelSentimentClient{}
+	registry.RegisterFactory("Sentiment", strategy.NewSentimentFactory(nil, client, 0.7))
+	repo := newRecordingRepo()
+	queue := experiment.NewInMemoryQueue(1)
+	pool := experiment.NewWorkerPool(queue, registry, repo, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool.Start(ctx)
+
+	instances := []strategy.StrategyInstance{{Type: "Sentiment"}}
+	job := experiment.BacktestJob{
+		ID: "job-sentiment-provenance",
+		Candidate: strategy.CandidateStrategy{
+			ID: "candidate-sentiment", Instances: instances, Policy: "majority",
+		},
+		Candles: []market.Candle{
+			{Symbol: "BTCUSDT", OpenTime: 1, Open: 100, High: 101, Low: 99, Close: 100},
+			{Symbol: "BTCUSDT", OpenTime: 2, Open: 100, High: 105, Low: 99, Close: 104},
+		},
+		Config: experiment.Config{
+			Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
+			StopLossPct: 0.02, TakeProfitPct: 0.04, FeePct: 0.001, SlippageBps: 5,
+		},
+		StrategyVersions: experiment.DefaultStrategyVersions(instances),
+		EnqueuedAt:       time.Now().UnixMilli(),
+	}
+	if err := queue.Enqueue(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+
+	var completed experiment.Result
+	for i := 0; i < 2; i++ {
+		select {
+		case result := <-repo.saves:
+			if result.Status == "COMPLETED" {
+				completed = result
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for sentiment experiment")
+		}
+	}
+	if completed.StrategyVersions["Sentiment"] != strategy.SentimentStrategyVersion {
+		t.Fatalf("strategy versions=%v", completed.StrategyVersions)
+	}
+	if len(completed.SentimentModels) != 1 || completed.SentimentModels[0].Name != "crypto-lexicon" || completed.SentimentModels[0].Version != "runtime-release" {
+		t.Fatalf("sentiment models=%v, want actual runtime model", completed.SentimentModels)
+	}
+	if completed.SentimentModels[0].Version == completed.StrategyVersions["Sentiment"] {
+		t.Fatal("runtime model provenance was replaced with the static strategy version")
+	}
+}
+
+func TestDefaultStrategyVersionsPreservesNonSentimentStrategies(t *testing.T) {
+	versions := experiment.DefaultStrategyVersions([]strategy.StrategyInstance{{Type: "MA"}})
+	if versions["MA"] != "v1" {
+		t.Fatalf("versions=%v, want MA=v1", versions)
 	}
 }
 

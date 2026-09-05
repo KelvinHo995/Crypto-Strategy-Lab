@@ -14,6 +14,25 @@ type mockSentimentClient struct {
 	err   error
 }
 
+type modelAwareSentimentClient struct {
+	responses map[int64]struct {
+		score         float64
+		name, version string
+	}
+}
+
+func (m *modelAwareSentimentClient) FetchSentiment(context.Context, int64) (float64, error) {
+	return 0, errors.New("score-only lookup must not be used")
+}
+
+func (m *modelAwareSentimentClient) FetchSentimentWithModel(_ context.Context, timestamp int64) (float64, string, string, error) {
+	response, ok := m.responses[timestamp]
+	if !ok {
+		return 0, "", "", errors.New("missing observation")
+	}
+	return response.score, response.name, response.version, nil
+}
+
 func (m *mockSentimentClient) FetchSentiment(ctx context.Context, timestamp int64) (float64, error) {
 	return m.score, m.err
 }
@@ -95,4 +114,32 @@ func TestSentimentStrategy_MinLookback(t *testing.T) {
 			t.Fatalf("MinLookback() = %d, want %d (base strategy's own requirement)", got, base.MinLookback())
 		}
 	})
+}
+
+func TestSentimentStrategyRecordsMixedModelVersionsDeterministically(t *testing.T) {
+	client := &modelAwareSentimentClient{responses: map[int64]struct {
+		score         float64
+		name, version string
+	}{
+		1: {score: 0.9, name: "crypto-lexicon", version: "release-b"},
+		2: {score: 0.9, name: "crypto-lexicon", version: "release-a"},
+	}}
+	s := strategy.NewSentimentStrategy(nil, client, 0.7)
+	s.Analyze([]market.Candle{{OpenTime: 1}})
+	s.Analyze([]market.Candle{{OpenTime: 2}})
+	s.Analyze([]market.Candle{{OpenTime: 1}})
+
+	models := s.SentimentModels()
+	want := []strategy.SentimentModelIdentity{
+		{Name: "crypto-lexicon", Version: "release-a"},
+		{Name: "crypto-lexicon", Version: "release-b"},
+	}
+	if len(models) != len(want) {
+		t.Fatalf("models=%v, want %v", models, want)
+	}
+	for i := range want {
+		if models[i] != want[i] {
+			t.Fatalf("models=%v, want deterministic %v", models, want)
+		}
+	}
 }

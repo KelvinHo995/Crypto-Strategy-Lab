@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -47,19 +48,49 @@ func (l *TimeLookup) Invalidate() {
 
 // FetchSentiment returns the directional 0..1 score expected by SentimentStrategy.
 func (l *TimeLookup) FetchSentiment(ctx context.Context, timestamp int64) (float64, error) {
+	observation, err := l.fetchObservation(ctx, timestamp)
+	if err != nil {
+		return 0, err
+	}
+	return directionalScore(observation)
+}
+
+// FetchSentimentWithModel preserves the identity of the exact persisted
+// observation selected for a strategy lookup.
+func (l *TimeLookup) FetchSentimentWithModel(ctx context.Context, timestamp int64) (float64, string, string, error) {
+	observation, err := l.fetchObservation(ctx, timestamp)
+	if err != nil {
+		return 0, "", "", err
+	}
+	score, err := directionalScore(observation)
+	if err != nil {
+		return 0, "", "", err
+	}
+	modelName := strings.TrimSpace(observation.ModelName)
+	modelVersion := strings.TrimSpace(observation.ModelVersion)
+	if modelName == "" || modelVersion == "" {
+		return 0, "", "", errors.New("sentiment observation has no model identity")
+	}
+	return score, modelName, modelVersion, nil
+}
+
+func (l *TimeLookup) fetchObservation(ctx context.Context, timestamp int64) (Observation, error) {
 	if l == nil || l.repo == nil {
-		return 0, errors.New("sentiment repository unavailable")
+		return Observation{}, errors.New("sentiment repository unavailable")
 	}
 	if timestamp <= 0 {
-		return 0, errors.New("sentiment timestamp must be positive")
+		return Observation{}, errors.New("sentiment timestamp must be positive")
 	}
 	earliest := timestamp - l.maxAge.Milliseconds()
 
 	observation, err := l.latestAtOrBefore(ctx, timestamp, earliest)
 	if err != nil {
-		return 0, err
+		return Observation{}, err
 	}
+	return observation, nil
+}
 
+func directionalScore(observation Observation) (float64, error) {
 	switch observation.Sentiment {
 	case "POSITIVE":
 		return observation.Score, nil

@@ -18,22 +18,23 @@ type Strategy interface {
 const MinCandlesForBacktest = strategy.MaxGeneratedLookback + 1
 
 type Result struct {
-	ID               string                      `json:"id"`
-	SearchID         string                      `json:"searchId"`
-	SearchTotal      int                         `json:"searchTotal"`
-	CandidateID      string                      `json:"candidateId"`
-	Instances        []strategy.StrategyInstance `json:"instances"`
-	Policy           string                      `json:"policy"`
-	StrategyVersions map[string]string           `json:"strategyVersions"`
-	DatasetPeriod    string                      `json:"datasetPeriod"`
-	Return           float64                     `json:"return"`
-	MDD              float64                     `json:"mdd"`
-	TradeCount       int                         `json:"tradeCount"`
-	WinRate          float64                     `json:"winRate"`
-	Wins             int                         `json:"wins"`
-	Losses           int                         `json:"losses"`
-	TotalProfit      float64                     `json:"totalProfit"`
-	Status           string                      `json:"status"`
-	CreatedAt        int64                       `json:"createdAt"`
-	UpdatedAt        int64                       `json:"updatedAt"`
+	ID               string                            `json:"id"`
+	SearchID         string                            `json:"searchId"`
+	SearchTotal      int                               `json:"searchTotal"`
+	CandidateID      string                            `json:"candidateId"`
+	Instances        []strategy.StrategyInstance       `json:"instances"`
+	Policy           string                            `json:"policy"`
+	StrategyVersions map[string]string                 `json:"strategyVersions"`
+	SentimentModels  []strategy.SentimentModelIdentity `json:"sentimentModels,omitempty"`
+	DatasetPeriod    string                            `json:"datasetPeriod"`
+	Return           float64                           `json:"return"`
+	MDD              float64                           `json:"mdd"`
+	TradeCount       int                               `json:"tradeCount"`
+	WinRate          float64                           `json:"winRate"`
+	Wins             int                               `json:"wins"`
+	Losses           int                               `json:"losses"`
+	TotalProfit      float64                           `json:"totalProfit"`
+	Status           string                            `json:"status"`
+	CreatedAt        int64                             `json:"createdAt"`
+	UpdatedAt        int64                             `json:"updatedAt"`
 }

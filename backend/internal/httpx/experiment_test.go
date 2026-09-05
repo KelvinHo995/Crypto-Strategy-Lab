@@ -135,6 +135,9 @@ func TestSearchStart_QueuesRealPipelineAndSavesProvenance(t *testing.T) {
 			if result.StrategyVersions["MA"] != "v1" {
 				t.Fatalf("strategyVersions = %#v, want MA=v1", result.StrategyVersions)
 			}
+			if len(result.SentimentModels) != 0 {
+				t.Fatalf("non-sentiment experiment has sentiment models: %v", result.SentimentModels)
+			}
 			break
 		}
 		if time.Now().After(deadline) {
@@ -324,6 +327,39 @@ func TestGetExperiment_NotFound(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestGetExperiment_ExposesSentimentModelProvenance(t *testing.T) {
+	repo := newFakeRepo()
+	repo.results["sentiment-result"] = experiment.Result{
+		ID:        "sentiment-result",
+		Instances: []strategy.StrategyInstance{{Type: "Sentiment"}},
+		StrategyVersions: map[string]string{
+			"Sentiment": strategy.SentimentStrategyVersion,
+		},
+		SentimentModels: []strategy.SentimentModelIdentity{
+			{Name: "crypto-lexicon", Version: "runtime-release"},
+		},
+		Status: "COMPLETED",
+	}
+	srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), repo))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/experiments/sentiment-result")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d, want 200", resp.StatusCode)
+	}
+	var result experiment.Result
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.SentimentModels) != 1 || result.SentimentModels[0].Name != "crypto-lexicon" || result.SentimentModels[0].Version != "runtime-release" {
+		t.Fatalf("sentiment models=%v", result.SentimentModels)
 	}
 }
 

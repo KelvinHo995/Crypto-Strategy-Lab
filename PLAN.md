@@ -119,6 +119,7 @@ type ExperimentResult struct {
     Params           map[string]any    `json:"params"`           // snapshot
     Policy           string            `json:"policy"`           // snapshot
     StrategyVersions map[string]string `json:"strategyVersions"` // provenance
+    SentimentModels  []ModelIdentity   `json:"sentimentModels"`  // runtime identities actually consumed
     DatasetPeriod    string            `json:"datasetPeriod"`
     Return           float64           `json:"return"`
     MDD              float64           `json:"mdd"`
@@ -141,7 +142,7 @@ Response: {
   "newsId": "8821",
   "sentiment": "NEGATIVE",
   "score": 0.91,
-  "model": { "name": "FinBERT", "version": "v1" },
+  "model": { "name": "crypto-lexicon", "version": "v1" },
   "createdAt": 1723000000
 }
 ```
@@ -247,6 +248,7 @@ CREATE TABLE experiments (
     params             TEXT NOT NULL,   -- JSON: {"maWindow":20,...} — snapshot
     policy             TEXT NOT NULL,   -- snapshot
     strategy_versions  TEXT NOT NULL,   -- JSON provenance
+    sentiment_models   TEXT NOT NULL,   -- JSON [{"name":"...","version":"..."}]
     dataset_period     TEXT NOT NULL,
     return_pct         REAL,
     mdd                REAL,

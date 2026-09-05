@@ -39,6 +39,24 @@ func TestTimeLookupMapsModelConfidenceToDirectionalScore(t *testing.T) {
 	}
 }
 
+func TestTimeLookupReturnsPersistedModelIdentity(t *testing.T) {
+	repo := &fakeRepository{observation: sentiment.Observation{
+		Sentiment:    "POSITIVE",
+		Score:        0.91,
+		ModelName:    "crypto-lexicon",
+		ModelVersion: "runtime-release",
+	}}
+	lookup := sentiment.NewTimeLookup(repo, time.Hour)
+
+	score, name, version, err := lookup.FetchSentimentWithModel(context.Background(), 10_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if score != 0.91 || name != "crypto-lexicon" || version != "runtime-release" {
+		t.Fatalf("lookup = (%v, %q, %q), want persisted identity", score, name, version)
+	}
+}
+
 func TestTimeLookupBoundsRepositoryQuery(t *testing.T) {
 	repo := &fakeRepository{observation: sentiment.Observation{Sentiment: "NEUTRAL", Score: 0.5}}
 	lookup := sentiment.NewTimeLookup(repo, 2*time.Hour)

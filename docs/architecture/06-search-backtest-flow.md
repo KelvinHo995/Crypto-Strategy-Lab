@@ -194,14 +194,15 @@ consumes the resulting `[]Trade`, it doesn't re-derive fills.
 
 ## Provenance
 
-Every `Result` records `StrategyVersions` — which exact version of each
-constituent strategy (and, if `SentimentStrategy` is included, which
-sentiment model version) produced this result. Spec ch.36 calls this
+Every `Result` records `StrategyVersions` for the exact implementation version
+of each constituent strategy. A result that consumes sentiment also records
+`SentimentModels` as structured `{name,version}` identities. Spec ch.36 calls this
 Reproducibility: "Experiment #122 luôn biết chính xác nó đã sử dụng strategy
 nào" — a leaderboard entry must be traceable to the exact code that produced
 it, not just a strategy name that may have since changed behavior.
 
-Built-in strategies currently use the explicit release label `v1`. A future
-Sentiment candidate must replace/add the actual model name/version received
-from the Sentiment API before enqueueing; the worker persists the supplied
-snapshot unchanged.
+Built-in strategies currently use the explicit implementation release label
+`v1`. Sentiment model provenance is not guessed at enqueue time: the runtime
+strategy collects identities from the observations selected during the
+backtest, and the worker persists the unique, deterministically sorted list.
+Mixed model versions are retained rather than collapsed.
