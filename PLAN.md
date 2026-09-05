@@ -12,7 +12,7 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ `Candle` struct chốt xong, có thêm field `IsClosed` (candle đang hình thành vs đã đóng)
 - ✅ Binance live stream đã merge và mở hai combined WebSocket dùng chung: kline cho 8 coin × 4 timeframe và aggregate trades cho 8 coin. `/ws` lọc theo subscription của từng browser, có reconnect/backoff.
 - ✅ sentiment-service FastAPI chạy được; `/analyze` dùng model lexicon xác định `crypto-lexicon/v1`, validate input, trả score/model version/timestamp thật và có test. FinBERT vẫn là nâng cấp ngoài MVP.
-- ⚠️ **News Collector** — `internal/news.NewsProvider` (interface) và pipeline ingest (`sentiment.Service.IngestNews`/`IngestFromProvider`, dedup + lưu Postgres) đã code xong và có test, nhưng chưa có implementation thật (không RSS, không News API, không crawler nào được nối) và chưa có endpoint/job nào gọi tới — pipeline tồn tại nhưng mồ côi. Giao Võ Thành Đạt: 1 `NewsProvider` cụ thể (RSS — spec §28 liệt kê RSS/News API/Crawler là 3 lựa chọn ngang hàng, không phải RSS là phương án yếu hơn) + 1 endpoint `POST /news/ingest` gọi `IngestFromProvider` có sẵn. Xem ADR-0006 "Implementation status".
+- ✅ **News Collector** — `internal/news.NewsProvider` có implementation RSS thật và `cmd/news-ingest` là trigger thủ công. Pipeline chuẩn hóa rồi upsert `news_items` trước khi gọi sentiment-service; kết quả inference được lưu riêng trong `sentiment_results`. Stable ID, partial-feed failure và skip sentiment đã có test; scheduler/API đọc news nằm ngoài MVP.
 - ✅ `internal/experiment`: Backtester + Evaluator, SL/TP, gap fill, fee, slippage, tránh lookahead bias và same-candle re-entry đã có test; `go vet`/`go test ./...` sạch. `NewJobID` nay ghép UUID sau timestamp (`exp-<unixnano>-<uuid>`) nên không còn phụ thuộc độ phân giải clock của OS — an toàn cả trong vòng lặp sinh candidate liên tục lẫn giữa nhiều backend instance dùng chung `PostgresQueue`. Đã sửa lỗi thật: `Config.Window` từng cố định (20), nhỏ hơn nhu cầu thật của MA mặc định (50) và của `RandomGenerator` (tới 200) — MA lặng lẽ trả `Hold` mãi mãi, `COMPLETED` với 0 trade trông như kết quả hợp lệ. Nay mỗi strategy tự báo `MinLookback()`, worker tính window đúng theo từng candidate đã resolve — verified sống: loop với `maLongWindow` tới 192 đều có trade thật (195–3200), không còn 0. Xem ADR-0003, ADR-0009, [06-search-backtest-flow.md](docs/architecture/06-search-backtest-flow.md).
 - ✅ `internal/httpx`: router 2-mux public/protected; `POST /search/start`, `GET /experiments`, `GET /experiments/{id}`, `GET /strategies`, `/health` chạy thật. Request search giới hạn 1 MiB, reject field lạ/trailing JSON và trả `202 STARTED`. Auth dùng JWT cookie thật; `/ws` là server-push channel có xác thực cho candle, tiến độ search và leaderboard.
 - ✅ `Binance.FetchHistoricalCandles` REST thật: pagination 1000 klines, normalize `Candle`, chỉ nhận candle đã đóng; live kline WebSocket có reconnect/backoff và phát `CANDLE_UPDATE`.
@@ -20,7 +20,7 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện; package strategy đạt 82.5% statement coverage trong lượt kiểm tra 2026-08-30. Đã sửa lỗi model dữ liệu thật: `CandidateStrategy` cũ dùng `Strategies []string` + 1 `Params map` dùng chung cho mọi strategy, nên không thể kết hợp 2 instance cùng type (VD MA(20) + MA(50)) và weighted policy luôn tự tính lại equal-weight bất kể client gửi gì. Nay `CandidateStrategy.Instances []StrategyInstance` — mỗi instance tự có `type/params/weight` riêng; `resolveCombinationPolicy` dùng đúng weight client gửi (fallback equal nếu không set). Migration `0008` đổi cột `strategies`+`params` → 1 cột `instances` JSON. `/search/start` nhận `{instances,policy}` thay `{strategies}`. Frontend Composite Strategy Builder (weight slider, per-strategy param, policy toggle) nay gửi thật thay vì bị bỏ qua — verified sống qua Supabase: 2 instance MA khác param + weight 0.9/0.1 lưu đúng, tách biệt, backtest thật.
 - ✅ Queue/Worker pool dùng durable PostgreSQL queue (3 workers), claim bằng `SKIP LOCKED`, retry/backoff, lease heartbeat và reclaim sau crash. `/search/start` và `/search/loop` đều ghi `PENDING + job` qua `EnqueuePending` trong một transaction — không còn crash window giữa hai lần ghi riêng biệt. Job chỉ lưu dataset reference/config, worker đọc candle qua bounded cache. Strategy/observer panic được cô lập để không làm chết worker.
 - ⚠️ `POST /search/loop` (ADR-0011) đã có `RandomGenerator`, nhận max-candidates / max-duration / no-improvement, và job ID nay an toàn (UUID). Backend phát terminal `SEARCH_PROGRESS{searchId,status:STOPPED|FAILED,reason}` ngay khi loop dừng sớm (max-duration/no-improvement/cancel/enqueue-failed), nên progress không còn treo dưới `total` vô thời hạn — verified sống qua Supabase thật. Còn tồn hai giới hạn đã biết, chấp nhận được ở quy mô hiện tại: PostgreSQL queue không backpressure nên no-improvement có thể overshoot nhiều hơn "vài candidate" như comment cũ giả định; dedup retry tối đa 10 lần rồi vẫn có thể nhận duplicate. User-cancel vẫn chưa có endpoint (3 điều kiện còn lại đã đảm bảo dừng).
-- ✅ Frontend Discovery đã gọi thật `POST /search/loop`, gửi đủ ba giới hạn, bỏ timer/progress giả và dùng `SEARCH_PROGRESS` + `LEADERBOARD_UPDATE` trong LIVE mode. UI hỗ trợ `COMPLETED|STOPPED|FAILED`; backend nay phát đủ `searchId/status/reason` cho `STOPPED/FAILED` cấp search-run, `COMPLETED` vẫn suy ra từ `tested == total`. Auth, catalog 8 coin, candles, aggregate trades, strategy list, experiments và sentiment analyze vẫn nối API thật; news collector/24h aggregate còn là DEMO rõ ràng.
+- ✅ Frontend Discovery đã gọi thật `POST /search/loop`, gửi đủ ba giới hạn, bỏ timer/progress giả và dùng `SEARCH_PROGRESS` + `LEADERBOARD_UPDATE` trong LIVE mode. UI hỗ trợ `COMPLETED|STOPPED|FAILED`; backend nay phát đủ `searchId/status/reason` cho `STOPPED/FAILED` cấp search-run, `COMPLETED` vẫn suy ra từ `tested == total`. Auth, catalog 8 coin, candles, aggregate trades, strategy list, experiments và sentiment analyze vẫn nối API thật; phần news aggregate trên frontend vẫn có DEMO fallback.
 - ✅ **Auth (users/session)** — bcrypt, Postgres user repository, JWT HS256 1h, httpOnly SameSite=Lax cookie, protected-route middleware và logout cookie clearing đã hoàn thiện; `JWT_SECRET` tối thiểu 16 ký tự là biến môi trường bắt buộc.
 
 ## 1. Phân công (đã điều chỉnh so với bản đầu)
@@ -292,6 +292,18 @@ CREATE TABLE sentiment_results (
     model_version TEXT NOT NULL,
     analyzed_at   BIGINT NOT NULL
 );
+
+-- Dữ liệu news đã chuẩn hóa do Go backend thu thập, độc lập với enrichment.
+CREATE TABLE news_items (
+    id            TEXT PRIMARY KEY,
+    title         TEXT NOT NULL,
+    content       TEXT NOT NULL,
+    source        TEXT NOT NULL,
+    url           TEXT NOT NULL,
+    published_at  BIGINT NOT NULL,
+    related_coins JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at    BIGINT NOT NULL
+);
 ```
 
 **Backfill dataset:** mặc định BTC/2 năm; operator có thể giới hạn coin và số
@@ -302,8 +314,9 @@ chạy trong server startup; upsert theo primary key nên chạy lại an toàn.
 `StrategyRegistry`. `sentiment-service` sở hữu model inference và mọi
 model-internal cache/state; nếu cần persistence riêng cho các concern đó thì
 nó không dùng chung Postgres của Go. Go backend chỉ sở hữu
-`sentiment_results`: observation projection nhận từ API để lookup theo thời
-gian cho strategy, không phải cache của Python service.
+`news_items` cho news đã chuẩn hóa và `sentiment_results` cho observation
+projection nhận từ API để lookup theo thời gian cho strategy. Hai bảng thuộc
+Go backend; bảng thứ hai không phải cache của Python service.
 
 ```sql
 -- Đăng nhập tối giản — không role, không password reset, không OAuth
@@ -356,7 +369,7 @@ Format: Context · Decision · Alternatives · Consequences · Evidence
 3. **Why separate Backtester and Evaluator?** (Người 3)
 4. **Why queue/worker (or why NOT Kafka)?** (Người 2 + 3)
 5. **Why modular monolith vs microservices?** (cả nhóm)
-6. **Why separate News Collector and Sentiment Service?** (Người 1 — Võ Thành Đạt, đã chốt ownership; xem ADR-0006's "Implementation status" cho spec còn thiếu)
+6. **Why separate News Collector and Sentiment Service?** (Người 1 — Võ Thành Đạt; ownership và pipeline hiện tại được ghi trong ADR-0006)
 7. **Why JWT (1h expiry) instead of a server-side session table?** (cần gán người — xem §0)
 
 ---

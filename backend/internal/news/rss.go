@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const maxRSSResponseBytes = 4 << 20
@@ -140,13 +141,14 @@ type rssChannel struct {
 }
 
 type rssItem struct {
-	GUID        string `xml:"guid"`
-	Title       string `xml:"title"`
-	Description string `xml:"description"`
-	Content     string `xml:"encoded"`
-	Link        string `xml:"link"`
-	PublishedAt string `xml:"pubDate"`
-	Source      string `xml:"source"`
+	GUID        string   `xml:"guid"`
+	Title       string   `xml:"title"`
+	Description string   `xml:"description"`
+	Content     string   `xml:"encoded"`
+	Link        string   `xml:"link"`
+	PublishedAt string   `xml:"pubDate"`
+	Source      string   `xml:"source"`
+	Categories  []string `xml:"category"`
 }
 
 func mapRSSItem(feedURL, channelTitle string, entry rssItem) (NewsItem, bool) {
@@ -176,13 +178,43 @@ func mapRSSItem(feedURL, channelTitle string, entry rssItem) (NewsItem, bool) {
 	}
 
 	return NewsItem{
-		ID:          stableRSSID(stableKey),
-		Title:       title,
-		Text:        text,
-		Source:      source,
-		URL:         articleURL,
-		PublishedAt: publishedAt.UnixMilli(),
+		ID:           stableRSSID(stableKey),
+		Title:        title,
+		Text:         text,
+		Source:       source,
+		URL:          articleURL,
+		PublishedAt:  publishedAt.UnixMilli(),
+		RelatedCoins: extractRelatedCoins(append([]string{title, text}, entry.Categories...)...),
 	}, true
+}
+
+func extractRelatedCoins(values ...string) []string {
+	words := make(map[string]struct{})
+	for _, value := range values {
+		for _, word := range strings.FieldsFunc(value, func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+		}) {
+			words[strings.ToUpper(word)] = struct{}{}
+		}
+	}
+
+	related := make([]string, 0, 3)
+	for _, coin := range []struct {
+		symbol  string
+		aliases []string
+	}{
+		{symbol: "BTC", aliases: []string{"BTC", "BITCOIN"}},
+		{symbol: "ETH", aliases: []string{"ETH", "ETHEREUM"}},
+		{symbol: "SOL", aliases: []string{"SOL", "SOLANA"}},
+	} {
+		for _, alias := range coin.aliases {
+			if _, found := words[alias]; found {
+				related = append(related, coin.symbol)
+				break
+			}
+		}
+	}
+	return related
 }
 
 func parseRSSDate(raw string) (time.Time, error) {

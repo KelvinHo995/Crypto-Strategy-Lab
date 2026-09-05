@@ -20,8 +20,8 @@ go run ./cmd/server
 The server and backfill command load `.env` for local development without
 overriding variables already set in the process environment.
 `SENTIMENT_SERVICE_URL` defaults to `http://localhost:8000`. Apply migrations
-with `go run ./cmd/migrate` before starting. It runs `0001` through `0007` in
-order. Migration `0003` is an
+with `go run ./cmd/migrate` before starting. It runs all numbered migrations
+in order. Migration `0003` is an
 idempotent cleanup for experiment rows written by an older pgx binding;
 `0004` adds the experiment update timestamp used by stale-job recovery,
 `0005` indexes leaderboard scoring, `0006` creates the durable job queue, and
@@ -40,8 +40,8 @@ override the two-year default, and `BACKFILL_REQUEST_PAUSE_MS` to tune Binance
 request pacing. `BACKFILL_SYMBOL` remains supported for older scripts. Invalid
 symbols fail fast instead of silently filling a different market.
 
-Ingest recent RSS news through the existing sentiment service and persist the
-resulting observations with:
+Ingest recent RSS news, persist normalized articles, and enrich new articles
+through the existing sentiment service with:
 
 ```bash
 go run ./cmd/news-ingest
@@ -49,8 +49,8 @@ go run ./cmd/news-ingest
 
 Set `NEWS_RSS_FEEDS` to a comma-separated list of RSS 2.0 URLs.
 `NEWS_LOOKBACK` controls the fetch window and defaults to `24h`. The command is
-safe to rerun: stable article IDs already in `sentiment_results` are skipped
-before analysis, with the existing upsert retained as a persistence safeguard.
+safe to rerun: `news_items` is upserted independently, while stable article IDs
+already in `sentiment_results` are skipped before analysis.
 
 ## Structure
 - `cmd/server` — entrypoint, HTTP/WebSocket wiring only, no business logic

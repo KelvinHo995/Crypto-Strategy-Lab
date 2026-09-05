@@ -25,6 +25,7 @@ func TestRSSNewsProviderMapsAndFiltersItems(t *testing.T) {
       <link>/article-1#comments</link>
       <pubDate>Wed, 02 Sep 2026 10:30:00 +0000</pubDate>
       <source>Test Desk</source>
+	  <category>Solana</category>
     </item>
     <item>
       <guid>old-article</guid>
@@ -57,6 +58,9 @@ func TestRSSNewsProviderMapsAndFiltersItems(t *testing.T) {
 	if item.Source != "Test Desk" || item.URL != server.URL+"/article-1" || item.PublishedAt != published.UnixMilli() {
 		t.Fatalf("mapped metadata = %+v", item)
 	}
+	if len(item.RelatedCoins) != 2 || item.RelatedCoins[0] != "BTC" || item.RelatedCoins[1] != "SOL" {
+		t.Fatalf("related coins = %v, want [BTC SOL]", item.RelatedCoins)
+	}
 	if !strings.HasPrefix(item.ID, "rss-") {
 		t.Fatalf("ID=%q, want stable rss prefix", item.ID)
 	}
@@ -67,6 +71,30 @@ func TestRSSNewsProviderMapsAndFiltersItems(t *testing.T) {
 	}
 	if len(again) != 1 || again[0].ID != item.ID {
 		t.Fatalf("stable ID changed: %q -> %+v", item.ID, again)
+	}
+}
+
+func TestRSSNewsProviderExtractsKnownCoinsAndLeavesUnknownEmpty(t *testing.T) {
+	server := rssServer(t, http.StatusOK, `
+<rss version="2.0"><channel><title>Market Wire</title>
+  <item><guid>known</guid><title>Ethereum update</title><description>SOL follows the ETH market.</description><link>/known</link><pubDate>Wed, 02 Sep 2026 10:30:00 +0000</pubDate></item>
+  <item><guid>unknown</guid><title>Macro rates update</title><description>Central banks hold rates.</description><link>/unknown</link><pubDate>Wed, 02 Sep 2026 10:31:00 +0000</pubDate></item>
+</channel></rss>`)
+	defer server.Close()
+
+	provider := news.NewRSSNewsProvider([]string{server.URL}, server.Client())
+	items, err := provider.Fetch(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("items=%d, want 2", len(items))
+	}
+	if got := items[0].RelatedCoins; len(got) != 2 || got[0] != "ETH" || got[1] != "SOL" {
+		t.Fatalf("known related coins=%v, want [ETH SOL]", got)
+	}
+	if got := items[1].RelatedCoins; got == nil || len(got) != 0 {
+		t.Fatalf("unknown related coins=%v, want non-nil empty list", got)
 	}
 }
 

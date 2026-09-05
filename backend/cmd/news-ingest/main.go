@@ -50,7 +50,11 @@ func main() {
 
 	feedClient := &http.Client{Timeout: 10 * time.Second}
 	analyzerClient := sentiment.NewClient(sentimentURL, &http.Client{Timeout: 5 * time.Second})
-	service := sentiment.NewService(analyzerClient, sentiment.NewPostgresRepository(db))
+	service := sentiment.NewIngestionService(
+		analyzerClient,
+		sentiment.NewPostgresRepository(db),
+		news.NewPostgresRepository(db),
+	)
 	provider := news.NewRSSNewsProvider(feedURLs, feedClient)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

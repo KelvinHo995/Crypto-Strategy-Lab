@@ -3,17 +3,13 @@
 **Status:** Accepted
 **Owner:** Market Data + Sentiment Service (Võ Thành Đạt builds the News Collector and sentiment-service; Frontend consumes it in UI)
 
-> **Implementation status (2026-09-03):** the `NewsProvider` interface and
-> the Go-side ingestion pipeline (`sentiment.Service.IngestNews` /
-> `IngestFromProvider` — dedup, error handling, persistence) are built and
-> tested. What's still open: no concrete `NewsProvider` implementation
-> exists (no RSS/News API/crawler actually wired up), and nothing calls
-> these methods in production — no endpoint, no job. This ADR's diagram
-> below describes the agreed *shape*, not yet a working pipeline. Assigned
-> to Võ Thành Đạt: one concrete `NewsProvider` (RSS — explicitly one of the
-> three named options in spec §28, see Decision) plus one way to
-> trigger it (`POST /news/ingest`, mirroring the existing `POST
-> /sentiment/analyze` pattern).
+> **Implementation status (2026-09-05):** `RSSNewsProvider` implements the
+> source-neutral `NewsProvider` contract, and `cmd/news-ingest` triggers the
+> pipeline manually. Go upserts normalized articles into `news_items` before
+> sentiment enrichment, then stores model observations in `sentiment_results`.
+> Stable IDs, partial-feed failure isolation, and duplicate-analysis skipping
+> are covered by deterministic tests. Scheduling and a news-read API remain
+> outside the MVP.
 
 ## Context
 
@@ -33,20 +29,21 @@ concerns ever need persistence, the service uses its own datastore rather
 than sharing the Go backend's Postgres instance. It can be deployed,
 restarted, or scaled independently of the Go backend.
 
-The Go backend owns the returned sentiment observations required by its
-domain. It persists them in `sentiment_results` and performs bounded,
-time-aligned lookup for `SentimentStrategy`. This table is a Go-owned
-observation projection, not a Python model cache or a database shared with
-`sentiment-service`; the Python process never connects to it.
+The Go backend owns news collection and normalized persistence in
+`news_items`. It also owns the returned sentiment observations required by
+its domain, persists them separately in `sentiment_results`, and performs
+bounded, time-aligned lookup for `SentimentStrategy`. This second table is a
+Go-owned observation projection, not a Python model cache or a database
+shared with `sentiment-service`; the Python process never connects to it.
 
 ```
-News Collector (Go, inside internal/*)
-     │  collect news → NewsItem
-     ▼
-sentiment-service (Python, separate process)
-     │  POST /analyze { newsId, text } → { sentiment, score, model{name,version} }
-     ▼
-Go backend — stores sentiment alongside News, optionally feeds SentimentStrategy
+RSS → News Collector (Go) → normalized NewsItem → news_items (Go Postgres)
+                                              │
+                                              ▼
+sentiment-service (Python inference via POST /analyze)
+                                              │
+                                              ▼
+                           sentiment_results (Go observation projection)
 ```
 
 Crucially, the News Collector and the Sentiment Service are also separated

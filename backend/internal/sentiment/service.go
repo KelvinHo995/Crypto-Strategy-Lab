@@ -22,10 +22,17 @@ type Analyzer interface {
 type Service struct {
 	analyzer Analyzer
 	repo     Repository
+	newsRepo news.Repository
 }
 
 func NewService(analyzer Analyzer, repo Repository) *Service {
 	return &Service{analyzer: analyzer, repo: repo}
+}
+
+func NewIngestionService(analyzer Analyzer, repo Repository, newsRepo news.Repository) *Service {
+	service := NewService(analyzer, repo)
+	service.newsRepo = newsRepo
+	return service
 }
 
 // AnalyzeInput is everything the collector already has in hand about an
@@ -80,6 +87,9 @@ func (s *Service) IngestNews(ctx context.Context, items []news.NewsItem) ([]Obse
 	if s == nil || s.analyzer == nil || s.repo == nil {
 		return observations, fmt.Errorf("%w: service unavailable", ErrAnalyze)
 	}
+	if s.newsRepo == nil {
+		return observations, fmt.Errorf("%w: news repository unavailable", ErrStore)
+	}
 
 	uniqueItems := make([]news.NewsItem, 0, len(items))
 	newsIDs := make([]string, 0, len(items))
@@ -92,6 +102,9 @@ func (s *Service) IngestNews(ctx context.Context, items []news.NewsItem) ([]Obse
 		seen[item.ID] = struct{}{}
 		uniqueItems = append(uniqueItems, item)
 		newsIDs = append(newsIDs, item.ID)
+	}
+	if err := s.newsRepo.Upsert(ctx, uniqueItems); err != nil {
+		return observations, fmt.Errorf("%w: persist normalized news: %w", ErrStore, err)
 	}
 
 	existing, err := s.repo.ExistingNewsIDs(ctx, newsIDs)
