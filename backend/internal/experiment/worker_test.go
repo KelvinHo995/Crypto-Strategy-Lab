@@ -161,7 +161,8 @@ func TestWorkerPoolRun_RecordsActualSentimentModelProvenance(t *testing.T) {
 
 	instances := []strategy.StrategyInstance{{Type: "Sentiment"}}
 	job := experiment.BacktestJob{
-		ID: "job-sentiment-provenance",
+		ID:   "job-sentiment-provenance",
+		Pair: "BTCUSDT", Timeframe: "1h",
 		Candidate: strategy.CandidateStrategy{
 			ID: "candidate-sentiment", Instances: instances, Policy: "majority",
 		},
@@ -193,6 +194,9 @@ func TestWorkerPoolRun_RecordsActualSentimentModelProvenance(t *testing.T) {
 	}
 	if completed.StrategyVersions["Sentiment"] != strategy.SentimentStrategyVersion {
 		t.Fatalf("strategy versions=%v", completed.StrategyVersions)
+	}
+	if completed.Pair != "BTCUSDT" || completed.Timeframe != "1h" {
+		t.Fatalf("market provenance=%s/%s, want BTCUSDT/1h", completed.Pair, completed.Timeframe)
 	}
 	if len(completed.SentimentModels) != 1 || completed.SentimentModels[0].Name != "crypto-lexicon" || completed.SentimentModels[0].Version != "runtime-release" {
 		t.Fatalf("sentiment models=%v, want actual runtime model", completed.SentimentModels)

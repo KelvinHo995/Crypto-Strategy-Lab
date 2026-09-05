@@ -95,7 +95,8 @@ func TestRunSearchLoop_StopsAtMaxCandidates(t *testing.T) {
 	pool := &fakePool{}
 
 	experiment.RunSearchLoop(context.Background(), experiment.LoopParams{
-		SearchID: "s1", Pair: "BTCUSDT", StartingCapital: 1000,
+		SearchID: "s1", Pair: "BTCUSDT", TimeFrame: "1h", From: 1, To: 2,
+		StartingCapital: 1000, DatasetPeriod: "1-2",
 		MaxCandidates: 5,
 	}, &sequentialGenerator{}, pool, repo, queue, nil)
 
@@ -104,7 +105,7 @@ func TestRunSearchLoop_StopsAtMaxCandidates(t *testing.T) {
 		t.Fatalf("enqueued %d jobs, want 5", len(jobs))
 	}
 	for _, j := range jobs {
-		if j.SearchID != "s1" || j.SearchTotal != 5 {
+		if j.SearchID != "s1" || j.SearchTotal != 5 || j.Pair != "BTCUSDT" || j.Timeframe != "1h" || j.DatasetPeriod != "1-2" {
 			t.Fatalf("job %+v missing SearchID/SearchTotal", j)
 		}
 	}

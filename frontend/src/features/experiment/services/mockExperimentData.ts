@@ -5,6 +5,8 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-122',
     candidateId: 'cand-001',
+    pair: 'BTCUSDT',
+    timeframe: '4h',
     instances: [
       { type: 'MA', params: { maShortWindow: 20, maLongWindow: 50 }, weight: 0.4 },
       { type: 'RSI', params: { rsiPeriod: 14, rsiOverbought: 70, rsiOversold: 30 }, weight: 0.35 },
@@ -26,6 +28,8 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-121',
     candidateId: 'cand-002',
+    pair: 'BTCUSDT',
+    timeframe: '4h',
     instances: [
       { type: 'RSI', params: { rsiPeriod: 14, rsiOverbought: 70, rsiOversold: 30 } },
       { type: 'Bollinger', params: { bollingerPeriod: 20, bollingerStdDev: 2.0 } },
@@ -46,6 +50,8 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-120',
     candidateId: 'cand-003',
+    pair: 'BTCUSDT',
+    timeframe: '4h',
     instances: [
       { type: 'SMC', params: { smcLookback: 10 }, weight: 0.5 },
       { type: 'MA', params: { maShortWindow: 20, maLongWindow: 50 }, weight: 0.5 },
@@ -66,6 +72,8 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-119',
     candidateId: 'cand-004',
+    pair: 'BTCUSDT',
+    timeframe: '4h',
     // Two MA instances, independently configured (fast + slow) — the
     // exact case a flat shared-params model couldn't represent.
     instances: [
@@ -88,6 +96,8 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-118',
     candidateId: 'cand-005',
+    pair: 'BTCUSDT',
+    timeframe: '4h',
     instances: [{ type: 'SR', params: { srWindow: 20, srTolerance: 0.005 } }],
     policy: 'majority',
     strategyVersions: { SR: 'v1.0.0' },
@@ -105,6 +115,8 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-117',
     candidateId: 'cand-006',
+    pair: 'BTCUSDT',
+    timeframe: '4h',
     instances: [
       { type: 'SMC', params: { smcLookback: 8 }, weight: 0.3 },
       { type: 'RSI', params: { rsiPeriod: 10, rsiOverbought: 70, rsiOversold: 30 }, weight: 0.35 },
@@ -126,6 +138,8 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-116',
     candidateId: 'cand-007',
+    pair: 'BTCUSDT',
+    timeframe: '4h',
     instances: [{ type: 'RSI', params: { rsiPeriod: 14, rsiOverbought: 80, rsiOversold: 20 } }],
     policy: 'majority',
     strategyVersions: { RSI: 'v2.0.1' },
@@ -143,6 +157,8 @@ export const MOCK_EXPERIMENTS: ExperimentResult[] = [
   {
     id: 'exp-115',
     candidateId: 'cand-008',
+    pair: 'BTCUSDT',
+    timeframe: '4h',
     instances: [{ type: 'Bollinger', params: { bollingerPeriod: 20, bollingerStdDev: 2.5 } }],
     policy: 'majority',
     strategyVersions: { Bollinger: 'v1.1.0' },

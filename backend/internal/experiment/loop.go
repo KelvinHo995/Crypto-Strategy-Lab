@@ -131,6 +131,7 @@ generate:
 		pending := Result{
 			ID: id, SearchID: params.SearchID, SearchTotal: params.MaxCandidates,
 			CandidateID: candidate.ID, Instances: candidate.Instances, Policy: candidate.Policy,
+			Pair: params.Pair, Timeframe: params.TimeFrame,
 			StrategyVersions: versions, DatasetPeriod: params.DatasetPeriod,
 			Status: "PENDING", CreatedAt: now.UnixMilli(),
 		}

@@ -59,14 +59,16 @@ func saveResult(ctx context.Context, executor resultExecer, r Result) error {
 
 	_, err = executor.ExecContext(ctx, `
 		INSERT INTO experiments (
-			id, search_id, search_total, candidate_id, instances, policy, strategy_versions, sentiment_models,
+			id, search_id, search_total, candidate_id, pair, timeframe, instances, policy, strategy_versions, sentiment_models,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
 		ON CONFLICT (id) DO UPDATE SET
 			search_id = EXCLUDED.search_id,
 			search_total = EXCLUDED.search_total,
 			candidate_id = EXCLUDED.candidate_id,
+			pair = EXCLUDED.pair,
+			timeframe = EXCLUDED.timeframe,
 			instances = EXCLUDED.instances,
 			policy = EXCLUDED.policy,
 			strategy_versions = EXCLUDED.strategy_versions,
@@ -82,7 +84,7 @@ func saveResult(ctx context.Context, executor resultExecer, r Result) error {
 			status = EXCLUDED.status,
 			created_at = EXCLUDED.created_at,
 			updated_at = EXCLUDED.updated_at
-	`, r.ID, searchID, searchTotal, r.CandidateID, string(instances), r.Policy, string(versions), string(sentimentModels),
+	`, r.ID, searchID, searchTotal, r.CandidateID, r.Pair, r.Timeframe, string(instances), r.Policy, string(versions), string(sentimentModels),
 		r.DatasetPeriod, r.Return, r.MDD, r.TradeCount, r.WinRate, r.Wins, r.Losses,
 		r.TotalProfit, r.Status, r.CreatedAt, time.Now().UnixMilli())
 	if err != nil {
@@ -93,7 +95,7 @@ func saveResult(ctx context.Context, executor resultExecer, r Result) error {
 
 func (p *PostgresRepository) Get(ctx context.Context, id string) (Result, error) {
 	row := p.db.QueryRowContext(ctx, `
-		SELECT id, search_id, search_total, candidate_id, instances, policy, strategy_versions, sentiment_models,
+		SELECT id, search_id, search_total, candidate_id, pair, timeframe, instances, policy, strategy_versions, sentiment_models,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
 		FROM experiments WHERE id = $1
@@ -111,7 +113,7 @@ func (p *PostgresRepository) Get(ctx context.Context, id string) (Result, error)
 
 func (p *PostgresRepository) List(ctx context.Context) ([]Result, error) {
 	rows, err := p.db.QueryContext(ctx, `
-		SELECT id, search_id, search_total, candidate_id, instances, policy, strategy_versions, sentiment_models,
+		SELECT id, search_id, search_total, candidate_id, pair, timeframe, instances, policy, strategy_versions, sentiment_models,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
 		FROM experiments
@@ -139,7 +141,7 @@ func (p *PostgresRepository) List(ctx context.Context) ([]Result, error) {
 
 func (p *PostgresRepository) ListBySearch(ctx context.Context, searchID string) ([]Result, error) {
 	rows, err := p.db.QueryContext(ctx, `
-		SELECT id, search_id, search_total, candidate_id, instances, policy, strategy_versions, sentiment_models,
+		SELECT id, search_id, search_total, candidate_id, pair, timeframe, instances, policy, strategy_versions, sentiment_models,
 			dataset_period, return_pct, mdd, trade_count, win_rate, wins, losses,
 			total_profit, status, created_at, updated_at
 		FROM experiments WHERE search_id = $1
@@ -221,7 +223,7 @@ func scanResult(s scanner) (Result, error) {
 	var instances, versions, sentimentModels []byte
 
 	err := s.Scan(
-		&r.ID, &r.SearchID, &r.SearchTotal, &r.CandidateID, &instances, &r.Policy, &versions, &sentimentModels,
+		&r.ID, &r.SearchID, &r.SearchTotal, &r.CandidateID, &r.Pair, &r.Timeframe, &instances, &r.Policy, &versions, &sentimentModels,
 		&r.DatasetPeriod, &r.Return, &r.MDD, &r.TradeCount, &r.WinRate, &r.Wins, &r.Losses,
 		&r.TotalProfit, &r.Status, &r.CreatedAt, &r.UpdatedAt,
 	)

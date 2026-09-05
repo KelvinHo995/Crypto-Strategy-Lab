@@ -115,6 +115,8 @@ type CandidateStrategy struct {
 type ExperimentResult struct {
     ID               string            `json:"id"`
     CandidateID      string            `json:"candidateId"`
+    Pair             string            `json:"pair"`            // empty only for legacy rows
+    Timeframe        string            `json:"timeframe"`       // actual runtime candle interval
     Strategies       []string          `json:"strategies"`       // snapshot, not FK
     Params           map[string]any    `json:"params"`           // snapshot
     Policy           string            `json:"policy"`           // snapshot
@@ -244,6 +246,8 @@ hiện tại đã ~1.7 nghìn tỷ, sẽ overflow. Đây là khác biệt thật
 CREATE TABLE experiments (
     id                 TEXT PRIMARY KEY,
     candidate_id       TEXT NOT NULL,
+    pair               TEXT NOT NULL DEFAULT '', -- empty means unknown legacy provenance
+    timeframe          TEXT NOT NULL DEFAULT '', -- empty means unknown legacy provenance
     strategies         TEXT NOT NULL,   -- JSON: ["MA","RSI"] — snapshot, not FK
     params             TEXT NOT NULL,   -- JSON: {"maWindow":20,...} — snapshot
     policy             TEXT NOT NULL,   -- snapshot

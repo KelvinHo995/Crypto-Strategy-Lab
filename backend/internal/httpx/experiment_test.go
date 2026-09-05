@@ -107,7 +107,7 @@ func TestSearchStart_QueuesRealPipelineAndSavesProvenance(t *testing.T) {
 	srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), repo))
 	defer srv.Close()
 
-	body := `{"pair":"BTCUSDT","timeframe":"5m","from":1,"to":10000000,"capital":1000,"instances":[{"type":"MA"}]}`
+	body := `{"pair":"BTCUSDT","timeframe":"1h","from":1,"to":10000000,"capital":1000,"instances":[{"type":"MA"}]}`
 	resp, err := http.Post(srv.URL+"/search/start", "application/json", bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatal(err)
@@ -132,11 +132,26 @@ func TestSearchStart_QueuesRealPipelineAndSavesProvenance(t *testing.T) {
 			t.Fatal(err)
 		}
 		if result.Status == "COMPLETED" {
+			if result.Pair != "BTCUSDT" || result.Timeframe != "1h" || result.DatasetPeriod != "1-10000000" {
+				t.Fatalf("market provenance = %s/%s/%s", result.Pair, result.Timeframe, result.DatasetPeriod)
+			}
 			if result.StrategyVersions["MA"] != "v1" {
 				t.Fatalf("strategyVersions = %#v, want MA=v1", result.StrategyVersions)
 			}
 			if len(result.SentimentModels) != 0 {
 				t.Fatalf("non-sentiment experiment has sentiment models: %v", result.SentimentModels)
+			}
+			apiResp, err := http.Get(srv.URL + "/experiments/" + out.SearchID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer apiResp.Body.Close()
+			var apiResult experiment.Result
+			if err := json.NewDecoder(apiResp.Body).Decode(&apiResult); err != nil {
+				t.Fatal(err)
+			}
+			if apiResult.Pair != "BTCUSDT" || apiResult.Timeframe != "1h" {
+				t.Fatalf("API market provenance = %s/%s, want BTCUSDT/1h", apiResult.Pair, apiResult.Timeframe)
 			}
 			break
 		}

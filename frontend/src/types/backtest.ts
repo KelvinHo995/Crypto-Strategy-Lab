@@ -23,14 +23,22 @@ export interface StrategyInstance {
   weight?: number; // only meaningful when policy === 'weighted'
 }
 
+export interface SentimentModelIdentity {
+  name: string;
+  version: string;
+}
+
 export interface ExperimentResult {
   id: string;
   searchId?: string;
   searchTotal?: number;
   candidateId: string;
+  pair?: string; // absent for experiments created before market provenance was stored
+  timeframe?: string; // absent for experiments created before market provenance was stored
   instances: StrategyInstance[]; // constituents + params snapshot
   policy: string; // combination policy snapshot
-  strategyVersions: Record<string, string>; // code/model versions (provenance tracking)
+  strategyVersions: Record<string, string>; // strategy implementation versions
+  sentimentModels?: SentimentModelIdentity[]; // runtime model identities actually consumed
   datasetPeriod: string; // e.g. "fromTimestamp-toTimestamp"
   return: number; // profit or return percentage
   mdd: number; // Maximum Drawdown percentage

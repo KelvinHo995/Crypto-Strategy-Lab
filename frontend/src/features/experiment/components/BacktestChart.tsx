@@ -40,7 +40,8 @@ export function BacktestChart({ experiment, trades, highlightedTrade }: Backtest
     () => tradesToMarkers(showAll ? trades : highlightedTrade ? [highlightedTrade] : []),
     [showAll, trades, highlightedTrade]
   );
-  const pair = trades[0]?.pair;
+  const pair = experiment.pair || trades[0]?.pair;
+  const timeframe = experiment.timeframe;
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +51,11 @@ export function BacktestChart({ experiment, trades, highlightedTrade }: Backtest
       setStatus('loading');
 
       if (mode === 'DEMO') {
-        const dto = fetchMarketDataDTO(pair || 'BTCUSDT', '4h', 200);
+        if (!pair || !timeframe) {
+          setStatus('unavailable');
+          return;
+        }
+        const dto = fetchMarketDataDTO(pair, timeframe, 200);
         if (cancelled) return;
         setCandles(dto.candles);
         setMa20Line(dto.ma20Line);
@@ -62,17 +67,13 @@ export function BacktestChart({ experiment, trades, highlightedTrade }: Backtest
       const [fromStr, toStr] = experiment.datasetPeriod.split('-');
       const from = Number(fromStr);
       const to = Number(toStr);
-      // Backend doesn't record which timeframe a backtest actually ran on —
-      // 4h is the widest available, giving the best chance a multi-month
-      // range fits within the 5000-candle server cap.
-      const tf = '4h';
-      if (!pair || !Number.isFinite(from) || !Number.isFinite(to)) {
+      if (!pair || !timeframe || !Number.isFinite(from) || !Number.isFinite(to)) {
         setStatus('unavailable');
         return;
       }
 
       try {
-        const apiCandles = await fetchCandles(pair, tf, from, to, 5000);
+        const apiCandles = await fetchCandles(pair, timeframe, from, to, 5000);
         if (cancelled) return;
         if (apiCandles.length < 20) {
           setStatus('unavailable');
@@ -94,7 +95,7 @@ export function BacktestChart({ experiment, trades, highlightedTrade }: Backtest
     return () => {
       cancelled = true;
     };
-  }, [experiment.id, experiment.datasetPeriod, pair, mode]);
+  }, [experiment.id, experiment.datasetPeriod, pair, timeframe, mode]);
 
   if (status === 'unavailable') {
     return (
