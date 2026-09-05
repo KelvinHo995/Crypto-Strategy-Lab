@@ -134,6 +134,78 @@ func TestLiveStreamReconnectsAfterDisconnect(t *testing.T) {
 	}
 }
 
+func TestStreamMarketEventsReconnectsAndResumesAfterDisconnect(t *testing.T) {
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempt := attempts.Add(1)
+		if got := r.URL.Query().Get("streams"); got != "btcusdt@aggTrade" {
+			t.Errorf("streams=%q, want btcusdt@aggTrade", got)
+		}
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Errorf("accept websocket: %v", err)
+			return
+		}
+
+		tradeJSON, err := json.Marshal(binanceAggTradeEvent{
+			Symbol: "BTCUSDT", TradeID: int64(attempt), Price: "100.5",
+			Quantity: "2", TradeTime: int64(attempt) * 1_000,
+		})
+		if err != nil {
+			t.Errorf("marshal trade: %v", err)
+			conn.CloseNow()
+			return
+		}
+		wrapped := binanceCombinedEvent{Stream: "btcusdt@aggTrade", Data: tradeJSON}
+		if err := wsjson.Write(r.Context(), conn, wrapped); err != nil {
+			t.Errorf("write market event: %v", err)
+			conn.CloseNow()
+			return
+		}
+
+		if attempt == 1 {
+			_ = conn.Close(websocket.StatusInternalError, "forced disconnect")
+			return
+		}
+		var message any
+		_ = wsjson.Read(r.Context(), conn, &message)
+		conn.CloseNow()
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	binance := NewBinance(nil)
+	binance.WSBaseURL = "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	stream := binance.StreamMarketEvents(ctx, []string{"BTCUSDT"}, nil)
+
+	for wantTradeID := int64(1); wantTradeID <= 2; wantTradeID++ {
+		select {
+		case event, ok := <-stream:
+			if !ok {
+				t.Fatalf("stream closed before trade %d", wantTradeID)
+			}
+			if event.Type != "TRADE_TICK" || event.Trade.TradeID != wantTradeID {
+				t.Fatalf("event after attempt %d = %+v", wantTradeID, event)
+			}
+		case <-time.After(4 * time.Second):
+			t.Fatalf("timed out waiting for trade %d", wantTradeID)
+		}
+	}
+	if attempts.Load() < 2 {
+		t.Fatalf("connection attempts=%d, want at least 2", attempts.Load())
+	}
+
+	cancel()
+	select {
+	case _, ok := <-stream:
+		if ok {
+			t.Fatal("stream produced another event after cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stream did not close after cancellation")
+	}
+}
+
 func TestLiveReconnectBackoffIsBounded(t *testing.T) {
 	backoff := liveReconnectInitialBackoff
 	want := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 30 * time.Second, 30 * time.Second}
