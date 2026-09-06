@@ -57,7 +57,14 @@ func (s *Service) AnalyzeAndStore(ctx context.Context, input AnalyzeInput) (Obse
 		return Observation{}, fmt.Errorf("%w: news id, text, and publishedAt are required", ErrAnalyze)
 	}
 
-	result, err := s.analyzer.Analyze(ctx, newsID, input.Text)
+	// Headlines frequently carry the market-moving verb while RSS summaries
+	// contain only background. Analyze both, without duplicating feeds that use
+	// the title as their description.
+	analysisText := strings.TrimSpace(input.Text)
+	if title := strings.TrimSpace(input.Title); title != "" && !strings.EqualFold(title, analysisText) {
+		analysisText = title + ". " + analysisText
+	}
+	result, err := s.analyzer.Analyze(ctx, newsID, analysisText)
 	if err != nil {
 		return Observation{}, fmt.Errorf("%w: %v", ErrAnalyze, err)
 	}

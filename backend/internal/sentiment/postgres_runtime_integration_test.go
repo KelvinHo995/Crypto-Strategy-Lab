@@ -27,6 +27,9 @@ func (s fixedSignalStrategy) Name() string { return "Fixed" }
 func (s fixedSignalStrategy) Analyze([]market.Candle) strategy.Signal { return s.signal }
 
 func TestPostgresSentimentRuntimePath(t *testing.T) {
+	if os.Getenv("RUN_POSTGRES_SENTIMENT_INTEGRATION") != "1" {
+		t.Skip("set RUN_POSTGRES_SENTIMENT_INTEGRATION=1 to run sentiment persistence tests against the configured database")
+	}
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		_ = godotenv.Load("../../.env")
@@ -55,7 +58,7 @@ func TestPostgresSentimentRuntimePath(t *testing.T) {
 	runID := fmt.Sprintf("sentiment-runtime-check-%d", time.Now().UnixNano())
 	insertedIDs := make([]string, 0, 8)
 	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cleanupCancel()
 		for _, id := range insertedIDs {
 			if _, err := db.ExecContext(cleanupCtx, `DELETE FROM sentiment_results WHERE news_id = $1`, id); err != nil {

@@ -6,8 +6,10 @@ import { SentimentAnalyticsPanel } from './components/SentimentAnalyticsPanel';
 import { MOCK_NEWS_FEED } from './services/mockNewsData';
 import type { NewsItem, SentimentObservation } from '../../types/news';
 import { fetchSentimentObservations } from '../../shared/api';
+import { useAppMode } from '../../shared/auth';
 
 function toNewsItem(observation: SentimentObservation): NewsItem {
+  const isDemoRSS = (observation.source || '').toLowerCase().includes('demo rss');
   return {
     id: observation.newsId,
     title: observation.title || observation.newsId,
@@ -22,31 +24,39 @@ function toNewsItem(observation: SentimentObservation): NewsItem {
       model: { name: observation.modelName, version: observation.modelVersion },
       createdAt: observation.analyzedAt,
     },
-    analysisSource: 'LIVE',
+    analysisSource: isDemoRSS ? 'DEMO' : 'LIVE',
   };
 }
 
 export function NewsCrawlerDashboard() {
-  const [newsFeed, setNewsFeed] = useState<NewsItem[]>(MOCK_NEWS_FEED);
+  const mode = useAppMode();
+  const [newsFeed, setNewsFeed] = useState<NewsItem[]>(mode === 'DEMO' ? MOCK_NEWS_FEED : []);
   const [observations, setObservations] = useState<SentimentObservation[]>([]);
-  const [analysisStatus, setAnalysisStatus] = useState<'DEMO' | 'LIVE' | 'ERROR'>('DEMO');
-  const [analysisMessage, setAnalysisMessage] = useState('Showing local sample articles — waiting on the live ingestion pipeline.');
+  const [analysisStatus, setAnalysisStatus] = useState<'LOADING' | 'DEMO' | 'LIVE' | 'EMPTY' | 'ERROR'>(mode === 'DEMO' ? 'DEMO' : 'LOADING');
+  const [analysisMessage, setAnalysisMessage] = useState(mode === 'DEMO'
+    ? 'Showing explicitly selected offline sample articles.'
+    : 'Loading analyzed articles from the live API…');
 
   useEffect(() => {
-    // Real, already-ingested articles (via the RSS ingestion pipeline) — if
-    // there are none yet, the demo fixtures stay so the page isn't empty.
-    // A failed fetch is not shown as an error here either: this is a
-    // background load, not something the user triggered.
+    if (mode === 'DEMO') return;
     fetchSentimentObservations()
       .then((real) => {
         setObservations(real);
-        if (real.length === 0) return;
+        if (real.length === 0) {
+          setAnalysisStatus('EMPTY');
+          setAnalysisMessage('No analyzed RSS articles in the last 24 hours. Run news-ingest; no demo data has been substituted.');
+          return;
+        }
         setNewsFeed(real.map(toNewsItem));
         setAnalysisStatus('LIVE');
-        setAnalysisMessage(`Showing ${real.length} real analyzed article(s) from the last 24h.`);
+        const demoCount = real.filter(item => (item.source || '').toLowerCase().includes('demo rss')).length;
+        setAnalysisMessage(`Showing ${real.length} API-backed article(s) from the last 24h${demoCount ? ` (${demoCount} clearly labelled demo RSS fixture)` : ''}.`);
       })
-      .catch(() => undefined);
-  }, []);
+      .catch((error) => {
+        setAnalysisStatus('ERROR');
+        setAnalysisMessage(`Could not load the live news feed: ${error instanceof Error ? error.message : String(error)}. No demo data has been substituted.`);
+      });
+  }, [mode]);
 
   return (
     <ErrorBoundary
