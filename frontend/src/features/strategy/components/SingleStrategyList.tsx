@@ -6,11 +6,13 @@ import {
 
 interface SingleStrategyListProps {
   instances: SingleStrategyInstance[];
+  availableStrategyNames?: string[];
   onCreateInstance: (newInstance: SingleStrategyInstance) => void;
 }
 
 export function SingleStrategyList({
   instances,
+  availableStrategyNames = AVAILABLE_STRATEGIES_META.map((strategy) => strategy.name),
   onCreateInstance,
 }: SingleStrategyListProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -18,12 +20,21 @@ export function SingleStrategyList({
   const [customName, setCustomName] = useState('');
   const [paramValues, setParamValues] = useState<Record<string, string | number | boolean>>({});
 
-  // Resolve metadata for the selected strategy type
-  const activeMeta = AVAILABLE_STRATEGIES_META.find((m) => m.name === selectedType);
+  // The backend registry is authoritative. Known plugins get a rich local
+  // parameter form; newly-added plugins still appear immediately and run with
+  // their backend factory defaults, without a frontend release.
+  const availableStrategies = availableStrategyNames.map((name) =>
+    AVAILABLE_STRATEGIES_META.find((meta) => meta.name === name) ?? {
+      name,
+      description: 'Backend-registered strategy using its default parameters.',
+      parameters: {},
+    }
+  );
+  const activeMeta = availableStrategies.find((m) => m.name === selectedType);
 
   const handleTypeChange = (type: string) => {
     setSelectedType(type);
-    const meta = AVAILABLE_STRATEGIES_META.find((m) => m.name === type);
+    const meta = availableStrategies.find((m) => m.name === type);
     // Initialize default parameter values
     const defaults: Record<string, string | number | boolean> = {};
     if (meta?.parameters) {
@@ -138,7 +149,7 @@ export function SingleStrategyList({
                   onChange={(e) => handleTypeChange(e.target.value)}
                   style={inputStyle}
                 >
-                  {AVAILABLE_STRATEGIES_META.map((meta) => (
+                  {availableStrategies.map((meta) => (
                     <option key={meta.name} value={meta.name}>
                       {meta.name} - {meta.description?.slice(0, 45)}...
                     </option>

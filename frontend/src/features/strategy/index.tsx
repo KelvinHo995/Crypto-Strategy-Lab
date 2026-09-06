@@ -5,6 +5,7 @@ import { LoopDiscoveryPanel, type DiscoveryLoopConfig } from './components/LoopD
 import { MiniLeaderboard } from './components/MiniLeaderboard';
 import {
   DEFAULT_SINGLE_STRATEGIES,
+  AVAILABLE_STRATEGIES_META,
   DEFAULT_DISCOVERY_STATS,
   MINI_LEADERBOARD_DATA,
   type SingleStrategyInstance,
@@ -24,6 +25,9 @@ export function StrategyDiscoveryPage() {
   const [markets, setMarkets] = useState<MarketInfo[]>(DEFAULT_MARKETS);
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [instances, setInstances] = useState<SingleStrategyInstance[]>(DEFAULT_SINGLE_STRATEGIES);
+  const [availableStrategyNames, setAvailableStrategyNames] = useState<string[]>(
+    AVAILABLE_STRATEGIES_META.map((strategy) => strategy.name)
+  );
   const [stats, setStats] = useState<DiscoveryStats>(DEFAULT_DISCOVERY_STATS);
   const [liveLeaderboard, setLiveLeaderboard] = useState<typeof MINI_LEADERBOARD_DATA>([]);
   const miniLeaderboard = mode === 'DEMO' ? MINI_LEADERBOARD_DATA : liveLeaderboard;
@@ -33,6 +37,7 @@ export function StrategyDiscoveryPage() {
   useEffect(() => {
     if (mode !== 'LIVE') return;
     fetchStrategies().then(names => {
+      setAvailableStrategyNames(names);
       setInstances(current => current.filter(instance => names.includes(instance.type)));
     }).catch(() => undefined);
     fetchMarkets().then(setMarkets).catch(() => setMarkets(DEFAULT_MARKETS));
@@ -192,6 +197,7 @@ export function StrategyDiscoveryPage() {
       <div style={col1Style}>
         <SingleStrategyList
           instances={instances}
+          availableStrategyNames={availableStrategyNames}
           onCreateInstance={handleCreateInstance}
         />
       </div>
