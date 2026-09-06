@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -380,6 +378,7 @@ func TestGetExperiment_ExposesSentimentModelProvenance(t *testing.T) {
 
 func TestGetExperimentTrades_ReturnsRealTrades(t *testing.T) {
 	repo := newFakeRepo()
+	repo.results["exp-1"] = experiment.Result{ID: "exp-1", Status: "COMPLETED"}
 	repo.trades["exp-1"] = []experiment.Trade{
 		{Pair: "BTCUSDT", EntryTime: 1, Direction: experiment.Long, VolumeUSD: 1000, EntryPrice: 100, ExitPrice: 110, ExitTime: 2, Profit: 100},
 	}
@@ -403,7 +402,7 @@ func TestGetExperimentTrades_ReturnsRealTrades(t *testing.T) {
 	}
 }
 
-func TestGetExperimentTrades_EmptyArrayNotNullForUnknownExperiment(t *testing.T) {
+func TestGetExperimentTrades_UnknownExperimentReturnsNotFound(t *testing.T) {
 	repo := newFakeRepo()
 	srv := httptest.NewServer(httpx.NewRouter(newTestRegistry(), repo))
 	defer srv.Close()
@@ -413,11 +412,7 @@ func TestGetExperimentTrades_EmptyArrayNotNullForUnknownExperiment(t *testing.T)
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (no trades yet is not an error)", resp.StatusCode)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	if strings.TrimSpace(string(body)) != "[]" {
-		t.Fatalf("body = %q, want an empty JSON array, not null", body)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
 	}
 }
