@@ -8,6 +8,8 @@ import (
 
 var _ Strategy = (*BollingerStrategy)(nil)
 
+const BollingerStrategyVersion = "v1"
+
 type BollingerStrategy struct {
 	Period           int
 	StdDevMultiplier float64
@@ -24,6 +26,17 @@ func BollingerFactory(params map[string]any) Strategy {
 	period, _ := toInt(params["bollingerPeriod"], 20)
 	sd, _ := toFloat(params["bollingerStdDev"], 2.0)
 	return NewBollingerStrategy(period, sd)
+}
+
+func BollingerRandomParams(source RandomSource) map[string]any {
+	return map[string]any{
+		"bollingerPeriod": 10 + source.Intn(31),
+		"bollingerStdDev": 1.5 + float64(source.Intn(15))/10.0,
+	}
+}
+
+func NewBollingerPlugin(defaultStrategy *BollingerStrategy) Plugin {
+	return Plugin{Name: "Bollinger", Default: defaultStrategy, Factory: BollingerFactory, RandomParams: BollingerRandomParams, Version: BollingerStrategyVersion}
 }
 
 func (s *BollingerStrategy) Name() string {

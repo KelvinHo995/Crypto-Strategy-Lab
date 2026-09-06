@@ -26,19 +26,32 @@ isolation and swappable without touching anything downstream.
 ## Registration (plugin boundary)
 
 ```go
-type Registry struct { strategies map[string]Strategy; factories map[string]StrategyFactory }
-func (r *Registry) RegisterPlugin(s Strategy, factory StrategyFactory) error
+type Plugin struct {
+    Name         string
+    Default      Strategy
+    Factory      StrategyFactory
+    RandomParams RandomParamsGenerator
+    Version      string
+}
+func (r *Registry) RegisterPlugin(plugin Plugin) error
 ```
 
-Adding a new production strategy means: implement `Strategy`, call
-`RegisterPlugin` once. It installs the default implementation and parameterized
-factory together, and rejects duplicate names. Nothing
-in `internal/experiment`, `cmd/server`, or the frontend should need to change
+Adding a new production strategy means: implement `Strategy` and its factory,
+define its random parameter generator, then register one descriptor in
+`cmd/server/main.go`. The descriptor also owns the static strategy
+implementation version. Registration rejects duplicate names and incomplete
+descriptors. Generic experiment code and the frontend do not need to change
 — no `if strategy == "MA" { ... } else if strategy == "RSI" { ... }` dispatch
 anywhere (spec ch.12, explicitly listed as the anti-pattern to avoid in
 ch.44 "Hard-coded Strategy"). This is the concrete test spec ch.41 proposes:
 "Hệ thống hiện có MA, RSI, Bollinger, SR. Hãy bổ sung MACD" should cost one
 new file + one `RegisterPlugin` call.
+
+`RandomGenerator` reads sorted descriptors and invokes each selected plugin's
+`RandomParams` function. Backtester, Evaluator, WorkerPool, Ranking, and
+RandomGenerator core therefore remain unchanged when another strategy is
+registered. This is source-level startup registration, not runtime loading of
+compiled plugins.
 
 ```
 strategies/

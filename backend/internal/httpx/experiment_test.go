@@ -95,8 +95,9 @@ func (f *fakeRepo) ListTrades(_ context.Context, experimentID string) ([]experim
 
 func newTestRegistry() *strategy.Registry {
 	reg := strategy.NewRegistry()
-	reg.Register(strategy.NewMAStrategy(5, 10))
-	reg.RegisterFactory("MA", strategy.MAFactory)
+	if err := reg.RegisterPlugin(strategy.NewMAPlugin(strategy.NewMAStrategy(5, 10))); err != nil {
+		panic(err)
+	}
 	return reg
 }
 

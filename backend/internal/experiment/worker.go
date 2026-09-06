@@ -284,20 +284,6 @@ func cloneInstances(src []strategy.StrategyInstance) []strategy.StrategyInstance
 	return dst
 }
 
-func DefaultStrategyVersions(instances []strategy.StrategyInstance) map[string]string {
-	versions := make(map[string]string, len(instances))
-	for _, inst := range instances {
-		version := "v1"
-		if inst.Type == "Sentiment" {
-			// This is the Go strategy implementation version. Runtime model
-			// identities are captured separately after the backtest.
-			version = strategy.SentimentStrategyVersion
-		}
-		versions[inst.Type] = version
-	}
-	return versions
-}
-
 // UUID suffix: timestamp alone can collide across a tight generation loop or across instances.
 func NewJobID(now time.Time) string {
 	return fmt.Sprintf("exp-%d-%s", now.UnixNano(), uuid.NewString())

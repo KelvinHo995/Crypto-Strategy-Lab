@@ -18,8 +18,10 @@ func (architectureProofStrategy) Analyze([]market.Candle) strategy.Signal { retu
 // evaluation, and ranking without changes to any of those components.
 func TestStrategyPluginRunsThroughExperimentPipeline(t *testing.T) {
 	registry := strategy.NewRegistry()
-	if err := registry.RegisterPlugin(architectureProofStrategy{}, func(map[string]any) strategy.Strategy {
-		return architectureProofStrategy{}
+	if err := registry.RegisterPlugin(strategy.Plugin{
+		Name: "ArchitectureProof", Default: architectureProofStrategy{},
+		Factory:      func(map[string]any) strategy.Strategy { return architectureProofStrategy{} },
+		RandomParams: strategy.NoRandomParams, Version: "test-version",
 	}); err != nil {
 		t.Fatal(err)
 	}

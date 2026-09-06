@@ -155,7 +155,9 @@ func TestWorkerPoolRun_ObserverPanicDoesNotStopWorker(t *testing.T) {
 func TestWorkerPoolRun_RecordsActualSentimentModelProvenance(t *testing.T) {
 	registry := strategy.NewRegistry()
 	client := runtimeModelSentimentClient{}
-	registry.RegisterFactory("Sentiment", strategy.NewSentimentFactory(nil, client, 0.7))
+	if err := registry.RegisterPlugin(strategy.NewSentimentPlugin(client, 0.7)); err != nil {
+		t.Fatal(err)
+	}
 	repo := newRecordingRepo()
 	queue := experiment.NewInMemoryQueue(1)
 	pool := experiment.NewWorkerPool(queue, registry, repo, 1)
@@ -179,7 +181,7 @@ func TestWorkerPoolRun_RecordsActualSentimentModelProvenance(t *testing.T) {
 			Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
 			StopLossPct: 0.02, TakeProfitPct: 0.04, FeePct: 0.001, SlippageBps: 5,
 		},
-		StrategyVersions: experiment.DefaultStrategyVersions(instances),
+		StrategyVersions: mustVersions(t, registry, instances),
 		EnqueuedAt:       time.Now().UnixMilli(),
 	}
 	if err := queue.Enqueue(ctx, job); err != nil {
@@ -211,11 +213,24 @@ func TestWorkerPoolRun_RecordsActualSentimentModelProvenance(t *testing.T) {
 	}
 }
 
-func TestDefaultStrategyVersionsPreservesNonSentimentStrategies(t *testing.T) {
-	versions := experiment.DefaultStrategyVersions([]strategy.StrategyInstance{{Type: "MA"}})
-	if versions["MA"] != "v1" {
-		t.Fatalf("versions=%v, want MA=v1", versions)
+func TestRegistryVersionsPreservesNonSentimentStrategies(t *testing.T) {
+	registry := strategy.NewRegistry()
+	if err := registry.RegisterPlugin(strategy.NewMAPlugin(strategy.NewMAStrategy(20, 50))); err != nil {
+		t.Fatal(err)
 	}
+	versions := mustVersions(t, registry, []strategy.StrategyInstance{{Type: "MA"}})
+	if versions["MA"] != strategy.MAStrategyVersion {
+		t.Fatalf("versions=%v, want MA=%s", versions, strategy.MAStrategyVersion)
+	}
+}
+
+func mustVersions(t *testing.T, registry *strategy.Registry, instances []strategy.StrategyInstance) map[string]string {
+	t.Helper()
+	versions, err := registry.VersionsFor(instances)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return versions
 }
 
 func TestWorkerPoolAddObserver_CoexistsAndUnsubscribes(t *testing.T) {

@@ -65,7 +65,7 @@ type StartLoopResponse struct {
 // startLoop returns as soon as candles are loaded and the generator goroutine
 // is launched — it does not wait for any candidate to finish, same
 // fire-and-forget contract as startSearch.
-func startLoop(gen strategy.StrategyGenerator, pool *experiment.WorkerPool, repo experiment.Repository, queue experiment.Queue, candleRepo market.CandleRepository, hub *Hub) http.HandlerFunc {
+func startLoop(gen strategy.StrategyGenerator, versions strategy.PluginVersionResolver, pool *experiment.WorkerPool, repo experiment.Repository, queue experiment.Queue, candleRepo market.CandleRepository, hub *Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req StartLoopRequest
 		if err := decodeJSON(w, r, &req); err != nil {
@@ -107,6 +107,7 @@ func startLoop(gen strategy.StrategyGenerator, pool *experiment.WorkerPool, repo
 			NoImprovementLimit: req.NoImprovementLimit,
 			FeePct:             feePct,
 			SlippageBps:        slippageBps,
+			VersionResolver:    versions,
 		}
 		onStopped := func(status, reason string) {
 			if hub != nil {

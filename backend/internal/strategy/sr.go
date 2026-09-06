@@ -8,6 +8,8 @@ import (
 
 var _ Strategy = (*SRStrategy)(nil)
 
+const SRStrategyVersion = "v1"
+
 type SRStrategy struct {
 	Window    int
 	Tolerance float64 // e.g. 0.005 for 0.5%
@@ -24,6 +26,17 @@ func SRFactory(params map[string]any) Strategy {
 	window, _ := toInt(params["srWindow"], 20)
 	tolerance, _ := toFloat(params["srTolerance"], 0.005)
 	return NewSRStrategy(window, tolerance)
+}
+
+func SRRandomParams(source RandomSource) map[string]any {
+	return map[string]any{
+		"srWindow":    10 + source.Intn(41),
+		"srTolerance": 0.001 + float64(source.Intn(10))/1000.0,
+	}
+}
+
+func NewSRPlugin(defaultStrategy *SRStrategy) Plugin {
+	return Plugin{Name: "SR", Default: defaultStrategy, Factory: SRFactory, RandomParams: SRRandomParams, Version: SRStrategyVersion}
 }
 
 func (s *SRStrategy) Name() string {

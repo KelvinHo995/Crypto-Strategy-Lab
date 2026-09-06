@@ -4,6 +4,8 @@ import "github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
 
 var _ Strategy = (*MAStrategy)(nil)
 
+const MAStrategyVersion = "v1"
+
 type MAStrategy struct {
 	ShortWindow int
 	LongWindow  int
@@ -20,6 +22,19 @@ func MAFactory(params map[string]any) Strategy {
 	short, _ := toInt(params["maShortWindow"], 20)
 	long, _ := toInt(params["maLongWindow"], 50)
 	return NewMAStrategy(short, long)
+}
+
+func MARandomParams(source RandomSource) map[string]any {
+	longWindow := 50 + source.Intn(151)
+	shortWindow := 5 + source.Intn(46)
+	if shortWindow >= longWindow {
+		shortWindow = longWindow - 1
+	}
+	return map[string]any{"maShortWindow": shortWindow, "maLongWindow": longWindow}
+}
+
+func NewMAPlugin(defaultStrategy *MAStrategy) Plugin {
+	return Plugin{Name: "MA", Default: defaultStrategy, Factory: MAFactory, RandomParams: MARandomParams, Version: MAStrategyVersion}
 }
 
 func (s *MAStrategy) Name() string {

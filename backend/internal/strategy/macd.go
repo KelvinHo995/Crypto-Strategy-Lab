@@ -5,6 +5,8 @@ import "github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
 var _ Strategy = (*MACDStrategy)(nil)
 var _ LookbackAware = (*MACDStrategy)(nil)
 
+const MACDStrategyVersion = "v1"
+
 type MACDStrategy struct {
 	FastPeriod   int
 	SlowPeriod   int
@@ -20,6 +22,18 @@ func MACDFactory(params map[string]any) Strategy {
 	slow, _ := toInt(params["macdSlowPeriod"], 26)
 	signal, _ := toInt(params["macdSignalPeriod"], 9)
 	return NewMACDStrategy(fast, slow, signal)
+}
+
+func MACDRandomParams(source RandomSource) map[string]any {
+	return map[string]any{
+		"macdFastPeriod":   8 + source.Intn(9),
+		"macdSlowPeriod":   20 + source.Intn(21),
+		"macdSignalPeriod": 5 + source.Intn(8),
+	}
+}
+
+func NewMACDPlugin(defaultStrategy *MACDStrategy) Plugin {
+	return Plugin{Name: "MACD", Default: defaultStrategy, Factory: MACDFactory, RandomParams: MACDRandomParams, Version: MACDStrategyVersion}
 }
 
 func (s *MACDStrategy) Name() string { return "MACD" }

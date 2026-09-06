@@ -54,7 +54,7 @@ func main() {
 
 func measure(workerCount, candidateCount int, candles []market.Candle) time.Duration {
 	registry := strategy.NewRegistry()
-	if err := registry.RegisterPlugin(strategy.NewMAStrategy(5, 20), strategy.MAFactory); err != nil {
+	if err := registry.RegisterPlugin(strategy.NewMAPlugin(strategy.NewMAStrategy(5, 20))); err != nil {
 		panic(err)
 	}
 	repo := newMemoryRepository()

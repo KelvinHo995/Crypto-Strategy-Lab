@@ -39,10 +39,10 @@ func TestMACDStrategyDetectsCrossovers(t *testing.T) {
 
 func TestRegisterPluginRejectsDuplicate(t *testing.T) {
 	registry := NewRegistry()
-	if err := registry.RegisterPlugin(NewMACDStrategy(12, 26, 9), MACDFactory); err != nil {
+	if err := registry.RegisterPlugin(NewMACDPlugin(NewMACDStrategy(12, 26, 9))); err != nil {
 		t.Fatal(err)
 	}
-	if err := registry.RegisterPlugin(NewMACDStrategy(8, 21, 5), MACDFactory); err == nil {
+	if err := registry.RegisterPlugin(NewMACDPlugin(NewMACDStrategy(8, 21, 5))); err == nil {
 		t.Fatal("duplicate plugin registration succeeded")
 	}
 }

@@ -4,6 +4,8 @@ import "github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
 
 var _ Strategy = (*RSIStrategy)(nil)
 
+const RSIStrategyVersion = "v1"
+
 type RSIStrategy struct {
 	Period              int
 	OverboughtThreshold float64
@@ -23,6 +25,18 @@ func RSIFactory(params map[string]any) Strategy {
 	ob, _ := toFloat(params["rsiOverbought"], 70.0)
 	os, _ := toFloat(params["rsiOversold"], 30.0)
 	return NewRSIStrategy(period, ob, os)
+}
+
+func RSIRandomParams(source RandomSource) map[string]any {
+	return map[string]any{
+		"rsiPeriod":     7 + source.Intn(22),
+		"rsiOverbought": float64(65 + source.Intn(16)),
+		"rsiOversold":   float64(20 + source.Intn(16)),
+	}
+}
+
+func NewRSIPlugin(defaultStrategy *RSIStrategy) Plugin {
+	return Plugin{Name: "RSI", Default: defaultStrategy, Factory: RSIFactory, RandomParams: RSIRandomParams, Version: RSIStrategyVersion}
 }
 
 func (s *RSIStrategy) Name() string {
