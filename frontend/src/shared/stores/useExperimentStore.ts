@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { ExperimentResult, Trade } from '../../types/backtest';
-import { generateMockTrades } from '../../features/experiment/services/mockExperimentData';
 
 export type WorkspaceTab = 'charts' | 'leaderboard' | 'builder' | 'news';
 
@@ -65,7 +64,7 @@ interface ExperimentStoreState {
   setActiveTab: (tab: WorkspaceTab) => void;
   setActiveExperiment: (exp: ExperimentResult | null) => void;
   setActiveTrades: (trades: Trade[]) => void;
-  loadExperimentToChart: (exp: ExperimentResult, customTrades?: Trade[]) => void;
+  loadExperimentToChart: (exp: ExperimentResult, trades: Trade[]) => void;
 }
 
 export const useExperimentStore = create<ExperimentStoreState>((set) => ({
@@ -75,8 +74,7 @@ export const useExperimentStore = create<ExperimentStoreState>((set) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
   setActiveExperiment: (exp) => set({ activeExperiment: exp }),
   setActiveTrades: (trades) => set({ activeTrades: trades }),
-  loadExperimentToChart: (exp, customTrades) => {
-    const trades = customTrades ?? generateMockTrades(exp.id, exp.tradeCount || 30);
+  loadExperimentToChart: (exp, trades) => {
     set({ activeExperiment: exp, activeTrades: trades });
   },
 }));

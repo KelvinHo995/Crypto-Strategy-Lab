@@ -5,6 +5,7 @@ interface MiniLeaderboardProps {
 }
 
 export function MiniLeaderboard({ items }: MiniLeaderboardProps) {
+  const formatMoney = (value: number) => `${value >= 0 ? '+' : '-'}${Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`;
   return (
     <div style={containerStyle}>
       <h4 style={titleStyle}>Top-5 Discovered Candidates</h4>
@@ -22,8 +23,8 @@ export function MiniLeaderboard({ items }: MiniLeaderboardProps) {
             <tr key={item.rank} style={item.rank === 1 ? topRowStyle : trStyle}>
               <td style={tdRankStyle(item.rank)}>{item.rank}</td>
               <td style={tdNameStyle}>{item.name}</td>
-              <td style={tdProfitStyle}>{item.profit.toLocaleString()} USDT</td>
-              <td style={tdRightStyle}>{item.winrate}%</td>
+              <td style={tdProfitStyle}>{formatMoney(item.profit)}</td>
+              <td style={tdRightStyle}>{item.winrate.toFixed(2)}%</td>
             </tr>
           ))}
         </tbody>

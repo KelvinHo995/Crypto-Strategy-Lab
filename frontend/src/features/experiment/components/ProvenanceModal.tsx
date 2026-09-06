@@ -42,6 +42,10 @@ export function ProvenanceModal({
                 <span style={metaValueStyle}>{experiment.datasetPeriod}</span>
               </div>
               <div style={metaRowStyle}>
+                <span style={metaLabelStyle}>Market / Timeframe:</span>
+                <span style={metaValueStyle}>{experiment.pair || 'legacy'} / {experiment.timeframe || 'unknown'}</span>
+              </div>
+              <div style={metaRowStyle}>
                 <span style={metaLabelStyle}>Candidate Ref:</span>
                 <span style={{ ...metaValueStyle, fontFamily: 'monospace' }}>{experiment.candidateId}</span>
               </div>

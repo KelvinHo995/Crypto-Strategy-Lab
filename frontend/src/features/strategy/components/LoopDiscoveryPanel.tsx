@@ -33,6 +33,8 @@ export function LoopDiscoveryPanel({
   const progressPercent = stats.totalIterations > 0
     ? Math.min(100, (stats.iteration / stats.totalIterations) * 100)
     : 0;
+  const formatMoney = (value: number) => `${value >= 0 ? '+' : '-'}${Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`;
+  const formatPercent = (value: number) => `${value.toFixed(2)}%`;
 
   return (
     <div style={panelContainerStyle}>
@@ -188,15 +190,15 @@ export function LoopDiscoveryPanel({
             <div style={bestStatsGridStyle}>
               <div style={bestStatItemStyle}>
                 <span style={bestLabelStyle}>Return:</span>
-                <span style={bestProfitStyle}>+{stats.bestStrategy.profit.toLocaleString()} USDT</span>
+                <span style={bestProfitStyle}>{formatMoney(stats.bestStrategy.profit)}</span>
               </div>
               <div style={bestStatItemStyle}>
                 <span style={bestLabelStyle}>Winrate:</span>
-                <span style={bestValStyle}>{stats.bestStrategy.winrate}%</span>
+                <span style={bestValStyle}>{formatPercent(stats.bestStrategy.winrate)}</span>
               </div>
               <div style={bestStatItemStyle}>
                 <span style={bestLabelStyle}>MDD:</span>
-                <span style={bestValStyle}>{stats.bestStrategy.mdd}%</span>
+                <span style={bestValStyle}>{formatPercent(stats.bestStrategy.mdd)}</span>
               </div>
             </div>
           </div>

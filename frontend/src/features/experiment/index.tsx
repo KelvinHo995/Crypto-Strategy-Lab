@@ -8,6 +8,7 @@ import { BacktestChart } from './components/BacktestChart';
 import { MOCK_EXPERIMENTS, generateMockTrades } from './services/mockExperimentData';
 import { fetchExperiment, fetchExperiments, fetchTrades, startSearch } from '../../shared/api';
 import { useWebSocketSubscription } from '../../shared/hooks';
+import { useAppMode } from '../../shared/auth';
 import type { WSSearchProgressPayload } from '../../types/websocket';
 import type { ExperimentResult, Trade } from '../../types/backtest';
 import { useExperimentStore, formatExperimentTitle } from '../../shared/stores/useExperimentStore';
@@ -17,39 +18,41 @@ import { useExperimentStore, formatExperimentTitle } from '../../shared/stores/u
 // backtest that's genuinely still retrying, not stuck.
 const RUN_TIMEOUT_MS = 90_000;
 
-const isMockExperiment = (id: string) => MOCK_EXPERIMENTS.some(m => m.id === id);
-
-// MOCK_EXPERIMENTS are fixture data end to end — generating consistent fake
-// trades for those specific rows is fine, it's already clearly demo data.
-// Anything else is a real experiment, so its trades come from the real
-// per-trade history the worker now persists (empty if this run predates
-// that, or genuinely has none — never backfilled with fake ones).
-async function loadTradesFor(exp: ExperimentResult): Promise<Trade[]> {
-  if (isMockExperiment(exp.id)) {
+// Fixture trades are only legal in explicit offline DEMO mode. LIVE mode
+// always exposes API failures instead of silently replacing them with data
+// that looks like a real run.
+async function loadTradesFor(exp: ExperimentResult, mode: 'DEMO' | 'LIVE'): Promise<Trade[]> {
+  if (mode === 'DEMO') {
     return generateMockTrades(exp.id, exp.tradeCount || 30);
   }
-  try {
-    return await fetchTrades(exp.id);
-  } catch {
-    return [];
-  }
+  return fetchTrades(exp.id);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function ExperimentDashboard() {
-  const [experiments, setExperiments] = useState<ExperimentResult[]>(MOCK_EXPERIMENTS);
+  const mode = useAppMode();
+  const [experiments, setExperiments] = useState<ExperimentResult[]>([]);
+  const [leaderboardState, setLeaderboardState] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading');
+  const [leaderboardError, setLeaderboardError] = useState('');
+  const [leaderboardReload, setLeaderboardReload] = useState(0);
+  const [tradeState, setTradeState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [tradeError, setTradeError] = useState('');
   const [selectedExpForMeta, setSelectedExpForMeta] = useState<ExperimentResult | null>(null);
 
-  const activeExp = useExperimentStore((state) => state.activeExperiment) ?? MOCK_EXPERIMENTS[0];
+  const activeExp = useExperimentStore((state) => state.activeExperiment);
   const activeTrades = useExperimentStore((state) => state.activeTrades);
   const setActiveExp = useExperimentStore((state) => state.setActiveExperiment);
   const setActiveTrades = useExperimentStore((state) => state.setActiveTrades);
-  const loadExperimentToChart = useExperimentStore((state) => state.loadExperimentToChart);
 
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimeout = useRef<number | null>(null);
   const activeSearchId = useRef<string | null>(null);
   const runTimeout = useRef<number | null>(null);
+  const pollTimeout = useRef<number | null>(null);
 
   // Which single trade the chart below highlights — per spec (Trade Detail),
   // clicking a row highlights just that trade's own entry/exit, not every
@@ -63,64 +66,148 @@ export function ExperimentDashboard() {
     toastTimeout.current = window.setTimeout(() => setToast(null), 4000);
   }, []);
 
-  useEffect(() => {
-    if (activeTrades.length === 0 && activeExp) {
-      loadTradesFor(activeExp).then(setActiveTrades);
+  const applyExperiments = useCallback((items: ExperimentResult[]) => {
+    if (mode !== 'LIVE') return;
+    setExperiments(items);
+    setLeaderboardState(items.length > 0 ? 'ready' : 'empty');
+    setLeaderboardError('');
+    if (items.length === 0) {
+      setActiveExp(null);
+      setActiveTrades([]);
+      return;
     }
-  }, [activeExp, activeTrades.length, setActiveTrades]);
+    const current = useExperimentStore.getState().activeExperiment;
+    if (!current || MOCK_EXPERIMENTS.some(mock => mock.id === current.id)) {
+      setActiveExp(items[0]);
+    }
+  }, [mode, setActiveExp, setActiveTrades]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      setSelectedExpForMeta(null);
+      setActiveTrades([]);
+      setTradeState('idle');
+      setTradeError('');
+
+      if (mode === 'DEMO') {
+        setExperiments(MOCK_EXPERIMENTS);
+        setLeaderboardState('ready');
+        setLeaderboardError('');
+        setActiveExp(MOCK_EXPERIMENTS[0]);
+        return;
+      }
+
+      setExperiments([]);
+      setActiveExp(null);
+      setLeaderboardState('loading');
+      setLeaderboardError('');
+      try {
+        const items = await fetchExperiments();
+        if (!cancelled) applyExperiments(items);
+      } catch (error) {
+        if (cancelled) return;
+        setExperiments([]);
+        setLeaderboardState('error');
+        setLeaderboardError(errorMessage(error));
+      }
+    });
+    return () => { cancelled = true; };
+  }, [applyExperiments, leaderboardReload, mode, setActiveExp, setActiveTrades]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      setActiveTrades([]);
+      setTradeError('');
+      if (!activeExp) {
+        setTradeState('idle');
+        return;
+      }
+      setTradeState('loading');
+      try {
+        const trades = await loadTradesFor(activeExp, mode);
+        if (cancelled) return;
+        setActiveTrades(trades);
+        setTradeState('ready');
+      } catch (error) {
+        if (cancelled) return;
+        setActiveTrades([]);
+        setTradeState('error');
+        setTradeError(errorMessage(error));
+      }
+    });
+    return () => { cancelled = true; };
+  }, [activeExp, mode, setActiveTrades]);
 
   useEffect(() => {
     void Promise.resolve().then(() => setSelectedTrade(activeTrades[0] ?? null));
   }, [activeTrades]);
 
-  const applyExperiments = useCallback((items: ExperimentResult[]) => {
-    if (items.length === 0) return;
-    setExperiments(items);
-    if (!useExperimentStore.getState().activeExperiment) {
-      setActiveExp(items[0]);
-      loadTradesFor(items[0]).then(setActiveTrades);
-    }
-  }, [setActiveExp, setActiveTrades]);
-
-  useEffect(() => {
-    fetchExperiments().then(applyExperiments).catch(() => undefined);
-  }, [applyExperiments]);
-
-  // Fires once the run this component started reaches a terminal status —
-  // driven by the real SEARCH_PROGRESS event, not a fixed-attempt REST poll,
-  // so a slow (retrying) backtest is still tracked instead of silently
-  // timing out after a few seconds.
-  const finishRun = useCallback(async (id: string, status: 'COMPLETED' | 'FAILED' | 'STOPPED') => {
+  const stopTrackingRun = useCallback(() => {
     if (runTimeout.current !== null) {
       window.clearTimeout(runTimeout.current);
       runTimeout.current = null;
     }
+    if (pollTimeout.current !== null) {
+      window.clearTimeout(pollTimeout.current);
+      pollTimeout.current = null;
+    }
     activeSearchId.current = null;
     setIsLoading(false);
-    if (status !== 'COMPLETED') {
-      alert(`Backtest kết thúc: ${status}.`);
-      return;
-    }
+  }, []);
+
+  // WebSocket is the fast path. The REST read verifies the persisted terminal
+  // status, preventing a FAILED candidate from being interpreted as COMPLETED
+  // merely because tested == total.
+  const finishRun = useCallback(async (id: string): Promise<boolean> => {
     try {
       const result = await fetchExperiment(id);
-      setActiveExp(result);
-      loadTradesFor(result).then(setActiveTrades);
+      if (result.status === 'PENDING' || result.status === 'RUNNING') return false;
+      stopTrackingRun();
       setExperiments(current => current.some(item => item.id === result.id)
         ? current.map(item => item.id === result.id ? result : item)
         : [result, ...current]);
-    } catch {
-      alert('Backtest đã hoàn tất nhưng không tải được kết quả — kiểm tra leaderboard.');
+      setLeaderboardState('ready');
+      if (result.status !== 'COMPLETED') {
+        showToast(`Backtest ${result.id} failed. Open provenance or server logs for details.`);
+        return true;
+      }
+      setActiveExp(result);
+      showToast(`Backtest ${result.id} completed successfully.`);
+      return true;
+    } catch (error) {
+      showToast(`Could not verify backtest status: ${errorMessage(error)}`);
+      return false;
     }
-  }, [setActiveExp, setActiveTrades]);
+  }, [setActiveExp, showToast, stopTrackingRun]);
+
+  const scheduleStatusPolling = useCallback((id: string) => {
+    if (pollTimeout.current !== null) window.clearTimeout(pollTimeout.current);
+    const poll = async () => {
+      if (activeSearchId.current !== id) return;
+      const terminal = await finishRun(id);
+      if (!terminal && activeSearchId.current === id) {
+        pollTimeout.current = window.setTimeout(poll, 1500);
+      }
+    };
+    pollTimeout.current = window.setTimeout(poll, 1000);
+  }, [finishRun]);
 
   const handleProgress = useCallback((progress: WSSearchProgressPayload) => {
     if (!activeSearchId.current || progress.searchId !== activeSearchId.current) return;
-    if (progress.status === 'FAILED' || progress.status === 'STOPPED') {
-      void finishRun(activeSearchId.current, progress.status);
-    } else if (progress.tested >= progress.total) {
-      void finishRun(activeSearchId.current, 'COMPLETED');
+    if (progress.status === 'FAILED' || progress.status === 'STOPPED' || progress.tested >= progress.total) {
+      void finishRun(activeSearchId.current);
     }
   }, [finishRun]);
+
+  useEffect(() => () => {
+    if (toastTimeout.current !== null) window.clearTimeout(toastTimeout.current);
+    if (runTimeout.current !== null) window.clearTimeout(runTimeout.current);
+    if (pollTimeout.current !== null) window.clearTimeout(pollTimeout.current);
+  }, []);
 
   useWebSocketSubscription<WSSearchProgressPayload>('SEARCH_PROGRESS', handleProgress);
   useWebSocketSubscription<ExperimentResult[]>('LEADERBOARD_UPDATE', applyExperiments);
@@ -134,6 +221,11 @@ export function ExperimentDashboard() {
     fee: number;
     slippage: number;
   }) => {
+    if (mode === 'DEMO') {
+      setActiveExp(MOCK_EXPERIMENTS[0]);
+      showToast('Offline demo loaded a deterministic sample backtest.');
+      return;
+    }
     setIsLoading(true);
     try {
       const started = await startSearch({
@@ -147,15 +239,17 @@ export function ExperimentDashboard() {
         instances: [{ type: 'MA' }],
       });
       activeSearchId.current = started.searchId;
+      scheduleStatusPolling(started.searchId);
       runTimeout.current = window.setTimeout(() => {
         if (activeSearchId.current !== started.searchId) return;
-        activeSearchId.current = null;
-        setIsLoading(false);
-        alert('Backtest đang chạy lâu hơn bình thường (>90s) — có thể vẫn hoàn tất, kiểm tra leaderboard sau ít phút.');
+        stopTrackingRun();
+        showToast('Backtest is taking longer than 90 seconds. It may still finish; refresh the leaderboard shortly.');
       }, RUN_TIMEOUT_MS);
     } catch (error) {
       setIsLoading(false);
-      alert(`Không thể chạy backtest thật: ${String(error)}. Hãy chạy migration/backfill trước.`);
+      setLeaderboardError(`Could not start backtest: ${errorMessage(error)}`);
+      setLeaderboardState('error');
+      showToast('Backtest could not start. Check migration, backfill and server connectivity.');
     }
   };
 
@@ -163,10 +257,9 @@ export function ExperimentDashboard() {
     setSelectedExpForMeta(exp);
   };
 
-  const handleLoadToChart = async (exp: ExperimentResult) => {
-    const trades = await loadTradesFor(exp);
-    loadExperimentToChart(exp, trades);
-    showToast(`Loaded #${exp.id} (${formatExperimentTitle(exp)}) — see its trades and chart below.`);
+  const handleLoadToChart = (exp: ExperimentResult) => {
+    setActiveExp(exp);
+    showToast(`Loading #${exp.id} (${formatExperimentTitle(exp)}) with its persisted trade history.`);
   };
 
   const handleReplicate = (exp: ExperimentResult) => {
@@ -178,6 +271,12 @@ export function ExperimentDashboard() {
   return (
     <div style={dashboardContainerStyle}>
       {toast && <div style={toastStyle}>{toast}</div>}
+      {mode === 'LIVE' && leaderboardState === 'error' && (
+        <div style={errorPanelStyle} role="alert">
+          <div><strong>Could not load live experiments.</strong> {leaderboardError}</div>
+          <button type="button" onClick={() => setLeaderboardReload(value => value + 1)} style={retryButtonStyle}>Retry</button>
+        </div>
+      )}
       {/* 1. Top Section: Run Simulation & Performance Overview */}
       <div style={topSectionStyle}>
         <div style={configColStyle}>
@@ -206,17 +305,25 @@ export function ExperimentDashboard() {
       {/* 2. Middle Section: Leaderboard */}
       <div style={leaderboardSectionStyle}>
         <h3 style={sectionTitleStyle}>Strategy Experiment Leaderboard</h3>
-        <ExperimentLeaderboard
-          experiments={experiments}
-          onSelectExperiment={handleSelectExperimentForMeta}
-          onLoadToChart={handleLoadToChart}
-        />
+        {leaderboardState === 'loading' && <p style={statePanelStyle}>Loading live experiments…</p>}
+        {leaderboardState === 'empty' && <p style={statePanelStyle}>No live backtests yet. Run one above to create the first result.</p>}
+        {experiments.length > 0 && (
+          <ExperimentLeaderboard
+            experiments={experiments}
+            onSelectExperiment={handleSelectExperimentForMeta}
+            onLoadToChart={handleLoadToChart}
+          />
+        )}
       </div>
 
       {/* 3. Bottom Section: Trade Chart + History log */}
       {activeExp && (
         <div style={tradesSectionStyle}>
-          {activeTrades.length > 0 ? (
+          {tradeState === 'loading' ? (
+            <p style={statePanelStyle}>Loading persisted trades…</p>
+          ) : tradeState === 'error' ? (
+            <p style={errorPanelStyle} role="alert">Could not load trade history: {tradeError}</p>
+          ) : activeTrades.length > 0 ? (
             <>
               <BacktestChart experiment={activeExp} trades={activeTrades} highlightedTrade={selectedTrade} />
               <TradeHistoryTable
@@ -345,4 +452,35 @@ const toastStyle: React.CSSProperties = {
   padding: '0.65rem 0.9rem',
   boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)',
   zIndex: 1000,
+};
+
+const statePanelStyle: React.CSSProperties = {
+  fontSize: '0.8rem',
+  color: '#64748b',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
+  borderRadius: '8px',
+  padding: '1rem',
+  margin: 0,
+};
+
+const errorPanelStyle: React.CSSProperties = {
+  ...statePanelStyle,
+  color: '#b91c1c',
+  backgroundColor: '#fef2f2',
+  borderColor: '#fecaca',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '1rem',
+};
+
+const retryButtonStyle: React.CSSProperties = {
+  color: '#ffffff',
+  backgroundColor: '#b91c1c',
+  border: 0,
+  borderRadius: '6px',
+  padding: '0.4rem 0.75rem',
+  cursor: 'pointer',
+  fontWeight: 700,
 };
