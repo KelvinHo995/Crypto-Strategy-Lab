@@ -67,13 +67,16 @@ scenarios" for the walkthrough: realtime multi-timeframe charts, strategy
 selection, composite generation, backtest run, leaderboard, and sentiment
 analysis, all against the real backend/Supabase.
 
-## Team ownership
+## Team ownership and contributions
 
-| Member | Area |
-|---|---|
-| Võ Thành Đạt | Market Data + Sentiment Service |
-| Vũ Thành Đạt | Strategy + Search |
-| Hồ Tấn Quốc | Experiment (Backtest/Evaluate/Rank) |
-| Trịnh Hạnh | Frontend |
+Primary ownership identifies the module each member is responsible for. Actual
+implementation work also crosses module boundaries, as summarized below.
+
+| Member | Primary ownership | Additional contributions |
+|---|---|---|
+| Võ Thành Đạt | Market Data + Sentiment Service | Binance resilience, RSS ingestion, sentiment integration and experiment provenance |
+| **Vũ Thành Đạt (`yuno1310`)** | **Strategy + Search** | Strategy plugins and extensibility; random/continuous search; backend API, auth and runtime integration; multi-market streaming and backfill; durable PostgreSQL queue, bounded caches, worker metrics and performance evidence; frontend REST/WebSocket integration, multi-coin charts, sentiment and search-loop UI, responsive workstation and dark theme; experiment/leaderboard integrity; CI, integration/E2E tests, ADRs, contracts and operational documentation |
+| Hồ Tấn Quốc | Experiment (Backtest/Evaluate/Rank) | Trade persistence and visualization, search-loop integrity, short-selling and runtime hardening |
+| Trịnh Hạnh | Frontend | Cross-tab state, backtest payload synchronization, news pipeline UI and strategy presets |
 
 Never commit `.env`, database credentials, JWT secrets, or exported cookie files.
