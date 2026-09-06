@@ -34,6 +34,16 @@ type Queue interface {
 	Nack(context.Context, string, error) error
 }
 
+type QueueStats struct {
+	Queued  int `json:"queued"`
+	Running int `json:"running"`
+	Failed  int `json:"failed"`
+}
+
+type QueueStatsProvider interface {
+	Stats(context.Context) (QueueStats, error)
+}
+
 // PendingQueue persists the PENDING experiment row and queue message in one
 // transaction, closing the crash window between the two writes.
 type PendingQueue interface {
@@ -76,6 +86,10 @@ func (q *InMemoryQueue) Dequeue(ctx context.Context) (BacktestJob, error) {
 
 func (q *InMemoryQueue) Ack(context.Context, string) error         { return nil }
 func (q *InMemoryQueue) Nack(context.Context, string, error) error { return nil }
+
+func (q *InMemoryQueue) Stats(context.Context) (QueueStats, error) {
+	return QueueStats{Queued: len(q.jobs)}, nil
+}
 
 const (
 	DefaultQueuePollInterval = time.Second

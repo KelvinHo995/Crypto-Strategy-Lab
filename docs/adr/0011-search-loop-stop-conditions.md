@@ -34,8 +34,9 @@ and can be combined:
 **Observability** is carried by two existing mechanisms rather than a new
 subsystem:
 - `SEARCH_PROGRESS` WebSocket messages (`{tested, total}`, PLAN.md §3.5).
-  `searchId`, terminal `status`, `reason`, best score and failure count are
-  additive target fields; the current backend does not publish them yet.
+  `searchId`, terminal `status` and `reason` are published today. Aggregate
+  completed/failed counts and latency are exposed separately by `GET /metrics`;
+  best score remains represented by `LEADERBOARD_UPDATE`.
 - `BacktestJob.Status` (`PENDING|RUNNING|COMPLETED|FAILED`, per the
   `Result` schema) and `BacktestJob.EnqueuedAt`
   ([ADR-0004](0004-inprocess-job-queue-not-kafka.md)) give per-job status

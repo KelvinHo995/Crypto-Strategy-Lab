@@ -11,6 +11,11 @@ backfill persists only closed candles. Live updates may carry
 
 ## Search and experiments
 
+`GET /strategies` returns the authoritative names registered by the backend.
+The frontend must render unknown names with a generic default-parameter form;
+hardcoded metadata may enrich known plugins but must not hide a newly registered
+one.
+
 `POST /search/start` accepts `{pair,timeframe,from,to,capital,instances,policy}`,
 where `instances` is `[{type,params,weight}]` — each entry is an
 independently configured strategy (own params, own weight), so a composite
@@ -30,6 +35,11 @@ requested Unix-millisecond `from-to` range). Together these identify the exact
 market candle dataset used by the backtest. Rows created before this provenance
 was introduced omit `pair`/`timeframe` rather than claiming an unverified value.
 Completed trade details remain available at `GET /experiments/{id}/trades`.
+The endpoint returns HTTP 404 for an unknown experiment and an array (possibly
+empty) for an existing experiment. A worker persists trades before publishing
+`COMPLETED`; if trade persistence fails, that candidate is persisted and
+broadcast as `FAILED`, so a reproducible result never advertises success
+without its trade detail.
 
 Completed results that consumed `SentimentStrategy` observations also expose
 `sentimentModels:[{name,version}]`. The list contains every distinct persisted
@@ -79,8 +89,12 @@ message atomically for both `/search/start` and `/search/loop`, via
 `EnqueuePending` — no crash window between the two writes. A job contains
 dataset coordinates rather than candle rows; workers claim with a renewable
 lease, load candles from the repository, and Ack/Nack after persistence.
-`GET /experiments` returns at most the indexed, score-ranked Top 100;
-WebSocket leaderboard updates publish Top 10.
+`GET /experiments` returns at most 100 rows. Rank-eligible results are
+`COMPLETED`, contain at least one trade and strategy instance, and include
+pair/timeframe provenance. They are ordered first by
+`0.50*return + 0.30*winRate - 0.20*MDD`; completed legacy/no-trade history
+remains readable after them for audit but is not competitive. WebSocket
+leaderboard updates publish the first 10 rows using the same ordering.
 
 ## Historical market data
 
@@ -100,7 +114,41 @@ returns HTTP 422 when the requested range contains fewer than
 `POST /auth/register` creates a bcrypt-backed user. `POST /auth/login` sets an
 httpOnly SameSite=Lax `session` JWT cookie with a one-hour expiry. The configured
 secret must contain at least 16 characters. All routes
-except health/register/login require that cookie. Logout clears it.
+except health/readiness/register/login require that cookie. Logout clears it.
+
+## Operational endpoints
+
+`GET /health` is a dependency-free liveness probe. `GET /ready` calls
+PostgreSQL with a two-second deadline and returns HTTP 503 when it is not
+available. Authenticated `GET /metrics` returns:
+
+```json
+{
+  "uptimeSeconds": 60,
+  "workerCount": 3,
+  "jobsCompleted": 20,
+  "jobsFailed": 1,
+  "jobsPerMinute": 21,
+  "averageQueueWaitMs": 4.2,
+  "queueWaitP50Ms": 3.8,
+  "queueWaitP95Ms": 8.1,
+  "averageExecutionTimeMs": 18.7,
+  "executionTimeP50Ms": 17.9,
+  "executionTimeP95Ms": 31.4,
+  "queue": {"queued": 2, "running": 3, "failed": 1}
+}
+```
+
+Counters and averages are process-lifetime measurements; queue state is queried
+live from the active queue. Every HTTP response includes `X-Request-ID` and the
+backend logs that ID with method, path, HTTP status, response bytes and elapsed
+milliseconds.
+
+Authenticated `GET /metrics/prometheus` exposes the same core worker, queue,
+failure, throughput and p50/p95 latency signals in Prometheus text exposition
+format. Normal asynchronous job transitions are correlated separately through
+structured key-value log fields `search_id`, `job_id`, `candidate_id` and
+`status`.
 
 ## WebSocket
 
@@ -117,7 +165,9 @@ Search is started through REST; WebSocket is the server-push channel. Ordinary
 per-candidate progress payload is `{tested,total,searchId}`; the terminal
 early-stop broadcast additionally carries `{status,reason}` (`STOPPED` or
 `FAILED`). The frontend renders `COMPLETED|STOPPED|FAILED` from these fields;
-clients must not invent them or advance progress with timers. A client
+clients must not invent them or advance progress with timers. Reaching
+`tested == total` prompts the client to fetch the persisted candidate and use
+its real terminal status; it is not itself proof of `COMPLETED`. A client
 selects only the market events it needs:
 
 ```json

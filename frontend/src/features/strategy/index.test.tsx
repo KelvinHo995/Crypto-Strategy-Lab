@@ -122,7 +122,7 @@ describe('StrategyDiscoveryPage Search Loop integration', () => {
     await act(async () => subscriptions.get('LEADERBOARD_UPDATE')?.([best]));
 
     await waitFor(() => expect(screen.getAllByText('MA + RSI').length).toBeGreaterThanOrEqual(2));
-    expect(screen.getByText('420 USDT')).toBeTruthy();
+    expect(screen.getAllByText('+420.00 USDT')).toHaveLength(2);
     expect(screen.queryByText(/MA\(20\) \+ RSI\(14\)/)).toBeNull();
   });
 });

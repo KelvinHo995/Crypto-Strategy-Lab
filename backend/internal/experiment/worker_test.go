@@ -2,6 +2,7 @@ package experiment_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 type recordingRepo struct {
 	saves      chan experiment.Result
 	tradeSaves chan []experiment.Trade
+	tradeErr   error
 }
 
 type holdStrategy struct{}
@@ -46,6 +48,9 @@ func (r *recordingRepo) ListBySearch(context.Context, string) ([]experiment.Resu
 	return nil, nil
 }
 func (r *recordingRepo) SaveTrades(_ context.Context, _ string, trades []experiment.Trade) error {
+	if r.tradeErr != nil {
+		return r.tradeErr
+	}
 	r.tradeSaves <- trades
 	return nil
 }
@@ -437,6 +442,8 @@ func TestWorkerPoolRun_PersistsTradesForCompletedBacktest(t *testing.T) {
 
 	job := experiment.BacktestJob{
 		ID:        "job-trade-persistence",
+		Pair:      "BTCUSDT",
+		Timeframe: "5m",
 		Candidate: strategy.CandidateStrategy{ID: "cand-ma-default", Instances: []strategy.StrategyInstance{{Type: "MA"}}, Policy: "majority"},
 		Candles:   candles,
 		Config: experiment.Config{
@@ -460,6 +467,9 @@ func TestWorkerPoolRun_PersistsTradesForCompletedBacktest(t *testing.T) {
 	if last.Status != "COMPLETED" || last.TradeCount == 0 {
 		t.Fatalf("result = %+v, want a COMPLETED result with trades", last)
 	}
+	if last.Pair != "BTCUSDT" || last.Timeframe != "5m" {
+		t.Fatalf("market coordinates = %s/%s, want BTCUSDT/5m", last.Pair, last.Timeframe)
+	}
 
 	select {
 	case trades := <-repo.tradeSaves:
@@ -468,5 +478,49 @@ func TestWorkerPoolRun_PersistsTradesForCompletedBacktest(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for the worker to call SaveTrades")
+	}
+}
+
+func TestWorkerPoolRun_FailsWhenTradePersistenceFails(t *testing.T) {
+	registry := strategy.NewRegistry()
+	registry.Register(holdStrategy{})
+	repo := newRecordingRepo()
+	repo.tradeErr = errors.New("trade table unavailable")
+	queue := experiment.NewInMemoryQueue(1)
+	pool := experiment.NewWorkerPool(queue, registry, repo, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool.Start(ctx)
+
+	job := experiment.BacktestJob{
+		ID: "job-trade-save-failure",
+		Candidate: strategy.CandidateStrategy{
+			ID: "cand-hold", Instances: []strategy.StrategyInstance{{Type: "Hold"}}, Policy: "majority",
+		},
+		Candles: []market.Candle{
+			{Symbol: "BTCUSDT", OpenTime: 1, Open: 100, High: 101, Low: 99, Close: 100},
+			{Symbol: "BTCUSDT", OpenTime: 2, Open: 100, High: 101, Low: 99, Close: 100},
+		},
+		Config: experiment.Config{
+			Pair: "BTCUSDT", StartingCapital: 1000, PositionSizePct: 1,
+			StopLossPct: 0.02, TakeProfitPct: 0.04, Window: 1,
+		},
+		EnqueuedAt: time.Now().UnixMilli(),
+	}
+	if err := queue.Enqueue(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+
+	var last experiment.Result
+	for i := 0; i < 2; i++ {
+		select {
+		case last = <-repo.saves:
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for worker result")
+		}
+	}
+	if last.Status != "FAILED" {
+		t.Fatalf("status = %q, want FAILED when trade persistence fails", last.Status)
 	}
 }

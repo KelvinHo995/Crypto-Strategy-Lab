@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -25,16 +26,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	registry := strategy.NewRegistry()
-	registry.Register(strategy.NewMAStrategy(20, 50))
-	registry.RegisterFactory("MA", strategy.MAFactory)
-	registry.Register(strategy.NewRSIStrategy(14, 70.0, 30.0))
-	registry.RegisterFactory("RSI", strategy.RSIFactory)
-	registry.Register(strategy.NewBollingerStrategy(20, 2.0))
-	registry.RegisterFactory("Bollinger", strategy.BollingerFactory)
-	registry.Register(strategy.NewSRStrategy(20, 0.005))
-	registry.RegisterFactory("SR", strategy.SRFactory)
-	registry.Register(strategy.NewSMCStrategy(10))
-	registry.RegisterFactory("SMC", strategy.SMCFactory)
+	mustRegisterPlugin(registry, strategy.NewMAStrategy(20, 50), strategy.MAFactory)
+	mustRegisterPlugin(registry, strategy.NewRSIStrategy(14, 70.0, 30.0), strategy.RSIFactory)
+	mustRegisterPlugin(registry, strategy.NewBollingerStrategy(20, 2.0), strategy.BollingerFactory)
+	mustRegisterPlugin(registry, strategy.NewSRStrategy(20, 0.005), strategy.SRFactory)
+	mustRegisterPlugin(registry, strategy.NewSMCStrategy(10), strategy.SMCFactory)
+	mustRegisterPlugin(registry, strategy.NewMACDStrategy(12, 26, 9), strategy.MACDFactory)
 
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
@@ -48,6 +45,7 @@ func main() {
 	repo := experiment.NewCachedRepository(experiment.NewPostgresRepository(db), 3*time.Second)
 	candleRepo := market.NewCachedCandleRepository(market.NewPostgresCandleRepository(db), 128, time.Minute)
 	jobQueue := experiment.NewPostgresQueue(db)
+	workerCount := envInt("BACKTEST_WORKERS", 3, 1, 64)
 	sentimentRepo := sentiment.NewPostgresRepository(db)
 	sentimentURL := os.Getenv("SENTIMENT_SERVICE_URL")
 	if sentimentURL == "" {
@@ -56,14 +54,7 @@ func main() {
 	sentimentClient := sentiment.NewClient(sentimentURL, &http.Client{Timeout: 3 * time.Second})
 	sentimentService := sentiment.NewService(sentimentClient, sentimentRepo)
 	sentimentLookup := sentiment.NewTimeLookup(sentimentRepo, sentiment.DefaultMaxAge)
-	registry.Register(strategy.NewSentimentStrategy(nil, sentimentLookup, 0.7))
-	registry.RegisterFactory("Sentiment", strategy.NewSentimentFactory(nil, sentimentLookup, 0.7))
-
-	// Architecture Proof (ADR-0002): Assert expected strategies are registered
-	expectedStrategies := 6 // MA, RSI, Bollinger, SR, SMC, Sentiment
-	if len(registry.List()) != expectedStrategies {
-		log.Fatalf("expected %d strategies, got %d", expectedStrategies, len(registry.List()))
-	}
+	mustRegisterPlugin(registry, strategy.NewSentimentStrategy(nil, sentimentLookup, 0.7), strategy.NewSentimentFactory(nil, sentimentLookup, 0.7))
 	binance := market.NewBinance(nil)
 	jwtSecret := os.Getenv("JWT_SECRET")
 	authService, err := auth.NewService(auth.NewPostgresRepository(db), jwtSecret)
@@ -72,7 +63,8 @@ func main() {
 	}
 
 	router := httpx.NewRouterWithContext(ctx, registry, repo, httpx.Dependencies{
-		Auth: authService, Candles: candleRepo, Live: binance, Sentiment: sentimentService, SentimentReader: sentimentRepo, Queue: jobQueue,
+		Auth: authService, Candles: candleRepo, Live: binance, Sentiment: sentimentService, SentimentReader: sentimentRepo,
+		Queue: jobQueue, WorkerCount: workerCount, Readiness: db.PingContext,
 	})
 	defer router.Close()
 
@@ -87,6 +79,24 @@ func main() {
 		}
 	}()
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
+}
+
+func envInt(name string, fallback, min, max int) int {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < min || value > max {
+		log.Fatalf("%s must be an integer between %d and %d", name, min, max)
+	}
+	return value
+}
+
+func mustRegisterPlugin(registry *strategy.Registry, implementation strategy.Strategy, factory strategy.StrategyFactory) {
+	if err := registry.RegisterPlugin(implementation, factory); err != nil {
 		log.Fatal(err)
 	}
 }

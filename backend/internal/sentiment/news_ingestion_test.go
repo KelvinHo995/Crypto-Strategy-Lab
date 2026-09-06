@@ -148,7 +148,7 @@ func TestIngestRSSArticlePersistsNormalizedNewsBeforeSentiment(t *testing.T) {
 	if len(stored.RelatedCoins) != 1 || stored.RelatedCoins[0] != "BTC" {
 		t.Fatalf("stored related coins = %v", stored.RelatedCoins)
 	}
-	if analyzer.calls[0] != stored.ID || analyzer.texts[0] != "Bitcoin posts bullish gains" {
+	if analyzer.calls[0] != stored.ID || analyzer.texts[0] != "Bitcoin rally continues. Bitcoin posts bullish gains" {
 		t.Fatalf("analyzer input = %q %q", analyzer.calls[0], analyzer.texts[0])
 	}
 }

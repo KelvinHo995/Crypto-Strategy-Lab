@@ -110,6 +110,12 @@ func generateRandomParamsFor(name string) map[string]any {
 		return map[string]any{
 			"smcLookback": 5 + randomInt(26), // 5-30
 		}
+	case "MACD":
+		return map[string]any{
+			"macdFastPeriod":   8 + randomInt(9),   // 8-16
+			"macdSlowPeriod":   20 + randomInt(21), // 20-40
+			"macdSignalPeriod": 5 + randomInt(8),   // 5-12
+		}
 	default:
 		return map[string]any{}
 	}

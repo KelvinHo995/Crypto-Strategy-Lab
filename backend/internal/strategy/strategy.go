@@ -52,6 +52,33 @@ func (r *Registry) RegisterFactory(name string, f StrategyFactory) {
 	r.factories[name] = f
 }
 
+// RegisterPlugin installs the default implementation and its parameterized
+// factory as one atomic composition-root operation. New production strategies
+// should use this method: adding one then costs one implementation file and one
+// registration call, while duplicate names fail loudly instead of silently
+// replacing an existing plugin.
+func (r *Registry) RegisterPlugin(s Strategy, factory StrategyFactory) error {
+	if s == nil {
+		return fmt.Errorf("register strategy plugin: nil strategy")
+	}
+	name := s.Name()
+	if name == "" {
+		return fmt.Errorf("register strategy plugin: empty name")
+	}
+	if factory == nil {
+		return fmt.Errorf("register strategy plugin %s: nil factory", name)
+	}
+	if _, exists := r.strategies[name]; exists {
+		return fmt.Errorf("register strategy plugin %s: duplicate name", name)
+	}
+	if _, exists := r.factories[name]; exists {
+		return fmt.Errorf("register strategy plugin %s: duplicate factory", name)
+	}
+	r.strategies[name] = s
+	r.factories[name] = factory
+	return nil
+}
+
 func (r *Registry) Get(name string) (Strategy, bool) {
 	s, ok := r.strategies[name]
 	return s, ok

@@ -79,7 +79,9 @@ Có dùng").
 ## Consequences
 
 - **Positive:** worker count is a config value, not an architecture change —
-  scaling from 1 to N workers only changes a pool size.
+  scaling from 1 to N workers only changes `BACKTEST_WORKERS`. The executable
+  `cmd/perf` architecture proof compares 1 and 3 workers on the same historical
+  workload and reports duration plus jobs/second.
 - **Positive:** no operational dependency (broker to run, monitor, and keep
   available) for the 2-week build and demo.
 - **Positive — Replaceability:** a future `RedisQueue` or `KafkaQueue` only

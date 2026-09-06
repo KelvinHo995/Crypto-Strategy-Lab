@@ -181,6 +181,21 @@ func (q *PostgresQueue) Heartbeat(ctx context.Context, id string) error {
 	return nil
 }
 
+func (q *PostgresQueue) Stats(ctx context.Context) (QueueStats, error) {
+	var stats QueueStats
+	err := q.db.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE status = 'QUEUED'),
+			COUNT(*) FILTER (WHERE status = 'RUNNING'),
+			COUNT(*) FILTER (WHERE status = 'FAILED')
+		FROM experiment_jobs
+	`).Scan(&stats.Queued, &stats.Running, &stats.Failed)
+	if err != nil {
+		return QueueStats{}, fmt.Errorf("read experiment queue stats: %w", err)
+	}
+	return stats, nil
+}
+
 func (q *PostgresQueue) signal() {
 	select {
 	case q.notify <- struct{}{}:

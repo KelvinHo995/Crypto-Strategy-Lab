@@ -40,10 +40,14 @@ func TestPostgresQueueAtomicEnqueueClaimAndAck(t *testing.T) {
 	defer cancel()
 	id := fmt.Sprintf("queue-runtime-%d", time.Now().UnixNano())
 	t.Cleanup(func() {
-		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		cleanup, stop := context.WithTimeout(context.Background(), 20*time.Second)
 		defer stop()
-		_, _ = db.ExecContext(cleanup, `DELETE FROM experiment_jobs WHERE id=$1`, id)
-		_, _ = db.ExecContext(cleanup, `DELETE FROM experiments WHERE id=$1`, id)
+		if _, err := db.ExecContext(cleanup, `DELETE FROM experiment_jobs WHERE id=$1`, id); err != nil {
+			t.Errorf("cleanup job %s: %v", id, err)
+		}
+		if _, err := db.ExecContext(cleanup, `DELETE FROM experiments WHERE id=$1`, id); err != nil {
+			t.Errorf("cleanup experiment %s: %v", id, err)
+		}
 	})
 
 	queue := experiment.NewPostgresQueue(db)
@@ -52,7 +56,7 @@ func TestPostgresQueueAtomicEnqueueClaimAndAck(t *testing.T) {
 		Config:    experiment.Config{Pair: "BTCUSDT", StartingCapital: 1000}, DatasetPeriod: "1-2", EnqueuedAt: time.Now().UnixMilli()}
 	pending := experiment.Result{ID: id, SearchID: id, SearchTotal: 1, CandidateID: "candidate", Instances: []strategy.StrategyInstance{{Type: "MA"}}, Policy: "majority", StrategyVersions: map[string]string{"MA": "v1"}, DatasetPeriod: "1-2", Status: "PENDING", CreatedAt: job.EnqueuedAt}
 	if err := queue.EnqueuePending(ctx, job, pending); err != nil {
-		t.Fatalf("enqueue pending: %v; apply migrations through 0007", err)
+		t.Fatalf("enqueue pending: %v; apply migrations through 0014", err)
 	}
 	stored, err := experiment.NewPostgresRepository(db).Get(ctx, id)
 	if err != nil || stored.Status != "PENDING" {
@@ -80,10 +84,14 @@ func TestPostgresQueueExhaustedRetryFailsExperiment(t *testing.T) {
 	defer cancel()
 	id := fmt.Sprintf("queue-retry-runtime-%d", time.Now().UnixNano())
 	t.Cleanup(func() {
-		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		cleanup, stop := context.WithTimeout(context.Background(), 20*time.Second)
 		defer stop()
-		_, _ = db.ExecContext(cleanup, `DELETE FROM experiment_jobs WHERE id=$1`, id)
-		_, _ = db.ExecContext(cleanup, `DELETE FROM experiments WHERE id=$1`, id)
+		if _, err := db.ExecContext(cleanup, `DELETE FROM experiment_jobs WHERE id=$1`, id); err != nil {
+			t.Errorf("cleanup job %s: %v", id, err)
+		}
+		if _, err := db.ExecContext(cleanup, `DELETE FROM experiments WHERE id=$1`, id); err != nil {
+			t.Errorf("cleanup experiment %s: %v", id, err)
+		}
 	})
 
 	queue := experiment.NewPostgresQueue(db)

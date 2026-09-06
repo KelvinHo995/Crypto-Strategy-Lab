@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 
 
 @dataclass(frozen=True)
@@ -16,12 +17,21 @@ class LexiconSentimentModel:
     """
 
     name = "crypto-lexicon"
-    version = "v1"
-    positive = frozenset({"gain", "gains", "bullish", "surge", "rally", "rise", "approval", "inflow", "record", "upgrade"})
-    negative = frozenset({"loss", "losses", "bearish", "drop", "crash", "fall", "hack", "ban", "outflow", "fraud"})
+    version = "v2"
+    positive = frozenset({
+        "adoption", "approve", "approved", "approval", "breakout", "bullish",
+        "gain", "gains", "growth", "high", "inflow", "launch", "partnership",
+        "rally", "rebound", "rebounds", "record", "recover", "recovered", "rise",
+        "surge", "upgrade",
+    })
+    negative = frozenset({
+        "attack", "ban", "bearish", "breach", "crackdown", "crash", "decline",
+        "drop", "exploit", "exploited", "fall", "flaw", "fraud", "hack", "hacked",
+        "hackers", "lawsuit", "loss", "losses", "outflow", "risk", "scam",
+    })
 
     def analyze(self, text: str) -> SentimentResult:
-        words = {word.strip(".,:;!?()[]{}\"'").lower() for word in text.split()}
+        words = set(re.findall(r"[a-z0-9]+", text.lower()))
         positive_hits = len(words & self.positive)
         negative_hits = len(words & self.negative)
         total = positive_hits + negative_hits

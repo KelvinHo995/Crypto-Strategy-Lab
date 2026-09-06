@@ -15,10 +15,11 @@ only when the user explicitly enters offline `DEMO` mode.
 DATABASE_URL=postgresql://...
 JWT_SECRET=replace-with-at-least-16-characters
 SENTIMENT_SERVICE_URL=http://127.0.0.1:8000
+BACKTEST_WORKERS=3
 ```
 
 Apply every SQL file in `backend/migrations/` in numeric order (`0001` through
-`0007`) with:
+`0014`) with:
 
 ```powershell
 cd backend
@@ -26,8 +27,9 @@ go run ./cmd/migrate
 ```
 
 The runner uses `DATABASE_URL`; re-running is safe because migrations are
-idempotent. `0005` adds the leaderboard index, `0006` creates the durable
-experiment job queue, and `0007` normalizes search metadata.
+idempotent. The latest migrations add normalized news (`0011`), sentiment model
+provenance (`0012`), experiment market coordinates (`0013`) and a conservative
+legacy-coordinate backfill (`0014`).
 
 ## 2. Run automated regression
 
@@ -48,6 +50,22 @@ $env:RUN_POSTGRES_QUEUE_INTEGRATION='1'
 go test -count=3 ./internal/experiment -run TestPostgresQueue
 Remove-Item Env:RUN_POSTGRES_QUEUE_INTEGRATION
 ```
+
+The trade and sentiment PostgreSQL runtime checks are opt-in for the same
+reason and should use a disposable database:
+
+```powershell
+$env:RUN_POSTGRES_TRADES_INTEGRATION='1'
+$env:RUN_POSTGRES_SENTIMENT_INTEGRATION='1'
+go test ./internal/experiment ./internal/sentiment
+Remove-Item Env:RUN_POSTGRES_TRADES_INTEGRATION
+Remove-Item Env:RUN_POSTGRES_SENTIMENT_INTEGRATION
+```
+
+These tests create uniquely named rows and delete them before closing their DB
+connection. Cleanup failures are test failures; after the run,
+`GET /experiments` must contain no `queue-runtime-*`,
+`queue-retry-runtime-*`, or `trade-history-runtime-test` rows.
 
 ```powershell
 cd frontend
@@ -80,6 +98,9 @@ go run ./cmd/backfill
 
 Every symbol/timeframe must report a non-zero count. Refresh only the latest
 two days before a demo by changing `BACKFILL_DAYS` to `2` and rerunning.
+This refresh is important for `5m`: the chart requests the latest 500 candles,
+so a database can contain years of history and still be too stale for the
+current chart window.
 
 ## 4. Start the stack
 
@@ -104,6 +125,8 @@ Expected health checks:
 
 - `http://127.0.0.1:8000/health` returns the sentiment service health response.
 - `http://127.0.0.1:8080/health` returns the Go service health response.
+- `http://127.0.0.1:8080/ready` returns HTTP 200 and
+  `{"status":"ready","database":"available"}`.
 - `http://127.0.0.1:5173/` opens the React application.
 
 ## 5. Browser acceptance scenarios
@@ -122,7 +145,11 @@ Expected health checks:
    `COMPLETED` badge, and at least one non-empty `LEADERBOARD_UPDATE`. The
    mini-leaderboard must match the WebSocket payload instead of fixture rows.
 5. On **Backtests**, confirm the default date range is the latest 90 days, run
-   a simulation and wait for `COMPLETED`. Open its result/provenance details.
+   a simulation and wait for `COMPLETED`. Open its result/provenance details;
+   pair/timeframe must match the submitted request, the chart must request that
+   exact timeframe, and the trade table must come from
+   `GET /experiments/{id}/trades`. In LIVE mode, an empty/error response must be
+   shown explicitly and must never reveal fixture experiment IDs or fake trades.
 6. Ingest real news before checking this step:
    ```powershell
    cd backend
@@ -132,14 +159,50 @@ Expected health checks:
    On **Market news**, confirm the feed and sentiment breakdown show the
    ingested articles labelled `LIVE`, with clickable titles linking to the
    source URL. Ingestion is an operator-run job, not a page action — there is
-   no in-page trigger. Without a recent ingest run, the page falls back to
-   the fixture article feed and aggregate labelled `DEMO`.
+   no in-page trigger. In LIVE mode an empty or failed API response is shown
+   explicitly and never substitutes local fixture articles.
+
+   To demonstrate all three sentiment labels through the real RSS parser when
+   the current news cycle happens to classify as neutral, run:
+   ```powershell
+   $env:NEWS_DEMO_RSS_FIXTURES='true'
+   $env:NEWS_RSS_FEEDS=''
+   go run ./cmd/news-ingest
+   Remove-Item Env:NEWS_DEMO_RSS_FIXTURES
+   ```
+   These API-backed rows must show source `Crypto Strategy Lab Demo RSS` and a
+   `DEMO` badge, while the breakdown contains positive, negative and neutral.
 7. Reload the page. The httpOnly session cookie should keep the user signed in
    and the WebSocket should reconnect and restore active subscriptions.
 
 Any `MOCK` market candle/trade label while signed into `Live infrastructure` is
 a failure. An explicit API error is expected when a requested range was not
 backfilled; the client must not disguise it with generated data.
+
+After at least one backtest, call authenticated `GET /metrics`. Confirm
+`workerCount` matches `BACKTEST_WORKERS`, `jobsCompleted + jobsFailed > 0`,
+queue fields are present, and queue/execution averages are non-negative. Also
+confirm API responses contain `X-Request-ID` and the same ID appears in the
+backend request log.
+
+## 6. Performance architecture proof
+
+Run the controlled workload without PostgreSQL/Binance variance:
+
+```powershell
+cd backend
+go run ./cmd/perf -candidates 1000 -candles 2000 -workers 1,3 -repeat 3
+```
+
+Record both `summary` lines in the demo report. The runner performs a discarded
+warm-up and three measured repetitions, then calculates median throughput and
+speedup automatically. The 3-worker run should normally outperform the
+1-worker run. This proves the configured scaling knob with the real worker,
+strategy composition, Backtester and Evaluator pipeline—not a sleep-based mock.
+
+Also call authenticated `GET /metrics/prometheus`; confirm the response content
+type is Prometheus text format and contains `crypto_strategy_queue_jobs`,
+`crypto_strategy_jobs_failed_total` and both p95 latency gauges.
 
 The current release gate additionally requires the Search Loop scenario above
 to finish. A permanent value below `5/5`, a WebSocket timeout, repeated result
@@ -149,7 +212,7 @@ do not compensate with a frontend timer. The backend now publishes additive
 (live-verified: a `noImprovementLimit` run correctly broadcast `STOPPED` the
 moment it stopped generating, well before its already-enqueued jobs finished).
 
-## 6. Authenticated API smoke test
+## 7. Authenticated API smoke test
 
 Run this while all three services are running. Change the username for each new
 database. The script verifies auth, the eight-market catalog, recent candles and
@@ -222,7 +285,7 @@ Expected negative checks:
   `experiment.MinCandlesForBacktest` (currently 202) persisted candles
   returns HTTP 422 and never substitutes fixture candles.
 
-## 7. Evidence to record
+## 8. Evidence to record
 
 For a release/demo, record the commit hash, automated-test output, the eight
 candle counts, one completed experiment ID, the sentiment response model/version

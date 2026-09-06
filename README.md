@@ -6,14 +6,14 @@ Full-stack quantitative strategy lab for realtime Binance candles, composable tr
 
 - Go backend (`backend/`) — REST, authenticated WebSocket, market ingestion, strategies, search, backtesting, ranking, PostgreSQL persistence.
 - React + TypeScript frontend (`frontend/`) — financial workstation UI with live API/WebSocket integration and explicitly labelled offline fallbacks.
-- Python FastAPI sentiment service (`sentiment-service/`) — deterministic `crypto-lexicon/v1` model behind a replaceable HTTP contract.
+- Python FastAPI sentiment service (`sentiment-service/`) — deterministic `crypto-lexicon/v2` model behind a replaceable HTTP contract.
 - PostgreSQL/Supabase — users, candles, experiments, and sentiment observations.
 
 ## Quick start
 
 1. Copy `backend/.env.example` to `backend/.env` and set `DATABASE_URL` plus a `JWT_SECRET` of at least 16 characters.
 2. Set `DATABASE_URL`, then run `go run ./cmd/migrate` from `backend/`. It applies
-   every idempotent migration in numeric order (`0001` through `0008`).
+   every idempotent migration in numeric order (`0001` through `0014`).
 3. Start the three processes in separate terminals:
 
 ```bash
@@ -55,6 +55,10 @@ cd sentiment-service && uv run python -m unittest discover -s tests -v
 Architecture decisions and runtime contracts live in `docs/`. See `PLAN.md` for
 scope and ownership, and [`docs/e2e-testing.md`](docs/e2e-testing.md) for the
 complete Supabase/Binance/fullstack verification runbook.
+
+In `Live infrastructure` mode the Backtests screen never substitutes fixture
+experiments or generated trades when an API call fails or returns no rows.
+Offline samples are available only in the explicitly selected `DEMO` mode.
 
 ## Demo
 

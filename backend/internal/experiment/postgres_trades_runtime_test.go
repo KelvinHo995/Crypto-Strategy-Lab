@@ -11,6 +11,9 @@ import (
 )
 
 func TestPostgresRepository_SaveAndListTrades(t *testing.T) {
+	if os.Getenv("RUN_POSTGRES_TRADES_INTEGRATION") != "1" {
+		t.Skip("set RUN_POSTGRES_TRADES_INTEGRATION=1 to run trade persistence tests against the configured database")
+	}
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		_ = godotenv.Load("../../.env")
@@ -23,7 +26,7 @@ func TestPostgresRepository_SaveAndListTrades(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(func() { _ = db.Close() })
 
 	repo := experiment.NewPostgresRepository(db)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -31,9 +34,11 @@ func TestPostgresRepository_SaveAndListTrades(t *testing.T) {
 
 	id := "trade-history-runtime-test"
 	t.Cleanup(func() {
-		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		cleanup, stop := context.WithTimeout(context.Background(), 20*time.Second)
 		defer stop()
-		_, _ = db.ExecContext(cleanup, `DELETE FROM experiments WHERE id=$1`, id)
+		if _, err := db.ExecContext(cleanup, `DELETE FROM experiments WHERE id=$1`, id); err != nil {
+			t.Errorf("cleanup experiment %s: %v", id, err)
+		}
 	})
 
 	result := experiment.Result{

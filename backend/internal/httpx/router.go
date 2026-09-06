@@ -26,6 +26,8 @@ type Dependencies struct {
 	Sentiment       SentimentService
 	SentimentReader SentimentReader
 	Queue           experiment.Queue
+	WorkerCount     int
+	Readiness       func(context.Context) error
 }
 
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) { r.handler.ServeHTTP(w, req) }
@@ -52,11 +54,18 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	if queue == nil {
 		queue = experiment.NewInMemoryQueue(128)
 	}
-	pool := experiment.NewWorkerPool(queue, registry, repo, 3)
+	workerCount := deps.WorkerCount
+	if workerCount < 1 {
+		workerCount = 3
+	}
+	pool := experiment.NewWorkerPool(queue, registry, repo, workerCount)
 	pool.SetCandleRepository(deps.Candles)
 	generator := strategy.NewRandomGenerator(registry)
 	hub := NewHub(repo)
 	pool.SetObserver(hub.JobUpdated)
+	runtimeMetrics := experiment.NewRuntimeMetrics(workerCount)
+	pool.AddObserver(runtimeMetrics.Observe)
+	pool.AddObserver(logJobTransition)
 	pool.Start(ctx)
 	if deps.Live != nil {
 		if combined, ok := deps.Live.(market.CombinedLiveProvider); ok {
@@ -89,6 +98,7 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	}
 	public := http.NewServeMux()
 	public.HandleFunc("GET /health", health)
+	public.HandleFunc("GET /ready", readiness(deps.Readiness))
 	if authService != nil {
 		public.HandleFunc("POST /auth/register", register(authService))
 		public.HandleFunc("POST /auth/login", login(authService))
@@ -110,7 +120,9 @@ func NewRouterWithContext(parent context.Context, registry *strategy.Registry, r
 	protected.HandleFunc("POST /sentiment/analyze", analyzeSentiment(deps.Sentiment))
 	protected.HandleFunc("GET /sentiment/observations", listSentimentObservations(deps.SentimentReader))
 	protected.HandleFunc("GET /ws", serveWebSocket(hub))
+	protected.HandleFunc("GET /metrics", operationalMetrics(runtimeMetrics, queue))
+	protected.HandleFunc("GET /metrics/prometheus", prometheusMetrics(runtimeMetrics, queue))
 
 	public.Handle("/", requireAuth(authService, protected))
-	return &Router{handler: public, cancel: cancel, pool: pool}
+	return &Router{handler: withRequestTrace(public), cancel: cancel, pool: pool}
 }

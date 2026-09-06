@@ -12,7 +12,7 @@ experiment execution and documentation.
   kline WebSocket reconnect/backoff, Postgres candle range/upsert repository and
   a two-year idempotent backfill command.
 - Search/runtime: production search reads its requested candle range from
-  Postgres, validates strict bounded JSON, uses three workers, persists state
+  Postgres, validates strict bounded JSON, uses a configurable worker pool, persists state
   transitions and publishes progress/leaderboard events.
 - Authentication: Postgres users, bcrypt password hashes, signed HS256 JWT with
   one-hour expiry, httpOnly SameSite=Lax cookie, protected routes and logout.
@@ -175,3 +175,39 @@ experiment execution and documentation.
   requests returned HTTP 400 and 422. Sentiment analysis persisted successfully.
   Browser verification showed four `LIVE/API` charts, `WS Connected`, Binance
   API feed state, and continuously updating real aggregate trades.
+
+## 2026-09-06 extensibility, performance and observability proof
+
+- Added a production `RegisterPlugin(default, factory)` boundary that installs
+  both lookup forms atomically and rejects duplicate names. Added a real MACD
+  strategy/factory and a cross-package architecture test that drives a plugin
+  through composition, Backtester, Evaluator and Rank without changing those
+  consumers.
+- Removed the remaining frontend catalog coupling: `GET /strategies` is now
+  authoritative, and an unknown backend plugin appears with a generic
+  default-parameter form instead of being filtered out by hardcoded metadata.
+- Made worker concurrency configurable through `BACKTEST_WORKERS` (`1`–`64`,
+  default `3`). Added `cmd/perf`; three controlled 500-candidate runs measured
+  median throughput of 8,186.25 jobs/s with one worker and 19,186.35 jobs/s with
+  three workers (2.34×). These are architecture-proof measurements, not a
+  production capacity promise; full evidence and limitations are in
+  `docs/performance-evidence.md`.
+- Added authenticated `GET /metrics`: process-lifetime completed/failed and
+  jobs/minute, bounded-sample average/p50/p95 queue wait and execution time,
+  plus live PostgreSQL queued/running/failed counts. Added public `/ready` with
+  a two-second PostgreSQL check while retaining dependency-free `/health`.
+- Added `X-Request-ID` propagation/generation and key-value request logs with
+  method, path, status, response bytes and duration. WebSocket handling remains
+  unwrapped so the upgrade interface is not broken.
+- Live Supabase verification: `/ready` returned 200, unauthenticated `/metrics`
+  returned 401, the registry returned seven strategies including MACD, and a
+  real BTCUSDT/5m MACD run completed with 36 trades while metrics reported the
+  queue and latency fields. Both temporary MACD experiment rows were deleted
+  afterward and verified as 404.
+- Final regression: all Go tests and `go vet ./...` passed; frontend 25/25 tests,
+  ESLint and production build passed; sentiment unittest passed; `git diff
+  --check` reported no whitespace errors (only the repository's LF→CRLF notice).
+- Follow-up hardening added authenticated Prometheus text exposition, normal
+  job lifecycle correlation logs, and automatic benchmark warm-up/repetition/
+  median/speedup reporting. These are additive observability surfaces; search,
+  backtest, ranking and sentiment behavior are unchanged.

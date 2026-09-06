@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"time"
@@ -25,8 +27,16 @@ func main() {
 		log.Fatal("DATABASE_URL is required")
 	}
 	feedURLs := splitFeedURLs(os.Getenv("NEWS_RSS_FEEDS"))
-	if len(feedURLs) == 0 {
+	demoFixtures := strings.EqualFold(strings.TrimSpace(os.Getenv("NEWS_DEMO_RSS_FIXTURES")), "true") || strings.TrimSpace(os.Getenv("NEWS_DEMO_RSS_FIXTURES")) == "1"
+	if len(feedURLs) == 0 && !demoFixtures {
 		log.Fatal("NEWS_RSS_FEEDS is required (comma-separated RSS URLs)")
+	}
+	var demoServer *httptest.Server
+	if demoFixtures {
+		demoServer = startDemoRSSFeed(time.Now())
+		defer demoServer.Close()
+		feedURLs = append(feedURLs, demoServer.URL)
+		log.Printf("demo RSS fixtures enabled; articles remain clearly labelled by source")
 	}
 
 	lookback := defaultNewsLookback
@@ -77,6 +87,25 @@ func main() {
 			log.Fatal(ingestErr)
 		}
 	}
+}
+
+func startDemoRSSFeed(now time.Time) *httptest.Server {
+	document := demoRSSXML(now.UTC())
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
+		_, _ = w.Write([]byte(document))
+	}))
+}
+
+func demoRSSXML(now time.Time) string {
+	day := now.Format("2006-01-02")
+	date := now.Format(time.RFC1123Z)
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Crypto Strategy Lab Demo RSS</title>
+<item><guid>demo-positive-%s</guid><title>Bitcoin adoption gains as ETF inflow sparks bullish rally</title><description>Institutional demand and network growth support a market rebound.</description><pubDate>%s</pubDate></item>
+<item><guid>demo-negative-%s</guid><title>Crypto exchange hacked after attackers exploit wallet flaw</title><description>The security breach raises loss and fraud risk across the market.</description><pubDate>%s</pubDate></item>
+<item><guid>demo-neutral-%s</guid><title>Ethereum developers publish weekly network schedule</title><description>The team listed routine maintenance dates and meeting times.</description><pubDate>%s</pubDate></item>
+</channel></rss>`, day, date, day, date, day, date)
 }
 
 func loadLocalEnv() {

@@ -238,6 +238,13 @@ func getExperiment(repo experiment.Repository) http.HandlerFunc {
 func getExperimentTrades(repo experiment.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
+		if _, err := repo.Get(r.Context(), id); errors.Is(err, experiment.ErrNotFound) {
+			http.Error(w, "experiment not found", http.StatusNotFound)
+			return
+		} else if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		trades, err := repo.ListTrades(r.Context(), id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

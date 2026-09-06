@@ -1,7 +1,8 @@
 # sentiment-service
 
 FastAPI sentiment service with a deterministic, versioned MVP model
-(`crypto-lexicon/v1`). It is replaceable behind the same `/analyze` contract.
+(`crypto-lexicon/v2`). It tokenizes headline/body vocabulary and is replaceable
+behind the same `/analyze` contract.
 
 ```bash
 uv sync
