@@ -118,7 +118,15 @@ func (p *PostgresRepository) List(ctx context.Context) ([]Result, error) {
 			total_profit, status, created_at, updated_at
 		FROM experiments
 		ORDER BY
-			CASE WHEN status = 'COMPLETED' THEN 0 ELSE 1 END,
+			CASE
+				WHEN status = 'COMPLETED'
+					AND trade_count > 0
+					AND instances <> '[]'
+					AND pair <> ''
+					AND timeframe <> '' THEN 0
+				WHEN status = 'COMPLETED' THEN 1
+				ELSE 2
+			END,
 			(0.50 * COALESCE(return_pct, 0) + 0.30 * COALESCE(win_rate, 0) - 0.20 * COALESCE(mdd, 0)) DESC,
 			created_at DESC
 		LIMIT $1

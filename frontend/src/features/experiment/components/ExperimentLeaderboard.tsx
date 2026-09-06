@@ -9,6 +9,21 @@ interface ExperimentLeaderboardProps {
 
 type SortCriterion = 'return' | 'winRate' | 'mdd' | 'tradeCount' | 'overallScore';
 
+export function isCompetitiveExperiment(exp: ExperimentResult): boolean {
+  return exp.status === 'COMPLETED' && exp.tradeCount > 0 && exp.instances.length > 0 && Boolean(exp.pair && exp.timeframe);
+}
+
+export function calculateExperimentScore(exp: ExperimentResult): number {
+  return 0.5 * exp.return + 0.3 * exp.winRate - 0.2 * exp.mdd;
+}
+
+function eligibilityLabel(exp: ExperimentResult): string {
+  if (isCompetitiveExperiment(exp)) return 'RANKED';
+  if (exp.status !== 'COMPLETED') return exp.status;
+  if (exp.tradeCount === 0) return 'NO TRADES';
+  return 'LEGACY';
+}
+
 export function ExperimentLeaderboard({
   experiments,
   onSelectExperiment,
@@ -17,25 +32,24 @@ export function ExperimentLeaderboard({
   const [topK, setTopK] = useState<number>(10);
   const [sortBy, setSortBy] = useState<SortCriterion>('return');
   const [searchQuery, setSearchQuery] = useState<string>('');
-
-  // Calculate overall score: 0.5*Return + 0.2*Winrate + 0.3*(100 - MDD)
-  const calculateOverallScore = (exp: ExperimentResult): number => {
-    const riskScore = 100 - exp.mdd; // Lower MDD means higher risk score
-    return 0.5 * exp.return + 0.2 * exp.winRate + 0.3 * riskScore;
-  };
+  const [showHistory, setShowHistory] = useState(false);
+  const hiddenHistoryCount = experiments.filter((exp) => !isCompetitiveExperiment(exp)).length;
 
   // Sort and filter logic
   const getProcessedData = () => {
     const filtered = experiments.filter((exp) => {
       const matchSearch = exp.instances.map(i => i.type).join(' + ').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           exp.id.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchSearch;
+      return matchSearch && (showHistory || isCompetitiveExperiment(exp));
     });
 
     // Sort by selected criterion
     filtered.sort((a, b) => {
+      if (isCompetitiveExperiment(a) !== isCompetitiveExperiment(b)) {
+        return isCompetitiveExperiment(a) ? -1 : 1;
+      }
       if (sortBy === 'overallScore') {
-        return calculateOverallScore(b) - calculateOverallScore(a);
+        return calculateExperimentScore(b) - calculateExperimentScore(a);
       }
       if (sortBy === 'mdd') {
         // Lower Drawdown is better (ascending order)
@@ -75,6 +89,12 @@ export function ExperimentLeaderboard({
             onChange={(e) => setSearchQuery(e.target.value)}
             style={searchStyle}
           />
+          {hiddenHistoryCount > 0 && (
+            <label style={historyToggleStyle}>
+              <input type="checkbox" checked={showHistory} onChange={(event) => setShowHistory(event.target.checked)} />
+              Show {hiddenHistoryCount} non-competitive historical run{hiddenHistoryCount === 1 ? '' : 's'}
+            </label>
+          )}
         </div>
 
         <div style={rightToolbarStyle}>
@@ -118,6 +138,8 @@ export function ExperimentLeaderboard({
               <th style={thCenterStyle}>Rank</th>
               <th style={thLeftStyle}>Exp ID & Version</th>
               <th style={thLeftStyle}>Strategy Composition</th>
+              <th style={thLeftStyle}>Market</th>
+              <th style={thCenterStyle}>Eligibility</th>
               <th style={thRightStyle}>Return</th>
               <th style={thRightStyle}>Win Rate</th>
               <th style={thRightStyle}>Max Drawdown</th>
@@ -130,20 +152,26 @@ export function ExperimentLeaderboard({
             {processedExperiments.length > 0 ? (
               processedExperiments.map((exp, index) => {
                 const isWarningMDD = exp.mdd >= 20;
-                const overallScore = calculateOverallScore(exp);
+                const overallScore = calculateExperimentScore(exp);
+                const eligibility = eligibilityLabel(exp);
+                const versions = Object.entries(exp.strategyVersions || {}).map(([name, version]) => `${name} ${version}`).join(', ');
 
                 return (
                   <tr key={exp.id} style={trStyle}>
                     <td style={tdCenterStyle}>{getRankBadge(index + 1)}</td>
                     <td style={tdLeftStyle}>
                       <span style={expIdStyle}>{exp.id}</span>
-                      <span style={versionBadgeStyle}>v1.0</span>
+                      <span style={versionBadgeStyle}>{versions || 'legacy'}</span>
                     </td>
                     <td style={tdLeftStyle}>
                       <span style={compositionStyle}>
                         {exp.instances.map(i => i.type).join(' + ')}
                       </span>
                       <span style={policyStyle}>{exp.policy}</span>
+                    </td>
+                    <td style={tdLeftStyle}>{exp.pair && exp.timeframe ? `${exp.pair} · ${exp.timeframe}` : 'legacy / unknown'}</td>
+                    <td style={tdCenterStyle}>
+                      <span style={isCompetitiveExperiment(exp) ? rankedBadgeStyle : historyBadgeStyle}>{eligibility}</span>
                     </td>
                     <td style={exp.return >= 0 ? tdBuyStyle : tdSellStyle}>
                       {exp.return >= 0 ? `+${exp.return.toFixed(2)}%` : `${exp.return.toFixed(2)}%`}
@@ -180,8 +208,8 @@ export function ExperimentLeaderboard({
               })
             ) : (
               <tr>
-                <td colSpan={sortBy === 'overallScore' ? 9 : 8} style={emptyTdStyle}>
-                  No experiments matching search criteria.
+                <td colSpan={sortBy === 'overallScore' ? 11 : 10} style={emptyTdStyle}>
+                  {showHistory ? 'No experiments matching search criteria.' : 'No rank-eligible experiments yet. Run a backtest that produces at least one trade.'}
                 </td>
               </tr>
             )}
@@ -214,7 +242,19 @@ const toolbarStyle: React.CSSProperties = {
 
 const leftToolbarStyle: React.CSSProperties = {
   flexGrow: 1,
-  maxWidth: '300px',
+  maxWidth: '420px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.5rem',
+};
+
+const historyToggleStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.4rem',
+  color: '#64748b',
+  fontSize: '0.72rem',
+  cursor: 'pointer',
 };
 
 const rightToolbarStyle: React.CSSProperties = {
@@ -379,6 +419,23 @@ const versionBadgeStyle: React.CSSProperties = {
   border: '1px solid #cbd5e1',
   fontFamily: 'monospace',
   display: 'inline-block',
+};
+
+const rankedBadgeStyle: React.CSSProperties = {
+  fontSize: '0.65rem',
+  fontWeight: 700,
+  color: '#047857',
+  backgroundColor: '#d1fae5',
+  border: '1px solid #6ee7b7',
+  borderRadius: '999px',
+  padding: '0.15rem 0.4rem',
+};
+
+const historyBadgeStyle: React.CSSProperties = {
+  ...rankedBadgeStyle,
+  color: '#92400e',
+  backgroundColor: '#fef3c7',
+  borderColor: '#fcd34d',
 };
 
 const compositionStyle: React.CSSProperties = {
