@@ -210,7 +210,7 @@ unit test/fallback composition. Worker pool và Backtester vẫn phụ thuộc i
 |---|---|---|
 | POST | `/search/start` | Bắt đầu search — trả về ngay `{searchId, status: STARTED}`, không block chờ chạy xong |
 | POST | `/search/loop` | Bắt đầu Random Search 2–200 candidate với max-duration/no-improvement optional; trả HTTP 202 ngay |
-| GET | `/experiments` | Leaderboard — đọc từ bảng `experiments`, sort theo return |
+| GET | `/experiments` | Leaderboard — competitive run (`COMPLETED`, có trade, strategy instances và market provenance) đứng trước; run legacy/no-trade vẫn giữ để audit nhưng không chiếm Top-K mặc định |
 | GET | `/experiments/{id}` | Chi tiết 1 kết quả (click Top #1), gồm provenance |
 | GET | `/strategies` | List authoritative plugin names; UI vẫn hiện plugin chưa có metadata local bằng default factory params |
 | GET | `/markets` | Catalog 8 coin và các timeframe được backend hỗ trợ |

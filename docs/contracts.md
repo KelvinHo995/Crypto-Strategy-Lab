@@ -89,8 +89,12 @@ message atomically for both `/search/start` and `/search/loop`, via
 `EnqueuePending` — no crash window between the two writes. A job contains
 dataset coordinates rather than candle rows; workers claim with a renewable
 lease, load candles from the repository, and Ack/Nack after persistence.
-`GET /experiments` returns at most the indexed, score-ranked Top 100;
-WebSocket leaderboard updates publish Top 10.
+`GET /experiments` returns at most 100 rows. Rank-eligible results are
+`COMPLETED`, contain at least one trade and strategy instance, and include
+pair/timeframe provenance. They are ordered first by
+`0.50*return + 0.30*winRate - 0.20*MDD`; completed legacy/no-trade history
+remains readable after them for audit but is not competitive. WebSocket
+leaderboard updates publish the first 10 rows using the same ordering.
 
 ## Historical market data
 

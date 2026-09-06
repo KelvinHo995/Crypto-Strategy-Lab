@@ -37,6 +37,7 @@ experiment.Result  { SearchID, SearchTotal, CandidateID, Pair, Timeframe,
                       MDD, TradeCount, Status, CreatedAt }
      ▼
 Ranking (Score = 0.50×Return + 0.30×WinRate − 0.20×MDD)
+        Eligible = COMPLETED + TradeCount > 0 + strategy/market provenance
      ▼
 Repository → Supabase (Postgres) `experiments` table
      ▼
@@ -48,6 +49,12 @@ WebSocket → { "type": "LEADERBOARD_UPDATE", payload: Result[] }
      ▼
 Frontend — Discovery progress and leaderboard re-render only from server events
 ```
+
+Zero-trade and legacy rows are retained as experiment history rather than
+deleted, but are ordered after competitive results. This prevents an unevaluated
+`0%` placeholder from outranking a real loss while preserving the audit trail.
+The frontend applies the same eligibility rule and score formula; historical
+rows are available through an explicit toggle instead of occupying Top-K.
 
 ## Why a queue + worker pool, not a sequential loop
 
