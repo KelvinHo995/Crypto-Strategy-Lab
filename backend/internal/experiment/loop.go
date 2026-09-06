@@ -13,6 +13,10 @@ import (
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/strategy"
 )
 
+// How often the generator re-checks whether an in-flight candidate has
+// resolved while paced (see NoImprovementLimit handling below).
+const searchLoopPaceInterval = 50 * time.Millisecond
+
 // observerRegistry is the slice of WorkerPool RunSearchLoop actually needs —
 // narrowed so tests can simulate job completions without a real worker pool
 // and backtest pipeline behind it.
@@ -55,14 +59,19 @@ func RunSearchLoop(ctx context.Context, params LoopParams, gen strategy.Strategy
 	var mu sync.Mutex
 	bestScore := math.Inf(-1)
 	stepsSinceImprovement := 0
+	completed := 0
 
-	// The generator can race ahead of completions by up to the queue's
-	// buffer size (workers take real time; enqueueing doesn't) — so this
-	// stop can overshoot NoImprovementLimit by that much before it lands,
-	// not stop at exactly N. Accepted: tightening it would mean waiting for
-	// each candidate to finish before generating the next, serializing
-	// generation to completion pace and starving the worker pool's
-	// parallelism, which defeats the point of having 3 workers.
+	// Without a cap, a fast generator against a queue with no backpressure
+	// of its own (the production Postgres queue has none — see ADR-0011)
+	// can enqueue every candidate before enough of them have actually
+	// completed for stepsSinceImprovement to ever reach the limit, so
+	// no-improvement would never fire early at all. Capping in-flight
+	// candidates (enqueued minus completed) at NoImprovementLimit bounds
+	// the overshoot to exactly that limit: you can't know whether the
+	// last N had no improvement while more than N are still unresolved.
+	// This does not serialize generation to one-at-a-time — up to
+	// NoImprovementLimit candidates can still be running in parallel
+	// across the worker pool at once.
 	if params.NoImprovementLimit > 0 {
 		unsubscribe := pool.AddObserver(func(r Result) {
 			if r.SearchID != params.SearchID || (r.Status != "COMPLETED" && r.Status != "FAILED") {
@@ -70,6 +79,7 @@ func RunSearchLoop(ctx context.Context, params LoopParams, gen strategy.Strategy
 			}
 			mu.Lock()
 			defer mu.Unlock()
+			completed++
 			if r.Status == "COMPLETED" {
 				if s := Score(r); s > bestScore {
 					bestScore, stepsSinceImprovement = s, 0
@@ -100,6 +110,23 @@ generate:
 			if stop {
 				reason = "no-improvement"
 				break generate
+			}
+			// Pace generation to the cap described above: don't generate
+			// another candidate while NoImprovementLimit are already
+			// in flight, wait for at least one to resolve first.
+			for {
+				mu.Lock()
+				inFlight := enqueued - completed
+				mu.Unlock()
+				if inFlight < params.NoImprovementLimit {
+					break
+				}
+				select {
+				case <-ctx.Done():
+					reason = "cancelled"
+					break generate
+				case <-time.After(searchLoopPaceInterval):
+				}
 			}
 		}
 
