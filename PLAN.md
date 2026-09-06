@@ -17,7 +17,7 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ `internal/httpx`: router 2-mux public/protected; search/experiment/strategy APIs chạy thật. `/health` là liveness, `/ready` kiểm tra PostgreSQL, `/metrics` có queue depth/running/failed, throughput và queue/execution latency; response có `X-Request-ID` đồng nhất với request-duration log. Auth dùng JWT cookie thật; `/ws` là server-push channel có xác thực cho candle, tiến độ search và leaderboard.
 - ✅ `Binance.FetchHistoricalCandles` REST thật: pagination 1000 klines, normalize `Candle`, chỉ nhận candle đã đóng; live kline WebSocket có reconnect/backoff và phát `CANDLE_UPDATE`.
 - ✅ Postgres repositories cho experiments/users/candles/sentiment và `cmd/backfill` đã hoàn thiện; default 2 năm/BTC, hỗ trợ `BACKFILL_SYMBOLS` + `BACKFILL_DAYS`, pace Binance request, upsert batch 500 và idempotent theo `(symbol,timeframe,open_time)`. Search production đọc range qua bounded cache. Chuỗi migration hiện chạy idempotent từ `0001` đến `0014`: durable queue/search metadata, strategy instances, article metadata, trade detail, normalized news, sentiment-model provenance, pair/timeframe provenance và conservative legacy backfill.
-- ✅ Strategy thật (MA/RSI/BB/SR/SMC/MACD/Sentiment), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện. `RegisterPlugin(default,factory)` đăng ký atomically và reject duplicate; MACD + cross-package architecture test chứng minh plugin mới chạy xuyên composition→backtest→evaluate→rank mà không sửa core consumers. `CandidateStrategy.Instances []StrategyInstance` cho mỗi instance tự có `type/params/weight`; `resolveCombinationPolicy` dùng đúng weight client gửi (fallback equal nếu không set). Migration `0008` lưu instances JSON. Frontend Composite Strategy Builder gửi contract này thật — verified sống qua Supabase với 2 instance MA khác param/weight.
+- ✅ Strategy thật (MA/RSI/BB/SR/SMC/MACD/Sentiment), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện. `RegisterPlugin(Plugin)` đăng ký atomically implementation, factory, random parameter generator và strategy version; architecture tests chứng minh plugin mới chạy xuyên generate→composition→backtest→evaluate→rank mà không sửa core consumers. `CandidateStrategy.Instances []StrategyInstance` cho mỗi instance tự có `type/params/weight`; `resolveCombinationPolicy` dùng đúng weight client gửi (fallback equal nếu không set). Migration `0008` lưu instances JSON. Frontend Composite Strategy Builder gửi contract này thật — verified sống qua Supabase với 2 instance MA khác param/weight.
 - ✅ Queue/Worker pool dùng durable PostgreSQL queue (`BACKTEST_WORKERS`, mặc định 3, giới hạn 1–64), claim bằng `SKIP LOCKED`, retry/backoff, lease heartbeat và reclaim sau crash. `cmd/perf` đo cùng workload với 1/3 workers; runtime metrics đo throughput, queue wait, execution time và failure count mà không đổi backtest/search semantics. `/search/start` và `/search/loop` ghi `PENDING + job` atomically; worker đọc candle qua bounded cache và cô lập panic.
 - ⚠️ `POST /search/loop` (ADR-0011) đã có `RandomGenerator`, nhận max-candidates / max-duration / no-improvement, và job ID nay an toàn (UUID). Backend phát terminal `SEARCH_PROGRESS{searchId,status:STOPPED|FAILED,reason}` ngay khi loop dừng sớm (max-duration/no-improvement/cancel/enqueue-failed), nên progress không còn treo dưới `total` vô thời hạn — verified sống qua Supabase thật. Còn tồn hai giới hạn đã biết, chấp nhận được ở quy mô hiện tại: PostgreSQL queue không backpressure nên no-improvement có thể overshoot nhiều hơn "vài candidate" như comment cũ giả định; dedup retry tối đa 10 lần rồi vẫn có thể nhận duplicate. User-cancel vẫn chưa có endpoint (3 điều kiện còn lại đã đảm bảo dừng).
 - ✅ Frontend Discovery đã gọi thật `POST /search/loop`, gửi đủ ba giới hạn, bỏ timer/progress giả và dùng `SEARCH_PROGRESS` + `LEADERBOARD_UPDATE` trong LIVE mode. UI hỗ trợ `COMPLETED|STOPPED|FAILED`; backend nay phát đủ `searchId/status/reason` cho `STOPPED/FAILED` cấp search-run, `COMPLETED` vẫn suy ra từ `tested == total`. Auth, catalog 8 coin, candles, aggregate trades, strategy list, experiments và sentiment analyze vẫn nối API thật; phần news aggregate trên frontend vẫn có DEMO fallback.
@@ -95,17 +95,23 @@ type Strategy interface {
 type StrategyRegistry struct {
     strategies map[string]Strategy
 }
-func (r *StrategyRegistry) RegisterPlugin(s Strategy, f StrategyFactory) error
+type Plugin struct {
+    Name         string
+    Default      Strategy
+    Factory      StrategyFactory
+    RandomParams RandomParamsGenerator
+    Version      string
+}
+func (r *StrategyRegistry) RegisterPlugin(plugin Plugin) error
 
 type StrategyGenerator interface {
     Generate() CandidateStrategy
 }
 
 type CandidateStrategy struct {
-    ID         string
-    Strategies []string
-    Params     map[string]any
-    Policy     string // "majority" | "weighted"
+    ID        string
+    Instances []StrategyInstance
+    Policy    string // "majority" | "weighted"
 }
 ```
 

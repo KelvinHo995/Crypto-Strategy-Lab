@@ -6,6 +6,8 @@ import (
 
 var _ Strategy = (*SMCStrategy)(nil)
 
+const SMCStrategyVersion = "v1"
+
 type SMCStrategy struct {
 	SwingLookback int // Number of candles to look back to define a swing point
 }
@@ -19,6 +21,14 @@ func NewSMCStrategy(swingLookback int) *SMCStrategy {
 func SMCFactory(params map[string]any) Strategy {
 	lookback, _ := toInt(params["smcLookback"], 10)
 	return NewSMCStrategy(lookback)
+}
+
+func SMCRandomParams(source RandomSource) map[string]any {
+	return map[string]any{"smcLookback": 5 + source.Intn(26)}
+}
+
+func NewSMCPlugin(defaultStrategy *SMCStrategy) Plugin {
+	return Plugin{Name: "SMC", Default: defaultStrategy, Factory: SMCFactory, RandomParams: SMCRandomParams, Version: SMCStrategyVersion}
 }
 
 func (s *SMCStrategy) Name() string {

@@ -1,73 +1,65 @@
-# ADR-0002: Strategies as a plugin (interface + registry), not a type switch
+# ADR-0002: Strategies as source-level plugins
 
 **Status:** Accepted
 **Owner:** Strategy + Search (Person 2)
 
 ## Context
 
-The spec's central extensibility test (ch.41) is literally "the system has
-MA, RSI, Bollinger, SR today — add MACD" and grades how many components that
-touches. Spec ch.44 names the anti-pattern directly:
-
-```go
-if strategy == MA { ... }
-else if strategy == RSI { ... }
-else if strategy == Bollinger { ... }
-else if strategy == SR { ... }
-```
-
-This grows linearly with every new strategy and touches a shared file every
-time, which is exactly the coupling the grading wants to see avoided.
+The central extensibility scenario is adding a strategy such as MACD without
+adding strategy-name branches to search, backtesting, evaluation, workers, or
+ranking. A registry that stores only implementations and factories is
+insufficient when random parameter generation and version metadata remain in
+separate central switches or maps.
 
 ## Decision
 
-`Strategy` is an interface (`Name() string`, `Analyze([]Candle) Signal`).
-Each strategy is its own type implementing it. A `Registry` holds strategies
-by name. `RegisterPlugin(default, factory)` installs both lookup forms in one
-validated operation; adding MACD is one composition-root call, with no edits to
-Backtester, Evaluator, Leaderboard or frontend core.
+Each strategy implements the small `Strategy` interface. Startup registers one
+complete descriptor:
 
 ```go
-type Strategy interface {
-    Name() string
-    Analyze(candles []market.Candle) Signal
+type Plugin struct {
+    Name         string
+    Default      Strategy
+    Factory      StrategyFactory
+    RandomParams RandomParamsGenerator
+    Version      string
 }
-type Registry struct{ strategies map[string]Strategy }
-func (r *Registry) RegisterPlugin(s Strategy, factory StrategyFactory) error
 ```
 
-Every implementation also declares
-`var _ Strategy = (*MAStrategy)(nil)` so a signature mismatch is a compile
-error at the definition site, not a runtime surprise (PLAN.md §6 — this
-check is explicitly "Có dùng").
+`Registry.RegisterPlugin(Plugin)` validates and atomically registers the
+implementation, factory, parameter generator, and implementation version.
+`RandomGenerator` discovers sorted descriptors through `Registry.Plugins()`;
+it never switches on concrete strategy names. Experiment provenance resolves
+strategy versions through `Registry.VersionsFor()` from the same descriptor.
+Sentiment model identity remains separate runtime provenance.
+
+Adding a strategy now requires:
+
+1. Implement `Strategy`.
+2. Implement its factory.
+3. Define a valid `RandomParamsGenerator` (or explicitly use
+   `NoRandomParams`).
+4. Register one `Plugin` descriptor in `cmd/server/main.go`.
+
+No change is required in `RandomGenerator`, Backtester, Evaluator, WorkerPool,
+or Ranking. Registration is source-level and occurs at startup; this decision
+does not provide runtime loading of compiled plugins.
 
 ## Alternatives considered
 
-- **Factory function with a `switch` on a strategy-name string.** Rejected —
-  this is the anti-pattern above, just moved into a `NewStrategy(name string)`
-  function instead of inline; the coupling is identical.
-- **Reflection-based auto-discovery** (scan a package for types implementing
-  `Strategy`, register automatically). Rejected as unnecessary complexity —
-  Go has no runtime package scanning without extra tooling, and explicit
-  `Register()` calls are more debuggable (you can see exactly what's
-  registered by reading `main.go`, not by inferring it from folder
-  contents).
-- **Config-driven strategies** (YAML describing indicator + thresholds,
-  interpreted generically). Rejected for MVP — flexible, but adds a config
-  interpretation layer the 2-week scope doesn't need; every MVP strategy is
-  simple enough that a Go type is not meaningfully more work than a config
-  schema, and a Go type gets compile-time safety the config approach
-  wouldn't.
+- **Strategy-name switch:** rejected because every strategy modifies generic
+  search code and violates the Open/Closed Principle.
+- **Reflection-based discovery:** rejected because Go does not provide useful
+  package scanning here and explicit startup composition is easier to audit.
+- **Configuration-interpreted strategies:** rejected for the MVP because it
+  adds a language and validation layer without improving the required proof.
 
 ## Consequences
 
-- **Positive:** the ch.41 scenario is implemented by `MACDStrategy`; production
-  registration costs one new file + one `RegisterPlugin()` call. The
-  cross-package architecture test drives an externally declared plugin through
-  composition, backtest, evaluation and ranking.
-- **Positive:** each strategy is independently unit-testable with a plain
-  candle slice in, signal out — no mocking required.
-- **Cost:** registration remains explicit in the composition root. A forgotten
-  call means the plugin is absent, but duplicate names, nil implementations and
-  missing factories now fail startup through `RegisterPlugin` rather than
-  silently overwriting another plugin.
+- A plugin owns its construction, random search space, and static
+  implementation version.
+- Sorted descriptor discovery plus a seeded random source makes candidate
+  generation reproducible for a fixed seed and plugin set.
+- Duplicate names and incomplete descriptors fail during registration.
+- Plugin authors must keep generated parameters within factory-valid ranges.
+- The composition root still changes by one registration line for each plugin.

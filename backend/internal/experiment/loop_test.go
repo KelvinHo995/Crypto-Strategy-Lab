@@ -93,11 +93,15 @@ func TestRunSearchLoop_StopsAtMaxCandidates(t *testing.T) {
 	repo := newMemRepo()
 	queue := experiment.NewInMemoryQueue(100)
 	pool := &fakePool{}
+	registry := strategy.NewRegistry()
+	if err := registry.RegisterPlugin(strategy.NewMAPlugin(strategy.NewMAStrategy(20, 50))); err != nil {
+		t.Fatal(err)
+	}
 
 	experiment.RunSearchLoop(context.Background(), experiment.LoopParams{
 		SearchID: "s1", Pair: "BTCUSDT", TimeFrame: "1h", From: 1, To: 2,
 		StartingCapital: 1000, DatasetPeriod: "1-2",
-		MaxCandidates: 5,
+		MaxCandidates: 5, VersionResolver: registry,
 	}, &sequentialGenerator{}, pool, repo, queue, nil)
 
 	jobs := drainAll(t, queue)
@@ -107,6 +111,9 @@ func TestRunSearchLoop_StopsAtMaxCandidates(t *testing.T) {
 	for _, j := range jobs {
 		if j.SearchID != "s1" || j.SearchTotal != 5 || j.Pair != "BTCUSDT" || j.Timeframe != "1h" || j.DatasetPeriod != "1-2" {
 			t.Fatalf("job %+v missing SearchID/SearchTotal", j)
+		}
+		if j.StrategyVersions["MA"] != strategy.MAStrategyVersion {
+			t.Fatalf("job versions = %v, want descriptor-owned MA version", j.StrategyVersions)
 		}
 	}
 }

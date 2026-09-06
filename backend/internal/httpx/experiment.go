@@ -131,7 +131,11 @@ func startSearch(registry *strategy.Registry, repo experiment.Repository, queue 
 			return
 		}
 
-		versions := experiment.DefaultStrategyVersions(candidate.Instances)
+		versions, err := registry.VersionsFor(candidate.Instances)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		candles := fixtureCandles(req.Pair, req.From, req.To)
 		if candleRepo != nil {
 			candles, err = candleRepo.Range(r.Context(), req.Pair, req.TimeFrame, req.From, req.To)

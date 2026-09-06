@@ -32,6 +32,7 @@ type LoopParams struct {
 	NoImprovementLimit int
 	FeePct             float64 // e.g. 0.001 = 10bps; defaulted by the caller if unset
 	SlippageBps        float64 // e.g. 5 = 5bps; defaulted by the caller if unset
+	VersionResolver    strategy.PluginVersionResolver
 }
 
 // RunSearchLoop generates candidates one at a time via gen, enqueueing each
@@ -114,7 +115,16 @@ generate:
 		}
 
 		id := NewJobID(time.Now())
-		versions := DefaultStrategyVersions(candidate.Instances)
+		versions := map[string]string{}
+		if params.VersionResolver != nil {
+			var err error
+			versions, err = params.VersionResolver.VersionsFor(candidate.Instances)
+			if err != nil {
+				log.Printf("search loop %s: resolve strategy versions: %v", params.SearchID, err)
+				reason = "invalid-plugin"
+				break generate
+			}
+		}
 		now := time.Now()
 		job := BacktestJob{
 			ID: id, SearchID: params.SearchID, SearchTotal: params.MaxCandidates,

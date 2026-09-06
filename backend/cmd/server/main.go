@@ -26,12 +26,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	registry := strategy.NewRegistry()
-	mustRegisterPlugin(registry, strategy.NewMAStrategy(20, 50), strategy.MAFactory)
-	mustRegisterPlugin(registry, strategy.NewRSIStrategy(14, 70.0, 30.0), strategy.RSIFactory)
-	mustRegisterPlugin(registry, strategy.NewBollingerStrategy(20, 2.0), strategy.BollingerFactory)
-	mustRegisterPlugin(registry, strategy.NewSRStrategy(20, 0.005), strategy.SRFactory)
-	mustRegisterPlugin(registry, strategy.NewSMCStrategy(10), strategy.SMCFactory)
-	mustRegisterPlugin(registry, strategy.NewMACDStrategy(12, 26, 9), strategy.MACDFactory)
+	mustRegisterPlugin(registry, strategy.NewMAPlugin(strategy.NewMAStrategy(20, 50)))
+	mustRegisterPlugin(registry, strategy.NewRSIPlugin(strategy.NewRSIStrategy(14, 70.0, 30.0)))
+	mustRegisterPlugin(registry, strategy.NewBollingerPlugin(strategy.NewBollingerStrategy(20, 2.0)))
+	mustRegisterPlugin(registry, strategy.NewSRPlugin(strategy.NewSRStrategy(20, 0.005)))
+	mustRegisterPlugin(registry, strategy.NewSMCPlugin(strategy.NewSMCStrategy(10)))
+	mustRegisterPlugin(registry, strategy.NewMACDPlugin(strategy.NewMACDStrategy(12, 26, 9)))
 
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
@@ -54,7 +54,7 @@ func main() {
 	sentimentClient := sentiment.NewClient(sentimentURL, &http.Client{Timeout: 3 * time.Second})
 	sentimentService := sentiment.NewService(sentimentClient, sentimentRepo)
 	sentimentLookup := sentiment.NewTimeLookup(sentimentRepo, sentiment.DefaultMaxAge)
-	mustRegisterPlugin(registry, strategy.NewSentimentStrategy(nil, sentimentLookup, 0.7), strategy.NewSentimentFactory(nil, sentimentLookup, 0.7))
+	mustRegisterPlugin(registry, strategy.NewSentimentPlugin(sentimentLookup, 0.7))
 	binance := market.NewBinance(nil)
 	jwtSecret := os.Getenv("JWT_SECRET")
 	authService, err := auth.NewService(auth.NewPostgresRepository(db), jwtSecret)
@@ -95,8 +95,8 @@ func envInt(name string, fallback, min, max int) int {
 	return value
 }
 
-func mustRegisterPlugin(registry *strategy.Registry, implementation strategy.Strategy, factory strategy.StrategyFactory) {
-	if err := registry.RegisterPlugin(implementation, factory); err != nil {
+func mustRegisterPlugin(registry *strategy.Registry, plugin strategy.Plugin) {
+	if err := registry.RegisterPlugin(plugin); err != nil {
 		log.Fatal(err)
 	}
 }

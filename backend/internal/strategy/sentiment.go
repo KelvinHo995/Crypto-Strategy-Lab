@@ -79,6 +79,16 @@ func NewSentimentFactory(baseFactory StrategyFactory, client SentimentClient, th
 	}
 }
 
+func NewSentimentPlugin(client SentimentClient, threshold float64) Plugin {
+	return Plugin{
+		Name:         "Sentiment",
+		Default:      NewSentimentStrategy(nil, client, threshold),
+		Factory:      NewSentimentFactory(nil, client, threshold),
+		RandomParams: NoRandomParams,
+		Version:      SentimentStrategyVersion,
+	}
+}
+
 func (s *SentimentStrategy) Name() string {
 	if s.BaseStrategy != nil {
 		return "Sentiment+" + s.BaseStrategy.Name()

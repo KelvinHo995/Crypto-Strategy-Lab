@@ -2,7 +2,9 @@ package strategy
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/KelvinHo995/crypto-strategy-lab/backend/internal/market"
 )
@@ -35,12 +37,14 @@ type StrategyFactory func(params map[string]any) Strategy
 type Registry struct {
 	strategies map[string]Strategy
 	factories  map[string]StrategyFactory
+	plugins    map[string]Plugin
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
 		strategies: make(map[string]Strategy),
 		factories:  make(map[string]StrategyFactory),
+		plugins:    make(map[string]Plugin),
 	}
 }
 
@@ -52,21 +56,26 @@ func (r *Registry) RegisterFactory(name string, f StrategyFactory) {
 	r.factories[name] = f
 }
 
-// RegisterPlugin installs the default implementation and its parameterized
-// factory as one atomic composition-root operation. New production strategies
-// should use this method: adding one then costs one implementation file and one
-// registration call, while duplicate names fail loudly instead of silently
-// replacing an existing plugin.
-func (r *Registry) RegisterPlugin(s Strategy, factory StrategyFactory) error {
-	if s == nil {
-		return fmt.Errorf("register strategy plugin: nil strategy")
-	}
-	name := s.Name()
+// RegisterPlugin atomically installs one complete source-level plugin.
+func (r *Registry) RegisterPlugin(plugin Plugin) error {
+	name := strings.TrimSpace(plugin.Name)
 	if name == "" {
 		return fmt.Errorf("register strategy plugin: empty name")
 	}
-	if factory == nil {
+	if plugin.Default == nil || isNilStrategy(plugin.Default) {
+		return fmt.Errorf("register strategy plugin %s: nil strategy", name)
+	}
+	if plugin.Default.Name() != name {
+		return fmt.Errorf("register strategy plugin %s: default strategy is named %s", name, plugin.Default.Name())
+	}
+	if plugin.Factory == nil {
 		return fmt.Errorf("register strategy plugin %s: nil factory", name)
+	}
+	if plugin.RandomParams == nil {
+		return fmt.Errorf("register strategy plugin %s: nil random parameter generator", name)
+	}
+	if strings.TrimSpace(plugin.Version) == "" {
+		return fmt.Errorf("register strategy plugin %s: empty version", name)
 	}
 	if _, exists := r.strategies[name]; exists {
 		return fmt.Errorf("register strategy plugin %s: duplicate name", name)
@@ -74,9 +83,46 @@ func (r *Registry) RegisterPlugin(s Strategy, factory StrategyFactory) error {
 	if _, exists := r.factories[name]; exists {
 		return fmt.Errorf("register strategy plugin %s: duplicate factory", name)
 	}
-	r.strategies[name] = s
-	r.factories[name] = factory
+	if _, exists := r.plugins[name]; exists {
+		return fmt.Errorf("register strategy plugin %s: duplicate metadata", name)
+	}
+	plugin.Name = name
+	plugin.Version = strings.TrimSpace(plugin.Version)
+	r.strategies[name] = plugin.Default
+	r.factories[name] = plugin.Factory
+	r.plugins[name] = plugin
 	return nil
+}
+
+func isNilStrategy(value Strategy) bool {
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
+}
+
+func (r *Registry) Plugins() []Plugin {
+	plugins := make([]Plugin, 0, len(r.plugins))
+	for _, plugin := range r.plugins {
+		plugins = append(plugins, plugin)
+	}
+	sort.Slice(plugins, func(i, j int) bool { return plugins[i].Name < plugins[j].Name })
+	return plugins
+}
+
+func (r *Registry) VersionsFor(instances []StrategyInstance) (map[string]string, error) {
+	versions := make(map[string]string, len(instances))
+	for _, instance := range instances {
+		plugin, ok := r.plugins[instance.Type]
+		if !ok {
+			return nil, fmt.Errorf("strategy plugin metadata for %s is not registered", instance.Type)
+		}
+		versions[instance.Type] = plugin.Version
+	}
+	return versions, nil
 }
 
 func (r *Registry) Get(name string) (Strategy, bool) {
