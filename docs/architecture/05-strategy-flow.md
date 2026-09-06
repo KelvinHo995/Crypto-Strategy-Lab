@@ -26,23 +26,25 @@ isolation and swappable without touching anything downstream.
 ## Registration (plugin boundary)
 
 ```go
-type Registry struct { strategies map[string]Strategy }
-func (r *Registry) Register(s Strategy)
+type Registry struct { strategies map[string]Strategy; factories map[string]StrategyFactory }
+func (r *Registry) RegisterPlugin(s Strategy, factory StrategyFactory) error
 ```
 
-Adding a new strategy means: implement `Strategy`, call `Register`. Nothing
+Adding a new production strategy means: implement `Strategy`, call
+`RegisterPlugin` once. It installs the default implementation and parameterized
+factory together, and rejects duplicate names. Nothing
 in `internal/experiment`, `cmd/server`, or the frontend should need to change
 — no `if strategy == "MA" { ... } else if strategy == "RSI" { ... }` dispatch
 anywhere (spec ch.12, explicitly listed as the anti-pattern to avoid in
 ch.44 "Hard-coded Strategy"). This is the concrete test spec ch.41 proposes:
 "Hệ thống hiện có MA, RSI, Bollinger, SR. Hãy bổ sung MACD" should cost one
-new file + one `Register` call.
+new file + one `RegisterPlugin` call.
 
 ```
 strategies/
     MAStrategy       ─┐
     RSIStrategy        │
-    BollingerStrategy  ├─▶ register(...) ─▶ Registry ─▶ (looked up by name, never by type-switch)
+    BollingerStrategy  ├─▶ RegisterPlugin(...) ─▶ Registry ─▶ (looked up by name, never by type-switch)
     SRStrategy         │
     SMCStrategy        ┘  (intentionally minimal — swing high/low structure break,
     MACDStrategy  ← new,     not full SMC theory; spec ch.11 only requires proving
@@ -50,10 +52,15 @@ strategies/
     registration call
 ```
 
-MVP ships 5 single strategies: MA, RSI, Bollinger, Support/Resistance, and
-SMC. SMC is deliberately scoped down — same registration mechanism as the
-other four, just a simpler rule set — so it counts as a 5th registered
-strategy without becoming its own time sink.
+The current server registers 7 single strategies: MA, RSI, Bollinger,
+Support/Resistance, SMC, MACD and Sentiment. MACD is the concrete architecture
+proof requested by the deck. `TestStrategyPluginRunsThroughExperimentPipeline`
+also declares a plugin outside the strategy package and passes it through
+composition → backtest → evaluation → ranking without changing those modules.
+The frontend treats `GET /strategies` as authoritative: unknown names receive a
+generic default-parameter form, so a new backend plugin appears in the picker
+without adding hardcoded frontend metadata. Rich labels/parameter hints remain
+an optional presentation enhancement, not a requirement for execution.
 
 ## Composition (composite strategies)
 
@@ -62,10 +69,9 @@ combination policy:
 
 ```go
 type CandidateStrategy struct {
-    ID         string
-    Strategies []string          // e.g. ["MA20", "RSI14", "SupportResistance"]
-    Params     map[string]any
-    Policy     string            // "majority" | "weighted"
+    ID        string
+    Instances []StrategyInstance // each has its own type, params and weight
+    Policy    string             // "majority" | "weighted"
 }
 ```
 

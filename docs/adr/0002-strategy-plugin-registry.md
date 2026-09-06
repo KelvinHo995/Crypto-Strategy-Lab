@@ -23,9 +23,9 @@ time, which is exactly the coupling the grading wants to see avoided.
 
 `Strategy` is an interface (`Name() string`, `Analyze([]Candle) Signal`).
 Each strategy is its own type implementing it. A `Registry` holds strategies
-by name; adding one is `registry.Register(NewMACDStrategy())` — one call, no
-edits to the registry's own code or to anything that consumes strategies by
-name.
+by name. `RegisterPlugin(default, factory)` installs both lookup forms in one
+validated operation; adding MACD is one composition-root call, with no edits to
+Backtester, Evaluator, Leaderboard or frontend core.
 
 ```go
 type Strategy interface {
@@ -33,7 +33,7 @@ type Strategy interface {
     Analyze(candles []market.Candle) Signal
 }
 type Registry struct{ strategies map[string]Strategy }
-func (r *Registry) Register(s Strategy) { r.strategies[s.Name()] = s }
+func (r *Registry) RegisterPlugin(s Strategy, factory StrategyFactory) error
 ```
 
 Every implementation also declares
@@ -61,13 +61,13 @@ check is explicitly "Có dùng").
 
 ## Consequences
 
-- **Positive:** the ch.41 scenario (add MACD) costs exactly one new file +
-  one `Register()` call, verifiably — this is a claim the team can
-  demonstrate live, not just assert.
+- **Positive:** the ch.41 scenario is implemented by `MACDStrategy`; production
+  registration costs one new file + one `RegisterPlugin()` call. The
+  cross-package architecture test drives an externally declared plugin through
+  composition, backtest, evaluation and ranking.
 - **Positive:** each strategy is independently unit-testable with a plain
   candle slice in, signal out — no mocking required.
-- **Cost:** the `Registry` itself is a single point every strategy must be
-  registered through; if registration is forgotten, the strategy silently
-  doesn't exist rather than failing loudly. Mitigation: `cmd/server`'s
-  composition root asserts the expected strategy count/names at
-  startup (Implemented).
+- **Cost:** registration remains explicit in the composition root. A forgotten
+  call means the plugin is absent, but duplicate names, nil implementations and
+  missing factories now fail startup through `RegisterPlugin` rather than
+  silently overwriting another plugin.

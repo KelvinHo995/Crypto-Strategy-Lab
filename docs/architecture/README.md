@@ -26,3 +26,5 @@ link to the contract instead.
 
 The implementation delta and its verified project impact are recorded in
 [backend-implementation-review.md](../backend-implementation-review.md).
+The repeatable 1-worker versus 3-worker measurement and baseline results are in
+[performance-evidence.md](../performance-evidence.md).

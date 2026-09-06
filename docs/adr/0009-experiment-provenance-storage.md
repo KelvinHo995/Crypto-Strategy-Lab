@@ -41,6 +41,8 @@ type Result struct {
 `DatasetPeriod` is only the historical `from-to` range and therefore cannot
 identify a symbol or interval by itself. Legacy rows keep empty pair/timeframe
 values so missing provenance is visible instead of being replaced by a guess.
+Migration `0014` recovers coordinates only from retained durable job payloads
+or persisted trade rows; an unknowable legacy timeframe remains empty.
 
 `StrategyVersions["Sentiment"]` identifies the Go strategy implementation;
 it is not used as a proxy for the Python model. During a backtest, each
@@ -54,6 +56,10 @@ This is plain CRUD — provenance is captured once, at the moment the result
 is written, not reconstructed later by correlating logs or replaying events
 (see [ADR-0010](0010-no-cqrs-event-sourcing.md) for why event replay isn't
 used for this).
+
+Trade rows are also part of the reproducibility record. They are written before
+the aggregate result becomes `COMPLETED`; a failed trade write produces a
+`FAILED` result rather than a successful but irreproducible leaderboard row.
 
 ## Alternatives considered
 

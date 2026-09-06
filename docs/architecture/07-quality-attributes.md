@@ -8,10 +8,12 @@ decision made in response, and where that decision is documented in depth.
 
 **Pressure:** add `MACDStrategy` without touching 20 other modules
 (spec ch.32.1).
-**Decision:** `Strategy` interface + `Registry.Register()`
+**Decision:** `Strategy` interface + atomic `Registry.RegisterPlugin()`
 ([05-strategy-flow.md](05-strategy-flow.md), [ADR-0002](../adr/0002-strategy-plugin-registry.md)).
 **Test:** spec ch.41 scenario — count how many files a new strategy touches.
-Should be 1 (new strategy file) + 1 registration call.
+Should be 1 (new strategy file) + 1 registration call. MACD now provides the
+real change proof; the cross-package experiment test proves the plugin reaches
+composition, Backtester, Evaluator and Rank without modifying them.
 
 ## Scalability
 
@@ -53,6 +55,14 @@ against a range with genuinely no data just exhausts retries and lands on
 **Pressure:** 1,000 strategies to backtest — sequential loop vs. concurrent
 workers (spec ch.32.5).
 **Decision:** same as Scalability above — Job Queue + Workers.
+**Measurement:** `BACKTEST_WORKERS` is configurable from 1–64;
+`go run ./cmd/perf -candidates 1000 -candles 2000 -workers 1,3 -repeat 3` runs
+the same in-memory historical workload at both concurrency levels, discards a
+warm-up, and prints per-run plus median duration/jobs per second/speedup.
+Production `GET /metrics` complements that controlled proof
+with live queue wait, execution time, throughput and queue state.
+The recorded three-run baseline and its limits are in
+[`performance-evidence.md`](../performance-evidence.md).
 
 ## Replaceability (spec ch.32.6 calls this "Maintainability" — same test)
 
@@ -75,10 +85,17 @@ implementation itself need to change. Should be zero.
 
 **Pressure:** is the loop running? how many candidates tried? how many
 job failures? who's #1 right now? (spec ch.32.7)
-**Status:** implemented for the MVP one-candidate request: workers persist
+**Status:** implemented for single and continuous searches: workers persist
 `PENDING → RUNNING → COMPLETED/FAILED`; the WebSocket hub broadcasts
-`SEARCH_PROGRESS` and a ranked Top-10 `LEADERBOARD_UPDATE`. A dedicated
-queue-depth/latency metrics surface remains future work.
+`SEARCH_PROGRESS` and a ranked Top-10 `LEADERBOARD_UPDATE`. Authenticated
+`GET /metrics` exposes queue depth/running/failed rows, process-lifetime
+completed/failed counters, throughput, average and p50/p95 queue wait/backtest
+execution time. `GET /ready` checks PostgreSQL separately from liveness, and
+each HTTP response carries an `X-Request-ID` that is included in a duration log.
+`GET /metrics/prometheus` exports the worker/queue/latency signals using the
+Prometheus exposition format, and normal worker transitions are logged with
+`search_id`, `job_id`, `candidate_id` and status. Deploying a Prometheus server,
+distributed tracing and alert routing remain operational post-MVP work.
 
 ## Reproducibility
 
@@ -174,7 +191,7 @@ cost, not just its benefit, without re-reading it first.
 | Anti-pattern | Where it would show up | Why the current package boundaries prevent it |
 |---|---|---|
 | God Service | one `TradingService` doing Binance calls + RSI math + crawling + ML + backtest + ranking + DB + WS | `internal/market` / `internal/strategy` / `internal/experiment` are separate packages with one owner each |
-| Hard-coded strategy dispatch | `if strategy == MA ... else if ...` | `Registry.Register()` — see [05-strategy-flow.md](05-strategy-flow.md) |
+| Hard-coded strategy dispatch | `if strategy == MA ... else if ...` | `Registry.RegisterPlugin()` — see [05-strategy-flow.md](05-strategy-flow.md) |
 | Business logic in frontend | React computing backtest/ranking itself | Frontend only renders `Result`/`Candle`/WS payloads it receives, never derives them |
 | Strategy → Database directly | `RSIStrategy` calling Postgres directly | `Strategy.Analyze(candles) Signal` — no I/O in the interface at all |
 | Crawler tightly coupled to ML model | `Crawler → BERT model` inline | `sentiment-service` is a separate deployable behind a REST boundary — [ADR-0006](../adr/0006-separate-sentiment-service.md) |

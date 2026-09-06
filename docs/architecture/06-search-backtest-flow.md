@@ -140,7 +140,7 @@ an indexed, cached Top-100 snapshot; incomplete jobs remain visible below
 completed results.
 
 `POST /search/loop` returns HTTP 202 with
-`{searchId,status:"STARTED",maxCandidates}` after validating that at least 21
+`{searchId,status:"STARTED",maxCandidates}` after validating that at least 202
 candles exist. It does not wait for generated jobs. Today there is no standalone
 search-run resource: `STARTED` is an acknowledgement, not a queryable lifecycle
 record. Per-candidate states remain `PENDING|RUNNING|COMPLETED|FAILED`.
@@ -149,10 +149,12 @@ record. Per-candidate states remain `PENDING|RUNNING|COMPLETED|FAILED`.
 Ordinary per-candidate ticks carry `{tested,total,searchId}`; `tested` counts
 terminal candidate rows and `total` is the requested maximum. The terminal
 early-stop broadcast additionally carries `{status,reason}` (`STOPPED` or
-`FAILED`). The frontend never advances progress locally — it treats
-`tested == total` as `COMPLETED`, reports REST failures as `FAILED`, and now
-renders `STOPPED`/`FAILED` directly from the additive fields the backend
-publishes.
+`FAILED`). The frontend never advances progress locally. A terminal WebSocket
+signal or `tested == total` triggers a REST read of the persisted candidate;
+the UI uses that row's actual `COMPLETED|FAILED` status instead of deriving
+success from a counter. A short REST poll is only a recovery path for a missed
+WebSocket frame, not synthetic progress. `STOPPED`/search-level `FAILED` remain
+direct additive fields from the backend.
 
 ## Analysis window sizing (`LookbackAware`)
 
@@ -212,3 +214,8 @@ Market provenance is stored in the same snapshot: `Pair` identifies the
 symbol, `Timeframe` the candle interval, and `DatasetPeriod` the exact
 historical range. The backtest chart uses these persisted values when loading
 candles; it does not infer the pair from trades or assume `4h`.
+
+The worker persists `experiment_trades` before changing the result to
+`COMPLETED`. Failure to write those rows changes the result to `FAILED` and is
+broadcast as such; chart/table detail is therefore part of the completion
+contract rather than a best-effort side effect.

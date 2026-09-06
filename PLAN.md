@@ -11,14 +11,14 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 - ✅ Repo scaffold xong (backend/frontend/sentiment-service), README từng phần đã có
 - ✅ `Candle` struct chốt xong, có thêm field `IsClosed` (candle đang hình thành vs đã đóng)
 - ✅ Binance live stream đã merge và mở hai combined WebSocket dùng chung: kline cho 8 coin × 4 timeframe và aggregate trades cho 8 coin. `/ws` lọc theo subscription của từng browser, có reconnect/backoff.
-- ✅ sentiment-service FastAPI chạy được; `/analyze` dùng model lexicon xác định `crypto-lexicon/v1`, validate input, trả score/model version/timestamp thật và có test. FinBERT vẫn là nâng cấp ngoài MVP.
+- ✅ sentiment-service FastAPI chạy được; `/analyze` dùng model lexicon xác định `crypto-lexicon/v2`, validate input, trả score/model version/timestamp thật và có test. News ingestion phân tích cả headline lẫn RSS summary để tránh bỏ mất market-moving verb. FinBERT vẫn là nâng cấp ngoài MVP.
 - ✅ **News Collector** — `internal/news.NewsProvider` có implementation RSS thật và `cmd/news-ingest` là trigger thủ công. Pipeline chuẩn hóa rồi upsert `news_items` trước khi gọi sentiment-service; kết quả inference được lưu riêng trong `sentiment_results`. Stable ID, partial-feed failure và skip sentiment đã có test; scheduler/API đọc news nằm ngoài MVP.
 - ✅ `internal/experiment`: Backtester + Evaluator, SL/TP, gap fill, fee, slippage, tránh lookahead bias và same-candle re-entry đã có test; `go vet`/`go test ./...` sạch. `NewJobID` nay ghép UUID sau timestamp (`exp-<unixnano>-<uuid>`) nên không còn phụ thuộc độ phân giải clock của OS — an toàn cả trong vòng lặp sinh candidate liên tục lẫn giữa nhiều backend instance dùng chung `PostgresQueue`. Đã sửa lỗi thật: `Config.Window` từng cố định (20), nhỏ hơn nhu cầu thật của MA mặc định (50) và của `RandomGenerator` (tới 200) — MA lặng lẽ trả `Hold` mãi mãi, `COMPLETED` với 0 trade trông như kết quả hợp lệ. Nay mỗi strategy tự báo `MinLookback()`, worker tính window đúng theo từng candidate đã resolve — verified sống: loop với `maLongWindow` tới 192 đều có trade thật (195–3200), không còn 0. Xem ADR-0003, ADR-0009, [06-search-backtest-flow.md](docs/architecture/06-search-backtest-flow.md).
-- ✅ `internal/httpx`: router 2-mux public/protected; `POST /search/start`, `GET /experiments`, `GET /experiments/{id}`, `GET /strategies`, `/health` chạy thật. Request search giới hạn 1 MiB, reject field lạ/trailing JSON và trả `202 STARTED`. Auth dùng JWT cookie thật; `/ws` là server-push channel có xác thực cho candle, tiến độ search và leaderboard.
+- ✅ `internal/httpx`: router 2-mux public/protected; search/experiment/strategy APIs chạy thật. `/health` là liveness, `/ready` kiểm tra PostgreSQL, `/metrics` có queue depth/running/failed, throughput và queue/execution latency; response có `X-Request-ID` đồng nhất với request-duration log. Auth dùng JWT cookie thật; `/ws` là server-push channel có xác thực cho candle, tiến độ search và leaderboard.
 - ✅ `Binance.FetchHistoricalCandles` REST thật: pagination 1000 klines, normalize `Candle`, chỉ nhận candle đã đóng; live kline WebSocket có reconnect/backoff và phát `CANDLE_UPDATE`.
-- ✅ Postgres repositories cho experiments/users/candles/sentiment và `cmd/backfill` đã hoàn thiện; default 2 năm/BTC, hỗ trợ `BACKFILL_SYMBOLS` + `BACKFILL_DAYS`, pace Binance request, upsert batch 500 và idempotent theo `(symbol,timeframe,open_time)`. Search production đọc range qua bounded cache. Migration `0003` chuẩn hóa JSON legacy, `0004` thêm `updated_at`, `0005` index leaderboard, `0006` tạo durable job queue và `0007` chuẩn hóa metadata của search.
-- ✅ Strategy thật (MA/RSI/BB/SR/SMC), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện; package strategy đạt 82.5% statement coverage trong lượt kiểm tra 2026-08-30. Đã sửa lỗi model dữ liệu thật: `CandidateStrategy` cũ dùng `Strategies []string` + 1 `Params map` dùng chung cho mọi strategy, nên không thể kết hợp 2 instance cùng type (VD MA(20) + MA(50)) và weighted policy luôn tự tính lại equal-weight bất kể client gửi gì. Nay `CandidateStrategy.Instances []StrategyInstance` — mỗi instance tự có `type/params/weight` riêng; `resolveCombinationPolicy` dùng đúng weight client gửi (fallback equal nếu không set). Migration `0008` đổi cột `strategies`+`params` → 1 cột `instances` JSON. `/search/start` nhận `{instances,policy}` thay `{strategies}`. Frontend Composite Strategy Builder (weight slider, per-strategy param, policy toggle) nay gửi thật thay vì bị bỏ qua — verified sống qua Supabase: 2 instance MA khác param + weight 0.9/0.1 lưu đúng, tách biệt, backtest thật.
-- ✅ Queue/Worker pool dùng durable PostgreSQL queue (3 workers), claim bằng `SKIP LOCKED`, retry/backoff, lease heartbeat và reclaim sau crash. `/search/start` và `/search/loop` đều ghi `PENDING + job` qua `EnqueuePending` trong một transaction — không còn crash window giữa hai lần ghi riêng biệt. Job chỉ lưu dataset reference/config, worker đọc candle qua bounded cache. Strategy/observer panic được cô lập để không làm chết worker.
+- ✅ Postgres repositories cho experiments/users/candles/sentiment và `cmd/backfill` đã hoàn thiện; default 2 năm/BTC, hỗ trợ `BACKFILL_SYMBOLS` + `BACKFILL_DAYS`, pace Binance request, upsert batch 500 và idempotent theo `(symbol,timeframe,open_time)`. Search production đọc range qua bounded cache. Chuỗi migration hiện chạy idempotent từ `0001` đến `0014`: durable queue/search metadata, strategy instances, article metadata, trade detail, normalized news, sentiment-model provenance, pair/timeframe provenance và conservative legacy backfill.
+- ✅ Strategy thật (MA/RSI/BB/SR/SMC/MACD/Sentiment), `Registry.Get/List`, `CombinationPolicy`, `StrategyGenerator` — đã hoàn thiện. `RegisterPlugin(default,factory)` đăng ký atomically và reject duplicate; MACD + cross-package architecture test chứng minh plugin mới chạy xuyên composition→backtest→evaluate→rank mà không sửa core consumers. `CandidateStrategy.Instances []StrategyInstance` cho mỗi instance tự có `type/params/weight`; `resolveCombinationPolicy` dùng đúng weight client gửi (fallback equal nếu không set). Migration `0008` lưu instances JSON. Frontend Composite Strategy Builder gửi contract này thật — verified sống qua Supabase với 2 instance MA khác param/weight.
+- ✅ Queue/Worker pool dùng durable PostgreSQL queue (`BACKTEST_WORKERS`, mặc định 3, giới hạn 1–64), claim bằng `SKIP LOCKED`, retry/backoff, lease heartbeat và reclaim sau crash. `cmd/perf` đo cùng workload với 1/3 workers; runtime metrics đo throughput, queue wait, execution time và failure count mà không đổi backtest/search semantics. `/search/start` và `/search/loop` ghi `PENDING + job` atomically; worker đọc candle qua bounded cache và cô lập panic.
 - ⚠️ `POST /search/loop` (ADR-0011) đã có `RandomGenerator`, nhận max-candidates / max-duration / no-improvement, và job ID nay an toàn (UUID). Backend phát terminal `SEARCH_PROGRESS{searchId,status:STOPPED|FAILED,reason}` ngay khi loop dừng sớm (max-duration/no-improvement/cancel/enqueue-failed), nên progress không còn treo dưới `total` vô thời hạn — verified sống qua Supabase thật. Còn tồn hai giới hạn đã biết, chấp nhận được ở quy mô hiện tại: PostgreSQL queue không backpressure nên no-improvement có thể overshoot nhiều hơn "vài candidate" như comment cũ giả định; dedup retry tối đa 10 lần rồi vẫn có thể nhận duplicate. User-cancel vẫn chưa có endpoint (3 điều kiện còn lại đã đảm bảo dừng).
 - ✅ Frontend Discovery đã gọi thật `POST /search/loop`, gửi đủ ba giới hạn, bỏ timer/progress giả và dùng `SEARCH_PROGRESS` + `LEADERBOARD_UPDATE` trong LIVE mode. UI hỗ trợ `COMPLETED|STOPPED|FAILED`; backend nay phát đủ `searchId/status/reason` cho `STOPPED/FAILED` cấp search-run, `COMPLETED` vẫn suy ra từ `tested == total`. Auth, catalog 8 coin, candles, aggregate trades, strategy list, experiments và sentiment analyze vẫn nối API thật; phần news aggregate trên frontend vẫn có DEMO fallback.
 - ✅ **Auth (users/session)** — bcrypt, Postgres user repository, JWT HS256 1h, httpOnly SameSite=Lax cookie, protected-route middleware và logout cookie clearing đã hoàn thiện; `JWT_SECRET` tối thiểu 16 ký tự là biến môi trường bắt buộc.
@@ -48,7 +48,7 @@ Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 | 7 | Sentiment API hoàn chỉnh + test | Nhảy sang hỗ trợ Người 3: Job Queue/Worker pool | ✅ Job Queue/Worker pool (cùng Người 2) | UI search progress / observability panel |
 | 8–9 | **Buffer chung — fix bug tích hợp toàn hệ thống** | | | |
 | 10 | ✅ Go sentiment REST client + lỗi service-down rõ ràng | ✅ SentimentStrategy fallback về base strategy khi service lỗi | ✅ Experiment snapshot `strategyVersions`; sentiment client trả model name/version thật | News panel UI + gắn Sentiment vào chart/leaderboard |
-| 11 | Test failure case: News/Sentiment down | Đo throughput khi tăng worker 1→3 (cùng Người 3) | ✅ Worker count là scaling knob (mặc định 3); còn benchmark với dataset lịch sử thật sau khi Market Data hoàn tất | Đảm bảo FE không sập khi News down |
+| 11 | Test failure case: News/Sentiment down | ✅ Đo throughput 1→3 bằng `cmd/perf` | ✅ Worker count là env scaling knob; `/metrics` đo production queue/runtime | Đảm bảo FE không sập khi News down |
 | 12 | **Architecture Proof cả nhóm** — mỗi người test domain mình (Extensibility / Replaceability / Scalability & Failure) | | | |
 | 13 | Viết ADR (5–6 cái quan trọng), chuẩn bị data demo | | | |
 | 14 | Rehearsal demo, chuẩn bị trả lời checklist vấn đáp | | | |
@@ -95,7 +95,7 @@ type Strategy interface {
 type StrategyRegistry struct {
     strategies map[string]Strategy
 }
-func (r *StrategyRegistry) Register(s Strategy) { r.strategies[s.Name()] = s }
+func (r *StrategyRegistry) RegisterPlugin(s Strategy, f StrategyFactory) error
 
 type StrategyGenerator interface {
     Generate() CandidateStrategy
@@ -144,7 +144,7 @@ Response: {
   "newsId": "8821",
   "sentiment": "NEGATIVE",
   "score": 0.91,
-  "model": { "name": "crypto-lexicon", "version": "v1" },
+  "model": { "name": "crypto-lexicon", "version": "v2" },
   "createdAt": 1723000000
 }
 ```
@@ -173,7 +173,7 @@ Session: JWT ký bằng secret server-side (HS256), claims `{sub: userID, iat,
 exp}`, `exp = iat + 1h` — không phải session token tra DB (lý do xem
 ADR-0007). Gửi về client qua httpOnly cookie khi login; browser tự gửi lại ở
 mọi request kể cả lúc WebSocket handshake. Middleware chỉ verify chữ ký +
-`exp`, không query DB. Toàn bộ API — trừ `/health`, `POST /auth/register`,
+`exp`, không query DB. Toàn bộ API — trừ `/health`, `/ready`, `POST /auth/register`,
 `POST /auth/login` — yêu cầu JWT hợp lệ, chưa hết hạn. Không có danh sách
 route "public vs private" riêng — 1 middleware áp dụng đều, để bớt chỗ dễ
 sai. Logout chỉ xoá cookie phía client — token cũ về lý thuyết vẫn hợp lệ
@@ -212,18 +212,21 @@ unit test/fallback composition. Worker pool và Backtester vẫn phụ thuộc i
 | POST | `/search/loop` | Bắt đầu Random Search 2–200 candidate với max-duration/no-improvement optional; trả HTTP 202 ngay |
 | GET | `/experiments` | Leaderboard — đọc từ bảng `experiments`, sort theo return |
 | GET | `/experiments/{id}` | Chi tiết 1 kết quả (click Top #1), gồm provenance |
-| GET | `/strategies` | List strategy đã đăng ký, cho strategy picker UI |
+| GET | `/strategies` | List authoritative plugin names; UI vẫn hiện plugin chưa có metadata local bằng default factory params |
 | GET | `/markets` | Catalog 8 coin và các timeframe được backend hỗ trợ |
 | GET | `/candles` | Nến lịch sử đã backfill từ Postgres |
 | GET | `/ws` | WebSocket — CANDLE_UPDATE, TRADE_TICK, SEARCH_PROGRESS, LEADERBOARD_UPDATE; client gửi lệnh subscribe/unsubscribe |
 | GET | `/health` | Sanity check, hữu ích cho docker-compose/demo |
+| GET | `/ready` | Readiness check PostgreSQL, trả 503 nếu dependency chưa sẵn sàng |
+| GET | `/metrics` | JSON queue depth/running/failed, throughput, queue wait và execution time |
+| GET | `/metrics/prometheus` | Prometheus exposition cho worker/queue/failure/latency gauges |
 | POST | `/auth/register` | `{username, password}` → tạo user, hash password bằng bcrypt |
 | POST | `/auth/login` | `{username, password}` → set session cookie |
 | POST | `/auth/logout` | Xoá session hiện tại |
 
 **Tất cả endpoint khác ở trên** (`/search/start`, `/search/loop`, `/experiments`,
-`/experiments/{id}`, `/strategies`, `/ws`) **yêu cầu session hợp lệ** — trừ
-`/health` và 2 endpoint `/auth/register` + `/auth/login`.
+`/experiments/{id}`, `/strategies`, `/metrics`, `/ws`) **yêu cầu session hợp lệ** — trừ
+`/health`, `/ready` và 2 endpoint `/auth/register` + `/auth/login`.
 
 ### sentiment-service (Python)
 
