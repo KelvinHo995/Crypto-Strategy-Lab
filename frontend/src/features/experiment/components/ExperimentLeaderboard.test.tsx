@@ -3,7 +3,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ExperimentResult } from '../../../types/backtest';
-import { calculateExperimentScore, ExperimentLeaderboard, isCompetitiveExperiment } from './ExperimentLeaderboard';
+import { ExperimentLeaderboard } from './ExperimentLeaderboard';
+import { calculateExperimentScore, isCompetitiveExperiment } from '../services/experimentRanking';
 
 const result = (overrides: Partial<ExperimentResult>): ExperimentResult => ({
   id: 'experiment', candidateId: 'candidate', pair: 'BTCUSDT', timeframe: '5m',

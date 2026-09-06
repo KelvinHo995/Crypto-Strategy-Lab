@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ExperimentResult } from '../../../types/backtest';
+import { calculateExperimentScore, isCompetitiveExperiment } from '../services/experimentRanking';
 
 interface ExperimentLeaderboardProps {
   experiments: ExperimentResult[];
@@ -8,14 +9,6 @@ interface ExperimentLeaderboardProps {
 }
 
 type SortCriterion = 'return' | 'winRate' | 'mdd' | 'tradeCount' | 'overallScore';
-
-export function isCompetitiveExperiment(exp: ExperimentResult): boolean {
-  return exp.status === 'COMPLETED' && exp.tradeCount > 0 && exp.instances.length > 0 && Boolean(exp.pair && exp.timeframe);
-}
-
-export function calculateExperimentScore(exp: ExperimentResult): number {
-  return 0.5 * exp.return + 0.3 * exp.winRate - 0.2 * exp.mdd;
-}
 
 function eligibilityLabel(exp: ExperimentResult): string {
   if (isCompetitiveExperiment(exp)) return 'RANKED';
