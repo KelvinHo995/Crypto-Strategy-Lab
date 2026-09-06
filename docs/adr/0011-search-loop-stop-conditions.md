@@ -7,10 +7,16 @@
 > search-run state and atomic loop enqueue — both flagged open earlier
 > today — are now shipped and live-verified against Supabase (see below).
 > Job ID generation, also flagged, is fixed (UUID suffix, not just a
-> timestamp). Still genuinely open: the production `PostgreSQL` queue has
-> no backpressure, so no-improvement can overshoot by more than a few
-> candidates; candidate dedup gives up after 10 retries and may still
-> enqueue a duplicate. Both are documented below, not silently dropped.
+> timestamp).
+>
+> **Update (2026-09-06):** the production `PostgreSQL` queue still has no
+> backpressure of its own, but `RunSearchLoop` now caps in-flight
+> candidates (enqueued minus completed) at `NoImprovementLimit` itself, so
+> the generator can no longer race ahead of completions and enqueue the
+> whole batch before the limit ever gets a chance to fire. No-improvement
+> overshoot is now bounded to exactly `NoImprovementLimit`, not unbounded.
+> Still genuinely open: candidate dedup gives up after 10 retries and may
+> still enqueue a duplicate — documented below, not silently dropped.
 
 ## Context
 
@@ -50,18 +56,33 @@ candidates via `strategy.RandomGenerator` and enqueues them one at a time
   always the backstop even if nothing else is set.
 - **max wall-clock time** — optional (`MaxDurationSeconds`, validated
   60–3600 if set).
-- **no-improvement-in-N** — optional (`NoImprovementLimit`). Currently tracked
+- **no-improvement-in-N** — optional (`NoImprovementLimit`). Tracked
   event-driven via a new `WorkerPool.AddObserver` (multiple observers, not
   just the one `SetObserver` hook the WebSocket hub already used) rather
   than polling the database before every candidate — the loop's observer
   gets pushed a notification the instant one of its own candidates
   completes, updates an in-memory best-score/steps-since-improvement pair,
-  and the generator checks that before producing the next candidate. Because
-  the production PostgreSQL queue has no bounded in-process buffer, generation
-  can enqueue every requested candidate before a completion arrives. The
-  observer is also removed as soon as generation ends. Therefore this input is
-  not yet a reliable production stop condition; a bounded in-flight window or
-  persisted search coordinator is required.
+  and the generator checks that before producing the next candidate. The
+  production PostgreSQL queue has no bounded in-process buffer of its own,
+  so without further guarding, a fast generator could enqueue every
+  requested candidate before enough completions arrive for the limit to
+  ever trip. `RunSearchLoop` guards against this directly: it caps
+  in-flight candidates (enqueued minus completed) at `NoImprovementLimit`,
+  pausing generation until at least one resolves once that many are
+  outstanding. This bounds the overshoot to exactly `NoImprovementLimit`
+  candidates, not unbounded, without serializing generation to
+  one-at-a-time — up to `NoImprovementLimit` candidates can still be
+  running across the worker pool in parallel at once. The observer is
+  removed as soon as generation ends.
+
+  One tradeoff worth naming: if `NoImprovementLimit` is set smaller than
+  the number of available workers, this cap means fewer workers stay busy
+  than are configured (e.g. `NoImprovementLimit: 2` with 3 workers means
+  at most 2 candidates are ever in flight). This is accepted rather than
+  papered over with a worker-count floor — flooring the cap would let the
+  overshoot exceed the configured `NoImprovementLimit` again, silently
+  breaking the same guarantee this fix exists to provide. An idle worker
+  is a disclosed performance cost; an inaccurate stop condition is not.
 - **user-cancel** — still deferred. Nothing on the frontend calls a cancel
   endpoint today. Max-candidates still guarantees finite generation; the other
   two inputs must not be described as completed until their runtime semantics

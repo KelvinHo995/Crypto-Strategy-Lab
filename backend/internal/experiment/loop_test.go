@@ -211,6 +211,33 @@ func TestRunSearchLoop_StopsAtNoImprovementLimit(t *testing.T) {
 	}
 }
 
+// Proves the generator paces itself against NoImprovementLimit rather than
+// relying on the queue to provide backpressure — TestRunSearchLoop_StopsAtNoImprovementLimit
+// above uses a buffer of 1, which incidentally forces pacing on its own and
+// would pass even without this fix. Here the buffer is enormous (mirroring
+// the production Postgres queue, which has no bound at all), and nothing
+// ever completes, so a correct implementation must stop generating once
+// NoImprovementLimit candidates are outstanding and simply wait, instead of
+// racing ahead to MaxCandidates.
+func TestRunSearchLoop_NoImprovementCapsInFlightCandidates(t *testing.T) {
+	repo := newMemRepo()
+	queue := experiment.NewInMemoryQueue(1_000_000)
+	pool := &fakePool{}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	experiment.RunSearchLoop(ctx, experiment.LoopParams{
+		SearchID: "s1", Pair: "BTCUSDT", StartingCapital: 1000,
+		MaxCandidates: 1000, NoImprovementLimit: 3,
+	}, &sequentialGenerator{}, pool, repo, queue, nil)
+
+	jobs := drainAll(t, queue)
+	if len(jobs) > 3 {
+		t.Fatalf("enqueued %d jobs with zero completions and NoImprovementLimit=3 — generator should cap in-flight candidates at the limit instead of racing ahead", len(jobs))
+	}
+}
+
 func TestRunSearchLoop_RespectsContextCancellation(t *testing.T) {
 	repo := newMemRepo()
 	queue := experiment.NewInMemoryQueue(1)
