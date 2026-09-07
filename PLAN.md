@@ -1,6 +1,6 @@
 # Kế hoạch Build Crypto Strategy Lab — Nhóm 4 người, 2 tuần
 
-Stack: **Go 1.22+** (backend core, `net/http` thuần — không dùng chi, xem mục 6), **React + TypeScript** (pnpm), **Python 3.11 + FastAPI** (Sentiment Service, quản lý bằng `uv`), **PostgreSQL (Supabase-hosted, dùng chung cho cả nhóm — xem ADR-0012)**
+Stack: **Go 1.22+** (backend core, `net/http` thuần — không dùng chi, xem mục 6), **React + TypeScript** (npm), **Python 3.11 + FastAPI** (Sentiment Service, quản lý bằng `uv`), **PostgreSQL (Supabase-hosted, dùng chung cho cả nhóm — xem ADR-0012)**
 
 Repo: monorepo, `backend/` · `frontend/` · `sentiment-service/` · `docs/adr/`
 
@@ -357,7 +357,7 @@ Việc biết mình *không* cần gì cũng là kiến trúc — mỗi dòng d�
 
 | Công nghệ/pattern | Quyết định | Vì sao |
 |---|---|---|
-| Web framework (chi, gin) | **Không** — `net/http` thuần (Go 1.22+ đã có path params + method routing sẵn) | Chỉ ~6 endpoint, không đáng thêm dependency; viết `internal/httpx` helper 30 dòng thay cho framework |
+| Web framework (chi, gin) | **Không** — `net/http` thuần (Go 1.22+ đã có path params + method routing sẵn) | API hiện tại vẫn đủ nhỏ cho standard-library routing và helper trong `internal/httpx`; chưa có driver cần framework |
 | Redis | **Không** | Traffic thấp, 1 instance, không cần shared cache giữa nhiều replica |
 | Kafka / message broker | **Không** — dùng in-process job queue (channel + worker pool) | Không có nhiều service cần decouple qua broker thật |
 | CQRS / Event Sourcing | **Không** — 1 bảng `experiments`, CRUD đơn giản | Write model và read model hình dạng giống hệt nhau, dữ liệu mỏng, không có áp lực đọc |

@@ -18,8 +18,8 @@ fact.
 
 ## Decision
 
-Every `Result` row (the write side of the Experiment domain) stores
-provenance inline, at write time, in the same row as the result itself:
+Every `Result` row (the write side of the Experiment domain) stores aggregate
+provenance inline at write time:
 
 ```go
 type Result struct {
@@ -27,6 +27,8 @@ type Result struct {
     CandidateID      string                   // exact CandidateStrategy spec used
     Pair             string                   // market symbol, e.g. BTCUSDT
     Timeframe        string                   // candle interval actually used
+    Instances        []StrategyInstance       // strategy types, params, weights
+    Policy           string                   // majority or weighted
     StrategyVersions map[string]string        // strategy implementation versions
     SentimentModels  []SentimentModelIdentity // model outputs actually consumed
     DatasetPeriod    string                   // exact historical window backtested

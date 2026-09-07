@@ -46,18 +46,19 @@ of network round-trips through the Supabase transaction pooler.
 ## What consumes this table
 
 The search HTTP orchestrator reads the requested candle range through
-`market.CandleRepository` and passes the normalized slice into
+`market.CandleRepository` to validate availability, then queues compact market
+coordinates rather than candle payloads. A worker reloads that range through
+the cached repository and passes the normalized slice into
 `internal/experiment`'s Backtester. The authenticated `GET /candles` endpoint
 also reads this repository to seed frontend charts. In authenticated `LIVE`
 mode, an unavailable API or missing range is a visible error; generated fixtures
 are used only after the user explicitly enters offline `DEMO` mode. Live chart
 updates do **not** go through this table — see
 [04-realtime-flow.md](04-realtime-flow.md) for the separate, unbuffered path
-live ticks take to the frontend. Indicator calculation (MA, RSI, Bollinger)
-happens in `internal/strategy` over whatever candle slice it's given,
-whether that slice came from the historical table (backtest) or the live
-WebSocket buffer (realtime chart) — the strategy code itself doesn't know or
-care which.
+live ticks take to the frontend. Backtest indicator calculation (MA, RSI,
+Bollinger, and the other registered strategies) happens in
+`internal/strategy` over the historical candle slice supplied by the worker;
+strategy code does not know how that data was acquired or persisted.
 
 The server decorates Postgres with a 128-entry, 60-second process-local LRU.
 Exact concurrent range requests share one database load. Returned slices are

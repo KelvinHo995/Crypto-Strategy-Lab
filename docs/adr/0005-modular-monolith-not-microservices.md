@@ -13,10 +13,11 @@ own deployed service (microservices) or separate packages within one process
 
 ## Decision
 
-Market Data, Strategy, and Experiment live as three packages
-(`internal/market`, `internal/strategy`, `internal/experiment`) inside one
-Go binary (`backend/`), composed in `cmd/server`. Only Sentiment is split
-into its own deployed service — see
+Market Data, News, Go-side Sentiment, Strategy, and Experiment live as focused
+packages (`internal/market`, `internal/news`, `internal/sentiment`,
+`internal/strategy`, `internal/experiment`) inside the Go backend, composed in
+`cmd/server` (with `cmd/backfill` and `cmd/news-ingest` as manual utilities).
+Only Python sentiment inference is split into its own deployed service — see
 [ADR-0006](0006-separate-sentiment-service.md) for why that one domain is
 different.
 
@@ -38,8 +39,8 @@ Go function calls, not network requests.
   during a demo) without a real scaling or team-autonomy need forcing it —
   a 4-person team sharing one repo doesn't need service-level deploy
   independence the way separate teams would.
-- **Everything in one undifferentiated package** (no `internal/market` /
-  `internal/strategy` / `internal/experiment` split at all). Rejected —
+- **Everything in one undifferentiated package** (no focused `internal/*`
+  domain packages). Rejected —
   this is the God Service anti-pattern the spec calls out (ch.44); package
   boundaries are what make ownership, testability, and the "add MACD"
   extensibility test (ch.41) meaningful even without process boundaries.

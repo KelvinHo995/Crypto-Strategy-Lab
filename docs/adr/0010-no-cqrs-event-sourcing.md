@@ -19,9 +19,10 @@ it as its own entry.
 
 ## Decision
 
-Plain CRUD: one `experiments` table, read and written through the same
-`Repository` interface. No separate write-model/read-model projection, no
-event log as the system of record.
+Plain CRUD: `experiments` is the aggregate result table, with normalized
+`experiment_trades` and durable `experiment_jobs` support tables, all accessed
+through the same experiment repository/queue boundaries. There is no separate
+write-model/read-model projection and no event log as the system of record.
 
 ## Alternatives considered
 
@@ -45,9 +46,9 @@ event log as the system of record.
 
 ## Consequences
 
-- **Positive:** simplest possible persistence model for the Experiment
-  domain — one table, one `Repository` interface, easy to explain and
-  defend at vấn đáp without needing to walk through a projection pipeline.
+- **Positive:** a small state-oriented persistence model for the Experiment
+  domain, easy to explain and defend without a CQRS projection pipeline or
+  event replay machinery.
 - **Positive:** consistent with the team's stated philosophy elsewhere
   (PLAN.md §6's "no driver forces this yet" reasoning for Redis, Kafka,
   Kubernetes) — this isn't an isolated simplicity call, it's the same

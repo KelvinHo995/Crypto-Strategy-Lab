@@ -16,9 +16,11 @@ should need to know it came from Binance specifically.
 ## Decision
 
 All Binance access (REST klines for history, WebSocket for live ticks) is
-isolated inside `internal/market`, exposed only through the normalized
-`Candle` type and adapter functions (`FetchHistoricalCandles`,
-`StreamLiveCandles`). No other package — not `internal/strategy`, not
+isolated inside `internal/market`, exposed through normalized `Candle`,
+`TradeTick`, and `LiveEvent` types plus provider/repository boundaries.
+`FetchHistoricalCandles` supplies backfill data; production realtime fan-out
+uses `StreamMarketEvents` (with `StreamLiveCandles` retained as the focused
+candle stream). No other package — not `internal/strategy`, not
 `internal/experiment`, not `cmd/server`, and definitely not the frontend —
 imports a Binance client or knows Binance's wire format.
 

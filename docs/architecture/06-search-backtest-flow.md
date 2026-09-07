@@ -26,14 +26,14 @@ Backtester
      ▼
 Evaluator
      │  Return, Win Rate, Wins/Losses count, Max Drawdown, Trade Count,
-     │  Total Profit, (Profit Factor, Sharpe)
+     │  Total Profit
      │  — deliberately a separate component from Backtester (ADR-0003):
      │    "did the strategy trade correctly" vs "was the outcome good" are
      │    different questions with different failure modes
      ▼
 experiment.Result  { SearchID, SearchTotal, CandidateID, Pair, Timeframe,
-                      DatasetPeriod,
-                      StrategyVersions (provenance), Return,
+                      DatasetPeriod, Instances, Policy,
+                      StrategyVersions, SentimentModels, Return,
                       MDD, TradeCount, Status, CreatedAt }
      ▼
 Ranking (Score = 0.50×Return + 0.30×WinRate − 0.20×MDD)
@@ -108,23 +108,21 @@ That describes the intended policy. `RunSearchLoop` now emits a terminal
 running, `FAILED` if none were ever enqueued — the moment it stops early
 (cancellation, `max-duration`, `no-improvement`, or an enqueue failure), wired
 through `Hub.SearchLoopStopped` to a `SEARCH_PROGRESS{searchId,status,reason}`
-broadcast. Live-verified against Supabase: a `noImprovementLimit:1` run
-stopped at 3/10 candidates and broadcast `STOPPED`/`no-improvement`
-immediately, while the one already-enqueued straggler still completed and
-pushed `tested` to 4 afterward — generation stopping and queued work finishing
-are correctly signaled as separate things.
+broadcast. Deterministic loop and HTTP tests verify the terminal signal,
+completion-driven no-improvement tracking, and the current in-flight cap.
+Already-enqueued work may still finish after generation stops, so generation
+stopping and queued work finishing remain separate states.
 
 Two caveats remain, both accepted rather than fixed for now:
 
 - wall-clock time measures the generator goroutine, not the complete search
   run (already-enqueued jobs can still be executing after `MaxDuration` trips);
-- the production PostgreSQL queue is durable but effectively unbounded, so the
-  generator can enqueue several candidates ahead of completion-driven
-  no-improvement state changes — the stop can overshoot `NoImprovementLimit`
-  by more than the "a few candidates" a bounded in-memory queue would have
-  capped it to. A bounded in-flight window or a persisted search coordinator
-  would tighten this further; not required at current candidate-count scale
-  (max 200).
+- the production PostgreSQL queue is durable but effectively unbounded. When
+  `NoImprovementLimit` is enabled, `RunSearchLoop` now supplies its own pacing:
+  unresolved candidates (`enqueued - completed`) cannot exceed that limit.
+  This bounds no-improvement overshoot while retaining parallelism. Runs that
+  omit this condition have no general in-flight cap, and there is still no
+  persisted search coordinator or user-cancel endpoint (max 200 candidates).
 
 Candidate dedup also still retries ten times, then may enqueue a duplicate
 rather than fail the whole run over it — an accepted tradeoff (wasted compute

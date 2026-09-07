@@ -20,16 +20,18 @@ tagged message types over one channel:
 
 ```json
 { "type": "CANDLE_UPDATE",      "payload": { /* Candle */ } }
-{ "type": "SEARCH_PROGRESS",    "payload": { "tested": 125, "total": 500 } }
-{ "type": "LEADERBOARD_UPDATED","payload": { /* ExperimentResult[] */ } }
+{ "type": "SEARCH_PROGRESS",   "payload": { "tested": 25, "total": 100 } }
+{ "type": "LEADERBOARD_UPDATE","payload": { /* ExperimentResult[] */ } }
 ```
 (full contract in `PLAN.md` §3.5)
 
 The current MVP uses the connection as the single server-push channel.
-Commands remain REST (`POST /search/start`), while candle/progress/leaderboard
-updates share this tagged WebSocket. Client-side subscription commands are a
-future optimization; clients currently filter the four configured timeframe
-streams they receive.
+Commands such as `POST /search/start` remain REST, while
+candle/trade/progress/leaderboard updates share this tagged WebSocket. Clients
+send `SUBSCRIBE_CANDLES`/`UNSUBSCRIBE_CANDLES` and
+`SUBSCRIBE_TRADES`/`UNSUBSCRIBE_TRADES`; the hub filters per client, and the
+frontend restores subscriptions after reconnect. This is an implementation
+evolution from the original broadcast-and-client-filter decision.
 
 ## Alternatives considered
 
@@ -40,10 +42,10 @@ streams they receive.
 - **Server-Sent Events (SSE).** A real contender — simpler than WebSocket
   (plain HTTP, no upgrade handshake, browser `EventSource` has built-in
   auto-reconnect). Rejected because SSE is one-directional (server→client
-  only); the frontend also needs to *send* commands (subscribe to a new
-  symbol/timeframe, `START_SEARCH`), which would need a second mechanism
-  (plain POST requests) alongside SSE — two channels instead of one for a
-  need WebSocket already covers in a single connection.
+  only); the frontend also sends market subscription commands. With SSE those
+  would need a second mechanism alongside the event stream, whereas WebSocket
+  covers subscriptions and pushes in one connection. Search-start commands
+  intentionally remain REST.
 - **Long polling.** Rejected — more manual complexity to implement
   correctly (timeout handling, immediate re-issue on response) than
   WebSocket, for no real benefit over it at this message frequency.
@@ -58,7 +60,9 @@ streams they receive.
 - **Positive:** one connection, one place to implement reconnect/backoff
   logic on the frontend — not N.
 - **Positive:** one authenticated push channel carries candle, progress and
-  leaderboard events; starting a search remains the explicit REST contract.
+  leaderboard events; per-client subscriptions prevent irrelevant market
+  events from being delivered, and starting a search remains the explicit REST
+  contract.
 - **Cost:** unlike SSE, WebSocket reconnect is not automatic — the frontend
   must hand-roll reconnect/backoff logic itself (this is separate from, but
   related to, the Binance-side reconnect logic in

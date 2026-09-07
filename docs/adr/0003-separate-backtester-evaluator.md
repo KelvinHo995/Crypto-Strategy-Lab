@@ -15,15 +15,16 @@ phải tách biệt khỏi Strategy Implementation."
 
 ## Decision
 
-`Backtester` takes a `CandidateStrategy` + historical candle range and
-produces a trade list (entry/exit price, timestamp, per-trade P/L) — it
+`Backtester` takes a strategy already constructed from a `CandidateStrategy`
+plus a historical candle range and produces a trade list (entry/exit price,
+timestamp, per-trade P/L) — it
 answers "what happened." `Evaluator` takes that trade list and produces
-metrics (Return, Win Rate, Max Drawdown, Trade Count, Profit Factor, Sharpe)
-— it answers "was that good." Backtester never computes a ranking-relevant
+metrics (Return, Win Rate, Max Drawdown, Trade Count, wins/losses, and Total
+Profit) — it answers "was that good." Backtester never computes a ranking-relevant
 score; Evaluator never simulates a trade.
 
 ```
-CandidateStrategy → Backtester → []Trade → Evaluator → Result{Return, MDD, WinRate, ...}
+CandidateStrategy → Registry/BuildFromCandidate → Strategy → Backtester → []Trade → Evaluator → Metrics
 ```
 
 ## Alternatives considered
@@ -46,8 +47,9 @@ CandidateStrategy → Backtester → []Trade → Evaluator → Result{Return, MD
 - **Positive:** Evaluator is independently testable against fixed trade
   fixtures — no need to run a real backtest to verify a Max Drawdown
   calculation is correct.
-- **Positive:** new metrics (Sharpe, Profit Factor) are additive to
-  Evaluator and never risk regressing Backtester's trade-simulation logic.
+- **Positive:** future metrics such as Sharpe or Profit Factor are additive to
+  Evaluator and need not change Backtester's trade-simulation logic. They are
+  not implemented in the current `Metrics` contract.
 - **Cost:** one more interface boundary and one more data shape (`[]Trade`)
   to keep stable between the two components — documented alongside the other
   cross-component contracts in `docs/contracts.md`.

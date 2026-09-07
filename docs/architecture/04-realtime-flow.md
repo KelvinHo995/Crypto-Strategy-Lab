@@ -62,12 +62,13 @@ Data Provider mới ... có phải sửa frontend không?" — answer must be no
 
 ## Reliability
 
-If either Binance WebSocket disconnects, `internal/market` owns reconnect/retry —
-this must not surface as a crash or a silent freeze on the frontend. This is
-one of the explicit "vấn đáp" scenarios the team must be able to answer
-(spec ch.32.4, ch.40 Q7, PLAN.md §5 checklist item 8). The chart should show
-a visible "reconnecting" state rather than silently showing stale data as
-live.
+If either Binance WebSocket disconnects, `internal/market` reconnects with
+bounded exponential backoff and resumes delivery without crashing the server.
+Deterministic local-WebSocket tests cover the production
+`StreamMarketEvents` disconnect/resumption path. One limitation remains: the
+backend does not publish upstream Binance reconnect state as a browser event or
+metric, so a browser still connected to the Go WebSocket cannot distinguish an
+upstream pause from a quiet market.
 
 Aggregate trades are substantially busier than candles, so each browser client
 has a dedicated bounded trade queue. Dropping an old trade tick for a slow client

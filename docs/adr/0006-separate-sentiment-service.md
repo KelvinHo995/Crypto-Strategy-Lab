@@ -8,8 +8,9 @@
 > pipeline manually. Go upserts normalized articles into `news_items` before
 > sentiment enrichment, then stores model observations in `sentiment_results`.
 > Stable IDs, partial-feed failure isolation, and duplicate-analysis skipping
-> are covered by deterministic tests. Scheduling and a news-read API remain
-> outside the MVP.
+> are covered by deterministic tests. Scheduling and a normalized
+> `news_items` read API remain outside the MVP; the current frontend reads
+> enriched observations through `GET /sentiment/observations`.
 
 ## Context
 
@@ -88,11 +89,11 @@ in the first place.
   có còn chạy không?" — this ADR's decision means the answer must be yes,
   since sentiment is not in the request path for market data or non-sentiment
   strategies).
-- **Positive:** model swaps (new FinBERT version, different model entirely)
-  only touch `sentiment-service` and are visible to the rest of the system
-  only as a version string in `model.version` — this is what keeps
-  `StrategyVersions` provenance meaningful (spec ch.36) even when the model
-  changes.
+- **Positive:** model swaps touch `sentiment-service` as long as the REST
+  contract remains stable. The returned `model.name` and `model.version` are
+  persisted with each observation and recorded as structured runtime
+  `SentimentModels` experiment provenance. This remains distinct from the Go
+  `SentimentStrategy` implementation version in `StrategyVersions`.
 - **Cost:** one more process to run for local dev and demo, one more network
   hop (Go → Python REST call) with its own latency/failure mode that must be
   explicitly handled (timeout + graceful degradation), not assumed away.

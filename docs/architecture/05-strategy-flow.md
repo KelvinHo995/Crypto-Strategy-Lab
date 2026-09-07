@@ -45,7 +45,8 @@ descriptors. Generic experiment code and the frontend do not need to change
 anywhere (spec ch.12, explicitly listed as the anti-pattern to avoid in
 ch.44 "Hard-coded Strategy"). This is the concrete test spec ch.41 proposes:
 "Hệ thống hiện có MA, RSI, Bollinger, SR. Hãy bổ sung MACD" should cost one
-new file + one `RegisterPlugin` call.
+strategy-owned implementation unit plus one `RegisterPlugin` call in the
+composition root.
 
 `RandomGenerator` reads sorted descriptors and invokes each selected plugin's
 `RandomParams` function. Backtester, Evaluator, WorkerPool, Ranking, and
@@ -67,9 +68,12 @@ strategies/
 
 The current server registers 7 single strategies: MA, RSI, Bollinger,
 Support/Resistance, SMC, MACD and Sentiment. MACD is the concrete architecture
-proof requested by the deck. `TestStrategyPluginRunsThroughExperimentPipeline`
-also declares a plugin outside the strategy package and passes it through
-composition → backtest → evaluation → ranking without changing those modules.
+proof requested by the deck. The test-only `TestMomentum` descriptor proves
+generation, factory construction, composite execution, deterministic seeded
+generation, and registration of an eighth plugin without a count assumption.
+`TestStrategyPluginRunsThroughExperimentPipeline` also declares a plugin
+outside the strategy package and passes it through composition → backtest →
+evaluation → ranking without changing those modules.
 The frontend treats `GET /strategies` as authoritative: unknown names receive a
 generic default-parameter form, so a new backend plugin appears in the picker
 without adding hardcoded frontend metadata. Rich labels/parameter hints remain
@@ -103,9 +107,11 @@ touching `MAStrategy` or `RSIStrategy`.
 
 ## What consumes a CandidateStrategy
 
-`internal/experiment`'s Backtester takes a `CandidateStrategy`, resolves each
-named strategy via the `Registry`, runs them against a candle window, applies
-the policy, and produces trade signals. See
+`internal/experiment.WorkerPool` passes a `CandidateStrategy` to
+`strategy.BuildFromCandidate`, which resolves each instance through the
+`Registry` and returns one constructed strategy (a `CombinedStrategy` when
+needed). The Backtester receives that resolved strategy, runs it against candle
+windows, and produces trades. See
 [06-search-backtest-flow.md](06-search-backtest-flow.md) for what happens
 next (backtest → evaluate → rank).
 

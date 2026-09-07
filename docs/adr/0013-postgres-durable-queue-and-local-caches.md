@@ -1,7 +1,15 @@
-# ADR-0013: Durable Postgres jobs and bounded local caches, not Redis/Kafka
+# ADR-0013: Durable Postgres jobs and process-local caches, not Redis/Kafka
 
 **Status:** Accepted
-**Owner:** Experiment / Market Data
+**Owner:** Experiment / Market Data / Sentiment
+
+> **Implementation evolution (2026-09-07):** the durable queue decision is
+> unchanged, but the cache details evolved. Candle ranges use a bounded
+> 128-entry/60-second cache and leaderboard reads use a write-invalidated
+> three-second snapshot. `sentiment.TimeLookup` currently uses a time-sorted,
+> one-minute-TTL slice with no explicit entry cap; its 24-hour `maxAge` limits
+> selection semantics, not cache size. The original 4,096-entry/five-minute
+> sentiment target below was not implemented.
 
 ## Context
 
@@ -24,11 +32,14 @@ second consumer group or event-replay requirement.
 - Store only pair/timeframe/range/config/provenance in a message. Workers read
   candles from the authoritative repository; messages never embed the dataset.
 - Keep the `Queue` interface and `InMemoryQueue` for isolated unit tests.
-- Use bounded process-local caches: 128 candle ranges for 60 seconds, a
-  write-invalidated leaderboard snapshot for three seconds, and 4,096 sentiment
-  timestamp scores for five minutes. Errors are not cached.
-- Coalesce concurrent identical misses and use generation invalidation so an
-  older in-flight read cannot repopulate stale state.
+- Use process-local caches: 128 candle ranges for 60 seconds, a
+  write-invalidated leaderboard snapshot for three seconds, and a one-minute
+  time-sorted sentiment observation slice reused across candle timestamps.
+  Errors are not cached.
+- Coalesce concurrent identical candle/leaderboard misses and use generation
+  invalidation so an older in-flight read cannot repopulate stale state.
+  `TimeLookup` serializes refresh and lookup under one mutex; `Invalidate` is
+  available, but current server-side sentiment writes do not invoke it.
 
 ## Consequences
 
@@ -41,7 +52,9 @@ second consumer group or event-replay requirement.
 - Failed queue rows remain available for diagnosis; a later retention job may
   archive/delete them if volume justifies it.
 - Caches are per process. Multi-replica hit ratios are lower than a shared Redis
-  cache, but correctness is preserved by TTL and invalidation.
+  cache. Candle/leaderboard correctness is protected by TTL and invalidation;
+  sentiment observations written during a live cache window may become visible
+  to lookup up to one minute later.
 - Replacing `PostgresQueue` with Redis Streams remains possible through the same
   queue contract. Kafka is still unjustified without replay or multiple consumer
   groups.

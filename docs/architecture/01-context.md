@@ -12,8 +12,9 @@ system — see PDF spec ch.2 and ch.47.
 The system:
 1. Pulls live and historical crypto price data from Binance.
 2. Renders up to 4 independent-timeframe candlestick charts.
-3. Runs pluggable technical-analysis strategies (MA, RSI, Bollinger,
-   Support/Resistance, later MACD/SMC/Wyckoff/Sentiment) against that data.
+3. Runs seven pluggable strategies (MA, RSI, Bollinger,
+   Support/Resistance, minimal SMC, MACD, and Sentiment) against that data.
+   Wyckoff remains a possible future plugin.
 4. Combines multiple strategies into composite strategies (majority vote or
    weighted score).
 5. Backtests candidate strategies against historical data and scores them
@@ -36,7 +37,7 @@ describes end to end.
 | System | Direction | Notes |
 |---|---|---|
 | **Binance** (REST + WebSocket) | inbound | Only external market data source for MVP. Accessed only through `internal/market`'s adapter — nothing else in the codebase is allowed to import a Binance client directly (see [ADR-0001](../adr/0001-market-data-adapter.md)). |
-| **News sources** (RSS / News API / crawler) | inbound | Abstracted behind a `NewsProvider` boundary so the source can change without touching sentiment analysis or strategies (spec ch.28). |
+| **RSS news sources** | inbound | The current `RSSNewsProvider` normalizes structured RSS. The `NewsProvider` boundary permits a future News API or crawler without changing sentiment analysis or strategies (spec ch.28). |
 
 The sentiment model itself is **not** an external system — it's `sentiment-service`,
 a component we own and deploy, reached over REST (see [ADR-0006](../adr/0006-separate-sentiment-service.md)).

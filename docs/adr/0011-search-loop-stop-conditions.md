@@ -84,9 +84,9 @@ candidates via `strategy.RandomGenerator` and enqueues them one at a time
   breaking the same guarantee this fix exists to provide. An idle worker
   is a disclosed performance cost; an inaccurate stop condition is not.
 - **user-cancel** — still deferred. Nothing on the frontend calls a cancel
-  endpoint today. Max-candidates still guarantees finite generation; the other
-  two inputs must not be described as completed until their runtime semantics
-  are corrected.
+  endpoint today. Max-candidates, max-duration, and no-improvement are
+  implemented; max-candidates still guarantees finite generation when the
+  optional conditions are absent.
 
 Within one loop run, generated candidates use a local dedup attempt (a
 `seen` set keyed by sorted strategies + params + policy, in-memory, scoped
@@ -113,13 +113,10 @@ normal completion, which the existing mechanism already covers): `status` is
 `FAILED` if nothing was ever enqueued, `STOPPED` otherwise. The HTTP layer
 wires this to `Hub.SearchLoopStopped`, which broadcasts an additive
 `SEARCH_PROGRESS{searchId,status,reason}` the moment generation stops —
-independent of whether already-enqueued jobs are still running. Live-verified
-against Supabase: a `noImprovementLimit:1` run stopped generation at 3 of 10
-requested candidates, broadcast `{status:STOPPED,reason:"no-improvement"}`
-immediately, and `tested` kept climbing afterward (4/10) as the one
-already-enqueued straggler finished — confirming "stopped generating" and
-"finished running" are correctly signaled as separate things, per the OR-stop
-rule below.
+independent of whether already-enqueued jobs are still running. Deterministic
+loop tests verify both the explicit terminal signal and the current in-flight
+cap. Already-enqueued work may still finish after generation stops, so
+"stopped generating" and "finished running" remain separate states.
 
 The frontend calls `/search/loop`, sends all three controls and has no
 timer-generated progress. It renders only WebSocket counts, treats HTTP
@@ -150,7 +147,7 @@ terminal fields the backend now publishes for `STOPPED`/`FAILED`.
 - **Positive:** `SEARCH_PROGRESS` gives the frontend real terminal-candidate
   counts on normal completion (`tested == total`) and an explicit
   `{status,reason}` terminal signal on early stop — both paths now
-  distinguishable, live-verified against Supabase.
+  distinguishable and covered by loop/HTTP tests.
 - **Positive:** `/search/loop` now writes its `PENDING` row and job through
   `PostgresQueue.EnqueuePending` in one transaction, same as `/search/start`
   — closes the crash window that existed when it wrote the two as separate

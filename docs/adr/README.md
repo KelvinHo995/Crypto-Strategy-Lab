@@ -13,14 +13,14 @@ not on the professor's list.
 | [0003](0003-separate-backtester-evaluator.md) | Backtester and Evaluator are separate components | Experiment |
 | [0004](0004-inprocess-job-queue-not-kafka.md) | In-process job queue behind a `Queue` interface, not Kafka/RabbitMQ | Strategy + Search / Experiment |
 | [0005](0005-modular-monolith-not-microservices.md) | Modular monolith (one Go binary), not per-domain microservices | whole team |
-| [0006](0006-separate-sentiment-service.md) | Sentiment analysis is a separate Python service, not a Go package | Market Data / Frontend |
+| [0006](0006-separate-sentiment-service.md) | Sentiment analysis is a separate Python service, not a Go package | Market Data / News / Sentiment |
 | [0007](0007-simple-session-auth.md) | Minimal username/password accounts + short-lived (1h) JWT cookie, not a server-side session table | unassigned — new scope, see ADR |
 | [0008](0008-websocket-for-realtime.md) | WebSocket for realtime UI, not polling/SSE | Market Data / Frontend |
 | [0009](0009-experiment-provenance-storage.md) | How experiment/version provenance is stored | Experiment |
 | [0010](0010-no-cqrs-event-sourcing.md) | CQRS and Event Sourcing are not used | whole team |
 | [0011](0011-search-loop-stop-conditions.md) | Stop conditions and observability of the Search Loop | Experiment / Strategy + Search |
 | [0012](0012-supabase-postgres-not-sqlite.md) | Supabase-hosted Postgres, not SQLite (shared team access, not performance) | unassigned — new scope, see ADR |
-| [0013](0013-postgres-durable-queue-and-local-caches.md) | Durable Postgres jobs and bounded local read caches, not Redis/Kafka | Experiment / Market Data |
+| [0013](0013-postgres-durable-queue-and-local-caches.md) | Durable Postgres jobs and process-local read caches, not Redis/Kafka | Experiment / Market Data / Sentiment |
 
 ## Cross-reference to the professor's suggested ADR list
 

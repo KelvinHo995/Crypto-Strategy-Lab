@@ -10,10 +10,12 @@ decision made in response, and where that decision is documented in depth.
 (spec ch.32.1).
 **Decision:** `Strategy` interface + atomic `Registry.RegisterPlugin()`
 ([05-strategy-flow.md](05-strategy-flow.md), [ADR-0002](../adr/0002-strategy-plugin-registry.md)).
-**Test:** spec ch.41 scenario — count how many files a new strategy touches.
-Should be 1 (new strategy file) + 1 registration call. MACD now provides the
-real change proof; the cross-package experiment test proves the plugin reaches
-composition, Backtester, Evaluator and Rank without modifying them.
+**Test:** spec ch.41 scenario — count how many generic consumers a new strategy
+touches. The strategy owns its implementation, factory, random parameter
+generator, and version descriptor; the composition root adds one registration.
+MACD is the real example, while test-only `TestMomentum` proves generation,
+construction, composite execution, seeded determinism, and an eighth plugin
+without modifying generic consumers.
 
 ## Scalability
 
@@ -24,7 +26,10 @@ a rewrite ([06-search-backtest-flow.md](06-search-backtest-flow.md),
 [ADR-0013](../adr/0013-postgres-durable-queue-and-local-caches.md)).
 **Implemented:** PostgreSQL workers claim safely across backend instances with
 `SKIP LOCKED`; durable leases survive process restarts. A dedicated broker is
-still unnecessary at current throughput.
+still unnecessary at current throughput. The current API caps a run at 200
+candidates. No-improvement runs bound unresolved work by their configured
+limit, but runs without that condition have no universal in-flight cap; a
+100,000-candidate run is not supported today.
 
 ## Realtime
 
@@ -39,8 +44,10 @@ low latency, without the frontend polling (spec ch.32.3).
 **Pressure:** Binance connection drops — does the system stay usable
 (spec ch.32.4, ch.40 Q7)?
 **Decision:** reconnect/retry logic owned entirely inside
-`internal/market`, isolated from strategy/experiment/frontend. Visible
-"reconnecting" state on the frontend rather than silent staleness.
+`internal/market`, isolated from strategy/experiment/frontend. Local tests
+prove disconnect, bounded backoff, reconnect, resumed event delivery, and
+clean cancellation. Upstream Binance reconnect state is not yet exposed to the
+frontend, so visible upstream-staleness reporting remains a limitation.
 **Answered:** a job whose on-demand candle fetch comes back short
 (`< experiment.MinCandlesForBacktest`) is retried through the same
 `Queue.Nack`/backoff/lease-exhaustion path as every other worker failure,
@@ -78,8 +85,9 @@ implementation — `StrategyGenerator` (`generate() -> CandidateStrategy`) and
 `Queue` (`Enqueue`/`Dequeue`/`Ack`/`Nack` over `BacktestJob`) —
 [06-search-backtest-flow.md](06-search-backtest-flow.md),
 [ADR-0013](../adr/0013-postgres-durable-queue-and-local-caches.md).
-**Test:** for either swap, count how many files outside the
-implementation itself need to change. Should be zero.
+**Test:** for either swap, downstream consumers remain unchanged. Source-level
+composition still selects the implementation in the server wiring; this is
+dependency injection, not runtime implementation discovery.
 
 ## Observability
 
@@ -102,8 +110,9 @@ distributed tracing and alert routing remain operational post-MVP work.
 **Pressure:** can a leaderboard result be traced back to the exact strategy
 code, parameters, dataset, and model version that produced it? (deck
 rubric: "Top-K có link về exact experiment config/version?", spec ch.36).
-**Decision:** `Result` rows store `StrategyVersions`, `CandidateID`,
-`DatasetPeriod` inline at write time —
+**Decision:** `Result` rows store `Pair`, `Timeframe`, `DatasetPeriod`,
+`CandidateID`, strategy instances/parameters, `StrategyVersions`, and runtime
+`SentimentModels`; generated trades are linked through `experiment_trades` —
 [ADR-0009](../adr/0009-experiment-provenance-storage.md), provenance
 section in [06-search-backtest-flow.md](06-search-backtest-flow.md).
 **Explicitly not done:** Event Sourcing / a full state-transition audit
@@ -163,12 +172,10 @@ sections + one-file-per-decision ADRs), cross-referenced by chapter/slide
 number against both the project spec (`Crypto Strategy Lab – Đồ án cuối
 kỳ.pdf`) and the professor's teaching deck (`KienTrucDoAn_slide.pdf`), so
 each claim traces to a source instead of being asserted from memory.
-**Known gap:** these docs were written ahead of most of the implementation
-(see [PLAN.md](../../PLAN.md) §0 status) — they describe the *agreed*
-architecture, not yet one verified against code. As modules get built, this
-file and the flow docs need to be checked against actual code before vấn
-đáp, not just against the plan — docs drifting from code is a real risk
-here, not a hypothetical one.
+**Current practice:** these pages and ADR implementation notes are checked
+against current source, migrations, and tests, with historical decisions marked
+as superseded or evolved where appropriate. Documentation drift remains a
+maintenance risk whenever behavior changes without the corresponding doc edit.
 
 ## Trade-off reasoning
 
@@ -177,8 +184,8 @@ non-trivial choice should state what it costs, not just what it buys
 ("không có free lunch", deck slide 69).
 **Where this lives:** every ADR's Consequences section states both the
 benefit and the cost of that decision — not duplicated here. See in
-particular [ADR-0004](../adr/0004-inprocess-job-queue-not-kafka.md) (queue:
-scale/retry vs. eventual consistency and a multi-machine limit),
+particular [ADR-0013](../adr/0013-postgres-durable-queue-and-local-caches.md)
+(durable queue/local caches vs. polling and per-process state),
 [ADR-0005](../adr/0005-modular-monolith-not-microservices.md) (monolith:
 simplicity vs. no independent scaling), and
 [ADR-0010](../adr/0010-no-cqrs-event-sourcing.md) (CRUD: simplicity vs. no
@@ -192,7 +199,7 @@ cost, not just its benefit, without re-reading it first.
 |---|---|---|
 | God Service | one `TradingService` doing Binance calls + RSI math + crawling + ML + backtest + ranking + DB + WS | `internal/market` / `internal/strategy` / `internal/experiment` are separate packages with one owner each |
 | Hard-coded strategy dispatch | `if strategy == MA ... else if ...` | `Registry.RegisterPlugin()` — see [05-strategy-flow.md](05-strategy-flow.md) |
-| Business logic in frontend | React computing backtest/ranking itself | Frontend only renders `Result`/`Candle`/WS payloads it receives, never derives them |
+| Business logic in frontend | React becoming the authoritative backtest/ranking engine | Backend persists and ranks authoritative results; the frontend only mirrors the score formula for display/sorting |
 | Strategy → Database directly | `RSIStrategy` calling Postgres directly | `Strategy.Analyze(candles) Signal` — no I/O in the interface at all |
 | Crawler tightly coupled to ML model | `Crawler → BERT model` inline | `sentiment-service` is a separate deployable behind a REST boundary — [ADR-0006](../adr/0006-separate-sentiment-service.md) |
 
@@ -203,7 +210,7 @@ cost, not just its benefit, without re-reading it first.
 3. Market Data Provider mới thêm thế nào, có sửa frontend không? → [04-realtime-flow.md](04-realtime-flow.md), [ADR-0001](../adr/0001-market-data-adapter.md)
 4. Backtest 100 → 100,000 thì kiến trúc thay đổi thế nào? → Scalability section above
 5. News Service lỗi thì Chart còn chạy không? → [ADR-0006](../adr/0006-separate-sentiment-service.md) (must degrade gracefully, not cascade)
-6. Sentiment Model thay đổi thì Strategy Engine bị ảnh hưởng không? → `StrategyVersions` provenance in [06-search-backtest-flow.md](06-search-backtest-flow.md)
+6. Sentiment Model thay đổi thì Strategy Engine bị ảnh hưởng không? → separate `SentimentModels` runtime provenance in [06-search-backtest-flow.md](06-search-backtest-flow.md)
 7. Binance WebSocket disconnect thì phục hồi thế nào? → Reliability section above
 8. Kết quả trên Leaderboard truy được version strategy nào? → Provenance section in [06-search-backtest-flow.md](06-search-backtest-flow.md)
 
